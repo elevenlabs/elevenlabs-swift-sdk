@@ -332,6 +332,9 @@ public class ElevenLabsSwift {
         
         /// Triggered when the conversation mode changes
         public var onModeChange: (Mode) -> Void = { _ in }
+        
+        /// Triggered when the input volume is updated
+        public var onVolumeUpdate: (Float) -> Void = { _ in }
     }
     
     /// Main class for managing a conversation
@@ -346,6 +349,10 @@ public class ElevenLabsSwift {
         private let volumeLock = NSLock()
         private let lastInterruptTimestampLock = NSLock()
         private let isProcessingInputLock = NSLock()
+        
+        private var volumeUpdateTimer: Timer?
+        private let volumeUpdateInterval: TimeInterval = 0.1 // Update every 100ms
+        private var currentVolume: Float = 0.0
         
         private var _mode: Mode = .listening
         private var _status: Status = .connecting
@@ -389,6 +396,61 @@ public class ElevenLabsSwift {
         
         private let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSwift", category: "Conversation")
         
+        private func setupVolumeMonitoring() {
+             DispatchQueue.main.async {
+                 self.volumeUpdateTimer = Timer.scheduledTimer(withTimeInterval: self.volumeUpdateInterval, repeats: true) { [weak self] _ in
+                     guard let self = self else { return }
+                     self.callbacks.onVolumeUpdate(self.currentVolume)
+                 }
+             }
+         }
+        
+        private func updateInputVolume() {
+            let inputFormat = input.mixer.inputFormat(forBus: 0)
+            
+            let frameCount = AVAudioFrameCount(inputFormat.sampleRate * 0.1) // 100ms worth of samples
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount) else {
+                return
+            }
+            
+            // Instead of rendering, we'll tap the mixer node
+            input.mixer.installTap(onBus: 0, bufferSize: frameCount, format: inputFormat) { (buffer, _) in
+                self.processAudioBuffer(buffer)
+                self.input.mixer.removeTap(onBus: 0)
+            }
+            
+            // Trigger the tap by requesting some audio
+            let _ = input.mixer.outputFormat(forBus: 0)
+        }
+        private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+            guard let channelData = buffer.floatChannelData else {
+                return
+            }
+
+            var sumOfSquares: Float = 0
+            let channelCount = Int(buffer.format.channelCount)
+            let frameLength = Int(buffer.frameLength)  // Convert to Int
+
+            for channel in 0..<channelCount {
+                let data = channelData[channel]
+                for i in 0..<frameLength {
+                    sumOfSquares += data[i] * data[i]
+                }
+            }
+
+            let rms = sqrt(sumOfSquares / Float(frameLength * channelCount))
+            let meterLevel = rms > 0 ? 20 * log10(rms) : -50.0 // Safeguarded
+
+            // Normalize the meter level to a 0-1 range
+            let normalizedLevel = max(0, min(1, (meterLevel + 50) / 50))
+
+            // Call the callback with the volume level
+            DispatchQueue.main.async {
+                self.callbacks.onVolumeUpdate(normalizedLevel)
+            }
+        }
+
+        
         private init(connection: Connection, input: Input, output: Output, callbacks: Callbacks) {
             self.connection = connection
             self.input = input
@@ -406,7 +468,7 @@ public class ElevenLabsSwift {
             setupWebSocket()
             // Remove configureAudioSession() from here
             setupAudioProcessing()
-            
+            setupVolumeMonitoring()
             // Remove playerNode.play() from here
         }
         
@@ -642,9 +704,30 @@ public class ElevenLabsSwift {
                 // Process the buffer using AudioConcatProcessor
                 self.audioConcatProcessor.handleMessage(["type": "buffer", "buffer": data])
                 self.audioConcatProcessor.process(outputs: &self.outputBuffers)
+                
+                self.updateVolume(buffer)
             }
             output.engine.prepare()
         }
+        private func updateVolume(_ buffer: AVAudioPCMBuffer) {
+              guard let channelData = buffer.floatChannelData else { return }
+
+              var sum: Float = 0
+              let channelCount = Int(buffer.format.channelCount)
+
+              for channel in 0..<channelCount {
+                  let data = channelData[channel]
+                  for i in 0..<Int(buffer.frameLength) {
+                      sum += abs(data[i])
+                  }
+              }
+
+              let average = sum / Float(buffer.frameLength * buffer.format.channelCount)
+              let meterLevel = 20 * log10(average)
+
+              // Normalize the meter level to a 0-1 range
+              currentVolume = max(0, min(1, (meterLevel + 50) / 50))
+          }
         
         private func addAudioBase64Chunk(_ chunk: String) {
             
@@ -746,6 +829,11 @@ public class ElevenLabsSwift {
             input.close()
             output.close()
             updateStatus(.disconnected)
+            
+            DispatchQueue.main.async {
+                   self.volumeUpdateTimer?.invalidate()
+                   self.volumeUpdateTimer = nil
+               }
         }
         
         /// Retrieves the conversation ID
