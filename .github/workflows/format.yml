@@ -1,0 +1,16 @@
+name: 🧼 SwiftFormat
+
+on: [push, pull_request]
+
+jobs:
+  swiftformat:
+    runs-on: macOS-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      - name: Run SwiftFormat in Strict Mode
+        run: swiftformat . --strict
