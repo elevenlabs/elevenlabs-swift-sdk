@@ -8,42 +8,40 @@ import os.log
 public class ElevenLabsSwift {
     public static let version = "1.0.0"
     
-    // MARK: - Audio Utilities
+    private enum Constants {
+        static let defaultApiOrigin = "wss://api.elevenlabs.io"
+        static let defaultApiPathname = "/v1/convai/conversation?agent_id="
+        static let sampleRate: Double = 16000
+        static let ioBufferDuration: Double = 0.005
+        static let volumeUpdateInterval: TimeInterval = 0.1
+        static let fadeOutDuration: TimeInterval = 2.0
+        static let bufferSize: AVAudioFrameCount = 1024
+    }
     
-    /// Converts an array of bytes to a Base64 encoded string
-    /// - Parameter data: The data to convert
-    /// - Returns: A Base64 encoded string
+    // MARK: - Audio Utilities
+
     public static func arrayBufferToBase64(_ data: Data) -> String {
         data.base64EncodedString()
     }
     
-    /// Converts a Base64 encoded string to an array of bytes
-    /// - Parameter base64: The Base64 encoded string
-    /// - Returns: The decoded data
     public static func base64ToArrayBuffer(_ base64: String) -> Data? {
         Data(base64Encoded: base64)
     }
     
     // MARK: - Audio Processing
     
-    /// AudioConcatProcessor class (equivalent to JavaScript AudioWorklet)
     public class AudioConcatProcessor {
         private var buffers: [Data] = []
         private var cursor: Int = 0
         private var currentBuffer: Data?
         private var wasInterrupted: Bool = false
         private var finished: Bool = false
-        
-        /// Callback triggered when processing is finished
         public var onProcess: ((Bool) -> Void)?
         
-        /// Processes audio data and fills the output buffers
-        /// - Parameter outputs: Inout array of output buffers
         public func process(outputs: inout [[Float]]) {
             var isFinished = false
             let outputChannel = 0
             var outputBuffer = outputs[outputChannel]
-            
             var outputIndex = 0
             
             while outputIndex < outputBuffer.count {
@@ -87,11 +85,6 @@ public class ElevenLabsSwift {
             }
         }
 
-
-
-        
-        /// Handles incoming messages for audio processing
-        /// - Parameter message: Dictionary containing message data
         public func handleMessage(_ message: [String: Any]) {
             guard let type = message["type"] as? String else { return }
             
@@ -117,31 +110,22 @@ public class ElevenLabsSwift {
     
     // MARK: - Connection
     
-    /// Configuration for the session
     public struct SessionConfig: Sendable {
         public let signedUrl: String?
         public let agentId: String?
         
-        /// Initializes with a signed URL
-        /// - Parameter signedUrl: The signed WebSocket URL
         public init(signedUrl: String) {
             self.signedUrl = signedUrl
             self.agentId = nil
         }
         
-        /// Initializes with an agent ID
-        /// - Parameter agentId: The agent identifier
         public init(agentId: String) {
             self.agentId = agentId
             self.signedUrl = nil
         }
     }
     
-    /// Manages the WebSocket connection
     public class Connection: @unchecked Sendable {
-        private static let defaultApiOrigin = "wss://api.elevenlabs.io"
-        private static let defaultApiPathname = "/v1/convai/conversation?agent_id="
-        
         public let socket: URLSessionWebSocketTask
         public let conversationId: String
         public let sampleRate: Int
@@ -152,18 +136,15 @@ public class ElevenLabsSwift {
             self.sampleRate = sampleRate
         }
         
-        /// Creates a new WebSocket connection
-        /// - Parameter config: Session configuration
-        /// - Returns: A connected `Connection` instance
         public static func create(config: SessionConfig) async throws -> Connection {
-            let origin = ProcessInfo.processInfo.environment["ELEVENLABS_CONVAI_SERVER_ORIGIN"] ?? defaultApiOrigin
-            let pathname = ProcessInfo.processInfo.environment["ELEVENLABS_CONVAI_SERVER_PATHNAME"] ?? defaultApiPathname
+            let origin = ProcessInfo.processInfo.environment["ELEVENLABS_CONVAI_SERVER_ORIGIN"] ?? Constants.defaultApiOrigin
+            let pathname = ProcessInfo.processInfo.environment["ELEVENLABS_CONVAI_SERVER_PATHNAME"] ?? Constants.defaultApiPathname
             
             let urlString: String
             if let signedUrl = config.signedUrl {
                 urlString = signedUrl
             } else if let agentId = config.agentId {
-                urlString = origin + pathname + agentId
+                urlString = "\(origin)\(pathname)\(agentId)"
             } else {
                 throw ElevenLabsError.invalidConfiguration
             }
@@ -177,7 +158,6 @@ public class ElevenLabsSwift {
             socket.resume()
             
             let configData = try await receiveInitialMessage(socket: socket)
-            
             return Connection(socket: socket, conversationId: configData.conversationId, sampleRate: configData.sampleRate)
         }
         
@@ -217,15 +197,13 @@ public class ElevenLabsSwift {
             }
         }
         
-        /// Closes the WebSocket connection
         public func close() {
             socket.cancel(with: .goingAway, reason: nil)
         }
     }
     
-    // MARK: - Input
+    // MARK: - Audio Input
     
-    /// Manages audio input
     public class Input {
         public let engine: AVAudioEngine
         public let inputNode: AVAudioInputNode
@@ -237,30 +215,18 @@ public class ElevenLabsSwift {
             self.mixer = mixer
         }
         
-        /// Creates and starts an audio input session
-        /// - Parameter sampleRate: Desired sample rate
-        /// - Returns: A configured `Input` instance
         public static func create(sampleRate: Double) async throws -> Input {
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
             let mixer = AVAudioMixerNode()
             
             engine.attach(mixer)
-            
-            let inputFormat = inputNode.inputFormat(forBus: 0)
-            engine.connect(inputNode, to: mixer, format: inputFormat)
-            
-            let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inputFormat.sampleRate, channels: 1, interleaved: false)!
-            
-            print("Input node format: \(inputFormat)")
-            print("Mixer input format: \(mixer.inputFormat(forBus: 0))")
-            print("Mixer output format: \(mixer.outputFormat(forBus: 0))")
+            engine.connect(inputNode, to: mixer, format: inputNode.inputFormat(forBus: 0))
             
             try engine.start()
             return Input(engine: engine, inputNode: inputNode, mixer: mixer)
         }
         
-        /// Stops the audio input session
         public func close() {
             engine.stop()
         }
@@ -268,7 +234,6 @@ public class ElevenLabsSwift {
     
     // MARK: - Output
     
-    /// Manages audio output
     public class Output {
         public let engine: AVAudioEngine
         public let playerNode: AVAudioPlayerNode
@@ -282,9 +247,6 @@ public class ElevenLabsSwift {
             self.audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
         }
         
-        /// Creates an audio output session
-        /// - Parameter sampleRate: Desired sample rate
-        /// - Returns: A configured `Output` instance
         public static func create(sampleRate: Double) async throws -> Output {
             let engine = AVAudioEngine()
             let playerNode = AVAudioPlayerNode()
@@ -300,15 +262,9 @@ public class ElevenLabsSwift {
             engine.connect(playerNode, to: mixer, format: format)
             engine.connect(mixer, to: engine.mainMixerNode, format: format)
             
-            print("Output player node format: \(playerNode.outputFormat(forBus: 0))")
-            print("Output mixer input format: \(mixer.inputFormat(forBus: 0))")
-            print("Output mixer output format: \(mixer.outputFormat(forBus: 0))")
-            print("Main mixer input format: \(engine.mainMixerNode.inputFormat(forBus: 0))")
-            
             return Output(engine: engine, playerNode: playerNode, mixer: mixer)
         }
         
-        /// Stops the audio output session
         public func close() {
             engine.stop()
         }
@@ -316,19 +272,16 @@ public class ElevenLabsSwift {
     
     // MARK: - Conversation
     
-    /// Represents the role in the conversation
     public enum Role: String {
         case user
         case ai
     }
     
-    /// Represents the current mode of the conversation
     public enum Mode: String {
         case speaking
         case listening
     }
     
-    /// Represents the current status of the connection
     public enum Status: String {
         case connecting
         case connected
@@ -336,33 +289,18 @@ public class ElevenLabsSwift {
         case disconnected
     }
     
-    /// Callbacks for various events in the conversation
     public struct Callbacks {
-        public init() {}
-        
-        /// Triggered when the connection is established
         public var onConnect: (String) -> Void = { _ in }
-        
-        /// Triggered when the connection is disconnected
         public var onDisconnect: () -> Void = {}
-        
-        /// Triggered when a message is received
         public var onMessage: (String, Role) -> Void = { _, _ in }
-        
-        /// Triggered when an error occurs
         public var onError: (String, Any?) -> Void = { _, _ in }
-        
-        /// Triggered when the connection status changes
         public var onStatusChange: (Status) -> Void = { _ in }
-        
-        /// Triggered when the conversation mode changes
         public var onModeChange: (Mode) -> Void = { _ in }
-        
-        /// Triggered when the input volume is updated
         public var onVolumeUpdate: (Float) -> Void = { _ in }
+        
+        public init() {}
     }
     
-    /// Main class for managing a conversation
     public class Conversation: @unchecked Sendable {
         private let connection: Connection
         private let input: Input
@@ -375,9 +313,9 @@ public class ElevenLabsSwift {
         private let lastInterruptTimestampLock = NSLock()
         private let isProcessingInputLock = NSLock()
         
-        private var volumeUpdateTimer: Timer?
-        private let volumeUpdateInterval: TimeInterval = 0.1 // Update every 100ms
-        private var currentVolume: Float = 0.0
+        private var inputVolumeUpdateTimer: Timer?
+        private let inputVolumeUpdateInterval: TimeInterval = 0.1 // Update every 100ms
+        private var currentInputVolume: Float = 0.0
         
         private var _mode: Mode = .listening
         private var _status: Status = .connecting
@@ -421,32 +359,15 @@ public class ElevenLabsSwift {
         
         private let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSwift", category: "Conversation")
         
-        private func setupVolumeMonitoring() {
+        private func setupInputVolumeMonitoring() {
              DispatchQueue.main.async {
-                 self.volumeUpdateTimer = Timer.scheduledTimer(withTimeInterval: self.volumeUpdateInterval, repeats: true) { [weak self] _ in
+                 self.inputVolumeUpdateTimer = Timer.scheduledTimer(withTimeInterval: self.inputVolumeUpdateInterval, repeats: true) { [weak self] _ in
                      guard let self = self else { return }
-                     self.callbacks.onVolumeUpdate(self.currentVolume)
+                     self.callbacks.onVolumeUpdate(self.currentInputVolume)
                  }
              }
          }
         
-        private func updateInputVolume() {
-            let inputFormat = input.mixer.inputFormat(forBus: 0)
-            
-            let frameCount = AVAudioFrameCount(inputFormat.sampleRate * 0.1) // 100ms worth of samples
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount) else {
-                return
-            }
-            
-            // Instead of rendering, we'll tap the mixer node
-            input.mixer.installTap(onBus: 0, bufferSize: frameCount, format: inputFormat) { (buffer, _) in
-                self.processAudioBuffer(buffer)
-                self.input.mixer.removeTap(onBus: 0)
-            }
-            
-            // Trigger the tap by requesting some audio
-            let _ = input.mixer.outputFormat(forBus: 0)
-        }
         private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
             guard let channelData = buffer.floatChannelData else {
                 return
@@ -491,10 +412,8 @@ public class ElevenLabsSwift {
             }
             
             setupWebSocket()
-            // Remove configureAudioSession() from here
             setupAudioProcessing()
-            setupVolumeMonitoring()
-            // Remove playerNode.play() from here
+            setupInputVolumeMonitoring()
         }
         
         /// Starts a new conversation session
@@ -580,9 +499,18 @@ public class ElevenLabsSwift {
                     
                 case "audio":
                     handleAudioEvent(json)
-                    
+        
                 case "ping":
                     handlePingEvent(json)
+                    
+                case "internal_tentative_agent_response":
+                    break
+                    
+                case "internal_vad_score":
+                    break
+                    
+                case "internal_turn_probability":
+                    break
                     
                 default:
                     callbacks.onError("Unknown message type", json)
@@ -665,9 +593,6 @@ public class ElevenLabsSwift {
                 return
             }
             
-            print("Conversation input format: \(inputFormat)")
-            print("Conversation output format: \(outputFormat)")
-            
             // Create converter once and reuse
             guard let audioConverter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
                 logger.error("Failed to create audio converter.")
@@ -749,7 +674,7 @@ public class ElevenLabsSwift {
               let meterLevel = 20 * log10(average)
 
               // Normalize the meter level to a 0-1 range
-              currentVolume = max(0, min(1, (meterLevel + 50) / 50))
+            currentInputVolume = max(0, min(1, (meterLevel + 50) / 50))
           }
         
         private func addAudioBase64Chunk(_ chunk: String) {
@@ -854,8 +779,8 @@ public class ElevenLabsSwift {
             updateStatus(.disconnected)
             
             DispatchQueue.main.async {
-                   self.volumeUpdateTimer?.invalidate()
-                   self.volumeUpdateTimer = nil
+                self.inputVolumeUpdateTimer?.invalidate()
+                   self.inputVolumeUpdateTimer = nil
                }
         }
         
@@ -939,7 +864,7 @@ public class ElevenLabsSwift {
             // Configure for voice chat with minimum latency
             try audioSession.setCategory(.playAndRecord,
                                          mode: .voiceChat,
-                                       options: [.defaultToSpeaker, .allowBluetooth])
+                                         options: [ .allowBluetooth])
             
             // Set preferred IO buffer duration for lower latency
             try audioSession.setPreferredIOBufferDuration(0.005) // 5ms buffer
@@ -955,19 +880,6 @@ public class ElevenLabsSwift {
             // Activate the session
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
             
-            // Log detailed audio session information
-            print("Audio Session configured successfully:")
-            print("Category: \(audioSession.category.rawValue)")
-            print("Mode: \(audioSession.mode.rawValue)")
-            print("Sample Rate: \(audioSession.sampleRate)")
-            print("Preferred Sample Rate: \(audioSession.preferredSampleRate)")
-            print("IO Buffer Duration: \(audioSession.ioBufferDuration)")
-            print("Preferred IO Buffer Duration: \(audioSession.preferredIOBufferDuration)")
-            print("Input Latency: \(audioSession.inputLatency)")
-            print("Output Latency: \(audioSession.outputLatency)")
-            print("Input Gain: \(audioSession.inputGain)")
-            print("Input Available: \(audioSession.isInputAvailable)")
-            print("Output Volume: \(audioSession.outputVolume)")
         } catch {
             print("Failed to configure audio session: \(error.localizedDescription)")
             throw error
