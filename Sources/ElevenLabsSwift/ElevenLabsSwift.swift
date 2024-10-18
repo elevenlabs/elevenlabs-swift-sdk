@@ -41,9 +41,12 @@ public class ElevenLabsSwift {
         /// - Parameter outputs: Inout array of output buffers
         public func process(outputs: inout [[Float]]) {
             var isFinished = false
-            var output = outputs[0]
+            let outputChannel = 0
+            var outputBuffer = outputs[outputChannel]
             
-            for i in 0..<output.count {
+            var outputIndex = 0
+            
+            while outputIndex < outputBuffer.count {
                 if currentBuffer == nil {
                     if buffers.isEmpty {
                         isFinished = true
@@ -54,9 +57,21 @@ public class ElevenLabsSwift {
                 }
                 
                 if let currentBuffer = currentBuffer {
-                    let value = currentBuffer.withUnsafeBytes { $0.load(fromByteOffset: cursor * 2, as: Int16.self) }
-                    output[i] = Float(value) / 32768.0
-                    cursor += 1
+                    let remainingSamples = currentBuffer.count / 2 - cursor
+                    let samplesToWrite = min(remainingSamples, outputBuffer.count - outputIndex)
+                    
+                    guard let int16ChannelData = currentBuffer.withUnsafeBytes({ $0.bindMemory(to: Int16.self).baseAddress }) else {
+                        print("Failed to access Int16 channel data.")
+                        break
+                    }
+                    
+                    for sampleIndex in 0..<samplesToWrite {
+                        let sample = int16ChannelData[cursor + sampleIndex]
+                        outputBuffer[outputIndex] = Float(sample) / 32768.0
+                        outputIndex += 1
+                    }
+                    
+                    cursor += samplesToWrite
                     
                     if cursor >= currentBuffer.count / 2 {
                         self.currentBuffer = nil
@@ -64,13 +79,16 @@ public class ElevenLabsSwift {
                 }
             }
             
-            outputs[0] = output
+            outputs[outputChannel] = outputBuffer
             
             if self.finished != isFinished {
                 self.finished = isFinished
                 onProcess?(isFinished)
             }
         }
+
+
+
         
         /// Handles incoming messages for audio processing
         /// - Parameter message: Dictionary containing message data
@@ -234,6 +252,10 @@ public class ElevenLabsSwift {
             
             let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inputFormat.sampleRate, channels: 1, interleaved: false)!
             
+            print("Input node format: \(inputFormat)")
+            print("Mixer input format: \(mixer.inputFormat(forBus: 0))")
+            print("Mixer output format: \(mixer.outputFormat(forBus: 0))")
+            
             try engine.start()
             return Input(engine: engine, inputNode: inputNode, mixer: mixer)
         }
@@ -278,7 +300,10 @@ public class ElevenLabsSwift {
             engine.connect(playerNode, to: mixer, format: format)
             engine.connect(mixer, to: engine.mainMixerNode, format: format)
             
-            // Remove engine.start() from here
+            print("Output player node format: \(playerNode.outputFormat(forBus: 0))")
+            print("Output mixer input format: \(mixer.inputFormat(forBus: 0))")
+            print("Output mixer output format: \(mixer.outputFormat(forBus: 0))")
+            print("Main mixer input format: \(engine.mainMixerNode.inputFormat(forBus: 0))")
             
             return Output(engine: engine, playerNode: playerNode, mixer: mixer)
         }
@@ -628,87 +653,85 @@ public class ElevenLabsSwift {
         }
         
         private func setupAudioProcessing() {
-            let bufferSize: AVAudioFrameCount = 4096
+            let bufferSize: AVAudioFrameCount = 1024
             let inputFormat = input.inputNode.inputFormat(forBus: 0)
             
-            // Output format (16000 Hz, mono, float32)
-            guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false) else {
+            // Output format (16000 Hz, mono, Int16)
+            guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                                   sampleRate: 16000,
+                                                   channels: 1,
+                                                   interleaved: true) else {
                 logger.error("Failed to create output audio format for resampling.")
                 return
             }
             
+            print("Conversation input format: \(inputFormat)")
+            print("Conversation output format: \(outputFormat)")
+            
+            // Create converter once and reuse
             guard let audioConverter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
                 logger.error("Failed to create audio converter.")
                 return
             }
             
+            // Remove any existing taps
+            input.mixer.removeTap(onBus: 0)
+            
+            // Install a single tap that will be reused
             input.mixer.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
                 guard let self = self, self.isProcessingInput else { return }
                 
-                guard let channelData = buffer.floatChannelData?[0] else {
-                    self.logger.error("Failed to retrieve channel data.")
+                // Create output buffer with appropriate size based on resampling ratio
+                let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (16000.0 / inputFormat.sampleRate))
+                guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat,
+                                                            frameCapacity: outputFrameCapacity) else {
+                    self.logger.error("Failed to create output PCM buffer.")
                     return
                 }
                 
-                // Create input PCM buffer for the original data
-                let inputPCMBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: buffer.frameCapacity)!
-                inputPCMBuffer.frameLength = buffer.frameLength
-                
-                // Manually copy the audio data from the input buffer to the new PCM buffer
-                for channel in 0..<Int(inputFormat.channelCount) {
-                    let inputChannelData = buffer.floatChannelData![channel]
-                    let outputChannelData = inputPCMBuffer.floatChannelData![channel]
-                    for frame in 0..<Int(buffer.frameLength) {
-                        outputChannelData[frame] = inputChannelData[frame]
-                    }
-                }
-                
-                // Create output PCM buffer for resampled data
-                guard let outputPCMBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(bufferSize)) else {
-                    self.logger.error("Failed to create output PCM buffer for resampled data.")
-                    return
-                }
-                
-                var errorOccurred = false
-                audioConverter.convert(to: outputPCMBuffer, error: nil) { inNumPackets, outStatus in
+                var error: NSError?
+                let status = audioConverter.convert(to: outputPCMBuffer, error: &error) { inNumPackets, outStatus in
                     outStatus.pointee = .haveData
-                    return inputPCMBuffer
+                    return buffer
                 }
                 
-                // Check if the output buffer was successfully filled
-                if errorOccurred {
-                    self.logger.error("Error during resampling.")
+                if status == .error {
+                    self.logger.error("Conversion error: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 
-                // Convert resampled float32 buffer to Int16 PCM and then to base64
-                var pcmBuffer = [Int16](repeating: 0, count: Int(outputPCMBuffer.frameLength))
-                let frameLength = Int(outputPCMBuffer.frameLength)
-                
-                for i in 0..<frameLength {
-                    let sample = outputPCMBuffer.floatChannelData![0][i]
-                    pcmBuffer[i] = Int16(max(-1.0, min(1.0, sample)) * Float(Int16.max))
+                // Get the converted samples
+                guard let int16ChannelData = outputPCMBuffer.int16ChannelData else {
+                    self.logger.error("Failed to get int16 channel data")
+                    return
                 }
                 
-                // Convert [Int16] to Data with little-endian byte order
-                let littleEndianPcmBuffer = pcmBuffer.map { $0.littleEndian }
-                let data = littleEndianPcmBuffer.withUnsafeBufferPointer { Data(buffer: $0) }
+                let frameLength = Int(outputPCMBuffer.frameLength)
+                var samples = [Int16](repeating: 0, count: frameLength)
                 
-                // Base64 encode the resampled data
-                let base64 = data.base64EncodedString()
+                // Copy samples ensuring we're not exceeding buffer bounds
+                for i in 0..<frameLength {
+                    samples[i] = int16ChannelData[0][i]
+                }
                 
-                // Send the WebSocket message
-                let message: [String: Any] = ["user_audio_chunk": base64]
-                self.sendWebSocketMessage(message)
+                // Convert to Data maintaining sample rate and timing
+                let data = Data(bytes: samples, count: frameLength * MemoryLayout<Int16>.size)
                 
-                // Process the buffer using AudioConcatProcessor
-                self.audioConcatProcessor.handleMessage(["type": "buffer", "buffer": data])
-                self.audioConcatProcessor.process(outputs: &self.outputBuffers)
+                // Encode and send only if we have data
+                if !data.isEmpty {
+                    let base64 = data.base64EncodedString()
+                    let message: [String: Any] = ["type": "user_audio_chunk",
+                                                "user_audio_chunk": base64]
+                    self.sendWebSocketMessage(message)
+                }
                 
+                // Update volume meter
                 self.updateVolume(buffer)
             }
+            
             output.engine.prepare()
         }
+
         private func updateVolume(_ buffer: AVAudioPCMBuffer) {
               guard let channelData = buffer.floatChannelData else { return }
 
@@ -730,8 +753,6 @@ public class ElevenLabsSwift {
           }
         
         private func addAudioBase64Chunk(_ chunk: String) {
-            
-            
             guard let data = ElevenLabsSwift.base64ToArrayBuffer(chunk) else {
                 callbacks.onError("Failed to decode audio chunk", nil)
                 return
@@ -771,6 +792,8 @@ public class ElevenLabsSwift {
             
             scheduleNextBuffer()
         }
+
+
         
         private func scheduleNextBuffer() {
             output.audioQueue.async { [weak self] in
@@ -913,18 +936,40 @@ public class ElevenLabsSwift {
     private static func configureAudioSession() throws {
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            // Set category to play and record with voiceChat mode for echo cancellation
-            try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+            // Configure for voice chat with minimum latency
+            try audioSession.setCategory(.playAndRecord,
+                                         mode: .voiceChat,
+                                       options: [.defaultToSpeaker, .allowBluetooth])
             
-            // Set preferred sample rate
+            // Set preferred IO buffer duration for lower latency
+            try audioSession.setPreferredIOBufferDuration(0.005) // 5ms buffer
+            
+            // Set preferred sample rate to match our target Note most IOS devices aren't able to go down this low
             try audioSession.setPreferredSampleRate(16000)
             
-            // Activate the audio session
-            try audioSession.setActive(true)
+            // Request input gain control if available
+            if audioSession.isInputGainSettable {
+                try audioSession.setInputGain(1.0)
+            }
             
-            print("Audio Session configured with sample rate: \(audioSession.sampleRate)")
+            // Activate the session
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            
+            // Log detailed audio session information
+            print("Audio Session configured successfully:")
+            print("Category: \(audioSession.category.rawValue)")
+            print("Mode: \(audioSession.mode.rawValue)")
+            print("Sample Rate: \(audioSession.sampleRate)")
+            print("Preferred Sample Rate: \(audioSession.preferredSampleRate)")
+            print("IO Buffer Duration: \(audioSession.ioBufferDuration)")
+            print("Preferred IO Buffer Duration: \(audioSession.preferredIOBufferDuration)")
+            print("Input Latency: \(audioSession.inputLatency)")
+            print("Output Latency: \(audioSession.outputLatency)")
+            print("Input Gain: \(audioSession.inputGain)")
+            print("Input Available: \(audioSession.isInputAvailable)")
+            print("Output Volume: \(audioSession.outputVolume)")
         } catch {
-            print("Failed to configure audio session: \(error)")
+            print("Failed to configure audio session: \(error.localizedDescription)")
             throw error
         }
     }
