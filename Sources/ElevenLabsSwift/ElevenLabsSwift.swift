@@ -208,6 +208,7 @@ public class ElevenLabsSwift {
         public let engine: AVAudioEngine
         public let inputNode: AVAudioInputNode
         public let mixer: AVAudioMixerNode
+        private var echoCancellationUnit: AudioUnit?
 
         private init(engine: AVAudioEngine, inputNode: AVAudioInputNode, mixer: AVAudioMixerNode) {
             self.engine = engine
@@ -215,7 +216,21 @@ public class ElevenLabsSwift {
             self.mixer = mixer
         }
 
-        public static func create(sampleRate _: Double) async throws -> Input {
+        // Remove this old version:
+        // public static func create(sampleRate _: Double) async throws -> Input {
+        //     let engine = AVAudioEngine()
+        //     let inputNode = engine.inputNode
+        //     let mixer = AVAudioMixerNode()
+        //
+        //     engine.attach(mixer)
+        //     engine.connect(inputNode, to: mixer, format: inputNode.inputFormat(forBus: 0))
+        //
+        //     try engine.start()
+        //     return Input(engine: engine, inputNode: inputNode, mixer: mixer)
+        // }
+
+        // Keep this new version that includes echo cancellation:
+        public static func create(sampleRate: Double) async throws -> Input {
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
             let mixer = AVAudioMixerNode()
@@ -223,11 +238,47 @@ public class ElevenLabsSwift {
             engine.attach(mixer)
             engine.connect(inputNode, to: mixer, format: inputNode.inputFormat(forBus: 0))
 
+            let input = Input(engine: engine, inputNode: inputNode, mixer: mixer)
+            try input.setupEchoCancellation()
             try engine.start()
-            return Input(engine: engine, inputNode: inputNode, mixer: mixer)
+            return input
+        }
+
+        private func setupEchoCancellation() throws {
+            var audioComponentDescription = AudioComponentDescription(
+                componentType: kAudioUnitType_Output,
+                componentSubType: kAudioUnitSubType_VoiceProcessingIO,
+                componentManufacturer: kAudioUnitManufacturer_Apple,
+                componentFlags: 0,
+                componentFlagsMask: 0)
+            
+            guard let audioComponent = AudioComponentFindNext(nil, &audioComponentDescription) else {
+                throw ElevenLabsError.failedToCreateAudioUnit
+            }
+            
+            var audioUnit: AudioUnit?
+            AudioComponentInstanceNew(audioComponent, &audioUnit)
+            
+            guard let unit = audioUnit else {
+                throw ElevenLabsError.failedToCreateAudioUnit
+            }
+            
+            // Enable echo cancellation
+            var enableEcho: UInt32 = 0
+            AudioUnitSetProperty(unit,
+                               kAUVoiceIOProperty_BypassVoiceProcessing,
+                               kAudioUnitScope_Global,
+                               0,
+                               &enableEcho,
+                               UInt32(MemoryLayout<UInt32>.size))
+            
+            self.echoCancellationUnit = unit
         }
 
         public func close() {
+            if let unit = echoCancellationUnit {
+                AudioComponentInstanceDispose(unit)
+            }
             engine.stop()
         }
     }
@@ -837,6 +888,7 @@ public class ElevenLabsSwift {
         case unexpectedBinaryMessage
         case unknownMessageType
         case failedToCreateAudioFormat
+        case failedToCreateAudioUnit
 
         public var errorDescription: String? {
             switch self {
@@ -852,6 +904,8 @@ public class ElevenLabsSwift {
                 return "Received an unknown message type."
             case .failedToCreateAudioFormat:
                 return "Failed to create the audio format."
+            case .failedToCreateAudioUnit:
+                return "Failed to create audio processing unit for echo cancellation."
             }
         }
     }
@@ -861,25 +915,33 @@ public class ElevenLabsSwift {
     private static func configureAudioSession() throws {
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            // Configure for voice chat with minimum latency
-            try audioSession.setCategory(.playAndRecord,
-                                         mode: .voiceChat,
-                                         options: [.allowBluetooth])
-
+            // Configure for voice chat with echo cancellation
+            try audioSession.setCategory(.playAndRecord, 
+                                       mode: .voiceChat,  // Using voiceChat mode for hardware echo cancellation
+                                       options: [.allowBluetooth, .defaultToSpeaker])
+            
+            // Enable echo cancellation and noise suppression
+            var audioComponentDescription = AudioComponentDescription(
+                componentType: kAudioUnitType_Output,
+                componentSubType: kAudioUnitSubType_VoiceProcessingIO,
+                componentManufacturer: kAudioUnitManufacturer_Apple,
+                componentFlags: 0,
+                componentFlagsMask: 0)
+            
             // Set preferred IO buffer duration for lower latency
-            try audioSession.setPreferredIOBufferDuration(0.005) // 5ms buffer
-
-            // Set preferred sample rate to match our target Note most IOS devices aren't able to go down this low
+            try audioSession.setPreferredIOBufferDuration(0.005)
+            
+            // Set preferred sample rate
             try audioSession.setPreferredSampleRate(16000)
-
-            // Request input gain control if available
+            
+            // Lower input gain to reduce echo
             if audioSession.isInputGainSettable {
-                try audioSession.setInputGain(1.0)
+                try audioSession.setInputGain(0.7) // Reduced from 1.0
             }
-
+            
             // Activate the session
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-
+            
         } catch {
             print("Failed to configure audio session: \(error.localizedDescription)")
             throw error
@@ -905,3 +967,4 @@ private extension Data {
         self = buffer.withUnsafeBufferPointer { Data(buffer: $0) }
     }
 }
+
