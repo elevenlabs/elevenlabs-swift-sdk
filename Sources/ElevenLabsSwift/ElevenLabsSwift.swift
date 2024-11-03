@@ -416,10 +416,17 @@ public class ElevenLabsSwift {
             // Set up the main mixer node
             self.mainMixer = audioEngine.mainMixerNode
             
-            // Connect the player node to the main mixer
-            audioEngine.connect(playerNode, to: mainMixer, format: inputFormat)
 
+            let sampleRate = Double(16000)
+            guard let playerNodeFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
+                callbacks.onError("Failed to create AVAudioFormat for playerNode", nil)
+                return
+            }
             
+            audioEngine.connect(playerNode, to: mainMixer, format: playerNodeFormat)
+            
+          
+
             
 
             // Set the onProcess callback
