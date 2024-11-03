@@ -202,73 +202,71 @@ public class ElevenLabsSwift {
         }
     }
 
-    // MARK: - Audio Input
-
-    public class Input {
-        public let engine: AVAudioEngine
-        public let inputNode: AVAudioInputNode
-        public let mixer: AVAudioMixerNode
-
-        private init(engine: AVAudioEngine, inputNode: AVAudioInputNode, mixer: AVAudioMixerNode) {
-            self.engine = engine
-            self.inputNode = inputNode
-            self.mixer = mixer
-        }
-
-        public static func create(sampleRate _: Double) async throws -> Input {
-            let engine = AVAudioEngine()
-            let inputNode = engine.inputNode
-            let mixer = AVAudioMixerNode()
-
-            engine.attach(mixer)
-            engine.connect(inputNode, to: mixer, format: inputNode.inputFormat(forBus: 0))
-
-            try engine.start()
-            return Input(engine: engine, inputNode: inputNode, mixer: mixer)
-        }
-
-        public func close() {
-            engine.stop()
-        }
-    }
+//    // MARK: - Audio Input
+//
+//    public class Input {
+//        public let inputNode: AVAudioInputNode
+//        public let mixer: AVAudioMixerNode
+//
+//        private init(engine: AVAudioEngine, inputNode: AVAudioInputNode, mixer: AVAudioMixerNode) {
+//            self.engine = engine
+//            self.inputNode = inputNode
+//            self.mixer = mixer
+//        }
+//
+//        public static func create(sampleRate _: Double) async throws -> Input {
+//            let engine = AVAudioEngine()
+//            let inputNode = engine.inputNode
+//            let mixer = AVAudioMixerNode()
+//
+//            engine.attach(mixer)
+//            engine.connect(inputNode, to: mixer, format: inputNode.inputFormat(forBus: 0))
+//
+//            try engine.start()
+//            return Input(engine: engine, inputNode: inputNode, mixer: mixer)
+//        }
+//
+//        public func close() {
+//            engine.stop()
+//        }
+//    }
 
     // MARK: - Output
 
-    public class Output {
-        public let engine: AVAudioEngine
-        public let playerNode: AVAudioPlayerNode
-        public let mixer: AVAudioMixerNode
-        let audioQueue: DispatchQueue
-
-        private init(engine: AVAudioEngine, playerNode: AVAudioPlayerNode, mixer: AVAudioMixerNode) {
-            self.engine = engine
-            self.playerNode = playerNode
-            self.mixer = mixer
-            audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
-        }
-
-        public static func create(sampleRate: Double) async throws -> Output {
-            let engine = AVAudioEngine()
-            let playerNode = AVAudioPlayerNode()
-            let mixer = AVAudioMixerNode()
-
-            engine.attach(playerNode)
-            engine.attach(mixer)
-
-            guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
-                throw ElevenLabsError.failedToCreateAudioFormat
-            }
-
-            engine.connect(playerNode, to: mixer, format: format)
-            engine.connect(mixer, to: engine.mainMixerNode, format: format)
-
-            return Output(engine: engine, playerNode: playerNode, mixer: mixer)
-        }
-
-        public func close() {
-            engine.stop()
-        }
-    }
+//    public class Output {
+//        public let playerNode: AVAudioPlayerNode
+//        public let mixer: AVAudioMixerNode
+//        let audioQueue: DispatchQueue
+//
+//        private init(engine: AVAudioEngine, playerNode: AVAudioPlayerNode, mixer: AVAudioMixerNode) {
+//            self.engine = engine
+//            self.playerNode = playerNode
+//            self.mixer = mixer
+//            audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
+//        }
+//
+//        public static func create(sampleRate: Double) async throws -> Output {
+//            let engine = AVAudioEngine()
+//            let playerNode = AVAudioPlayerNode()
+//            let mixer = AVAudioMixerNode()
+//
+//            engine.attach(playerNode)
+//            engine.attach(mixer)
+//
+//            guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
+//                throw ElevenLabsError.failedToCreateAudioFormat
+//            }
+//
+//            engine.connect(playerNode, to: mixer, format: format)
+//            engine.connect(mixer, to: engine.mainMixerNode, format: format)
+//
+//            return Output(engine: engine, playerNode: playerNode, mixer: mixer)
+//        }
+//
+//        public func close() {
+//            engine.stop()
+//        }
+//    }
 
     // MARK: - Conversation
 
@@ -302,9 +300,16 @@ public class ElevenLabsSwift {
     }
 
     public class Conversation: @unchecked Sendable {
+        // audio nodes
+        private let audioEngine: AVAudioEngine
+        private let inputNode: AVAudioInputNode
+        private let playerNode: AVAudioPlayerNode
+        private let mainMixer: AVAudioMixerNode
+        private let audioQueue: DispatchQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
+
         private let connection: Connection
-        private let input: Input
-        private let output: Output
+//        private let input: Input
+//        private let output: Output
         private let callbacks: Callbacks
 
         private let modeLock = NSLock()
@@ -396,11 +401,26 @@ public class ElevenLabsSwift {
             }
         }
 
-        private init(connection: Connection, input: Input, output: Output, callbacks: Callbacks) {
+        private init(connection: Connection, callbacks: Callbacks) {
             self.connection = connection
-            self.input = input
-            self.output = output
             self.callbacks = callbacks
+            self.audioEngine = AVAudioEngine()
+            
+            self.inputNode = audioEngine.inputNode
+            let inputFormat = inputNode.inputFormat(forBus: 0)
+            
+            // Set up the player node (output)
+            self.playerNode = AVAudioPlayerNode()
+            audioEngine.attach(playerNode)
+            
+            // Set up the main mixer node
+            self.mainMixer = audioEngine.mainMixerNode
+            
+            // Connect the player node to the main mixer
+            audioEngine.connect(playerNode, to: mainMixer, format: inputFormat)
+
+            
+            
 
             // Set the onProcess callback
             audioConcatProcessor.onProcess = { [weak self] finished in
@@ -427,21 +447,15 @@ public class ElevenLabsSwift {
             // Step 2: Create the WebSocket connection
             let connection = try await Connection.create(config: config)
 
-            // Step 3: Create the audio input
-            let input = try await Input.create(sampleRate: Double(connection.sampleRate))
+            // Step 3: Initialize the Conversation
+            let conversation = Conversation(connection: connection, callbacks: callbacks)
 
-            // Step 4: Create the audio output
-            let output = try await Output.create(sampleRate: Double(connection.sampleRate))
-
-            // Step 5: Initialize the Conversation
-            let conversation = Conversation(connection: connection, input: input, output: output, callbacks: callbacks)
-
-            // Step 6: Start the AVAudioEngine
-            try output.engine.start()
-
-            // Step 7: Start the player node
-            output.playerNode.play()
-
+            // Step 4: Start the AVAudioEngine
+            try conversation.audioEngine.start()
+            
+            // Step 5: Start the player node
+            conversation.playerNode.play()
+            
             // Step 8: Start recording
             conversation.startRecording()
 
@@ -582,7 +596,7 @@ public class ElevenLabsSwift {
 
         private func setupAudioProcessing() {
             let bufferSize: AVAudioFrameCount = 1024
-            let inputFormat = input.inputNode.inputFormat(forBus: 0)
+            let inputFormat = inputNode.inputFormat(forBus: 0)
 
             // Output format (16000 Hz, mono, Int16)
             guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
@@ -601,11 +615,13 @@ public class ElevenLabsSwift {
             }
 
             // Remove any existing taps
-            input.mixer.removeTap(onBus: 0)
+            inputNode.removeTap(onBus: 0)
 
             // Install a single tap that will be reused
-            input.mixer.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
+            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
                 guard let self = self, self.isProcessingInput else { return }
+                
+                // TODO: Move the below logic into separate function
 
                 // Create output buffer with appropriate size based on resampling ratio
                 let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * (16000.0 / inputFormat.sampleRate))
@@ -656,7 +672,7 @@ public class ElevenLabsSwift {
                 self.updateVolume(buffer)
             }
 
-            output.engine.prepare()
+            audioEngine.prepare()
         }
 
         private func updateVolume(_ buffer: AVAudioPCMBuffer) {
@@ -721,7 +737,7 @@ public class ElevenLabsSwift {
         }
 
         private func scheduleNextBuffer() {
-            output.audioQueue.async { [weak self] in
+            audioQueue.async { [weak self] in
                 guard let self = self else { return }
 
                 let buffer: AVAudioPCMBuffer? = self.audioBufferLock.withLock {
@@ -730,11 +746,11 @@ public class ElevenLabsSwift {
 
                 guard let audioBuffer = buffer else { return }
 
-                self.output.playerNode.scheduleBuffer(audioBuffer) {
+                self.playerNode.scheduleBuffer(audioBuffer) {
                     self.scheduleNextBuffer()
                 }
-                if !self.output.playerNode.isPlaying {
-                    self.output.playerNode.play()
+                if !self.playerNode.isPlaying {
+                    self.playerNode.play()
                 }
             }
         }
@@ -745,13 +761,13 @@ public class ElevenLabsSwift {
 
             // Fade out the volume
             let fadeOutDuration: TimeInterval = 2.0
-            output.mixer.volume = volume
-            output.mixer.volume = 0.0001
+            mainMixer.volume = volume
+            mainMixer.volume = 0.0001
 
             // Reset volume back after 2 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDuration) { [weak self] in
                 guard let self = self else { return }
-                self.output.mixer.volume = self.volume
+                self.mainMixer.volume = self.volume
                 self.clearAudioBuffers()
             }
         }
@@ -774,8 +790,7 @@ public class ElevenLabsSwift {
 
             updateStatus(.disconnecting)
             connection.close()
-            input.close()
-            output.close()
+            audioEngine.stop()
             updateStatus(.disconnected)
 
             DispatchQueue.main.async {
@@ -793,13 +808,13 @@ public class ElevenLabsSwift {
         /// Retrieves the input volume
         /// - Returns: Current input volume
         public func getInputVolume() -> Float {
-            input.mixer.volume
+            0 //TODO fix
         }
 
         /// Retrieves the output volume
         /// - Returns: Current output volume
         public func getOutputVolume() -> Float {
-            output.mixer.volume
+            playerNode.volume
         }
 
         /// Starts recording audio input
@@ -820,9 +835,9 @@ public class ElevenLabsSwift {
         }
 
         private func stopPlayback() {
-            output.audioQueue.async { [weak self] in
+            audioQueue.async { [weak self] in
                 guard let self = self else { return }
-                self.output.playerNode.stop()
+                self.playerNode.stop()
             }
         }
     }
@@ -864,7 +879,7 @@ public class ElevenLabsSwift {
             // Configure for voice chat with minimum latency
             try audioSession.setCategory(.playAndRecord,
                                          mode: .voiceChat,
-                                         options: [.allowBluetooth])
+                                         options: [.allowBluetooth, .defaultToSpeaker])
 
             // Set preferred IO buffer duration for lower latency
             try audioSession.setPreferredIOBufferDuration(0.005) // 5ms buffer
