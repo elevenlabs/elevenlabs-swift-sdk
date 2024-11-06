@@ -210,7 +210,7 @@ public class ElevenLabsSDK {
         public var isRecording: Bool = false
         private var recordCallback: ((AVAudioPCMBuffer, Float) -> Void)?
         private var currentAudioLevel: Float = 0.0
-        
+
         private init(audioUnit: AudioUnit, audioFormat: AudioStreamBasicDescription) {
             self.audioUnit = audioUnit
             self.audioFormat = audioFormat
@@ -222,7 +222,7 @@ public class ElevenLabsSDK {
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try audioSession.setPreferredSampleRate(sampleRate)
             try audioSession.setActive(true)
-            
+
             // Define the Audio Component
             var audioComponentDesc = AudioComponentDescription(
                 componentType: kAudioUnitType_Output,
@@ -231,20 +231,20 @@ public class ElevenLabsSDK {
                 componentFlags: 0,
                 componentFlagsMask: 0
             )
-            
+
             guard let audioComponent = AudioComponentFindNext(nil, &audioComponentDesc) else {
                 throw ElevenLabsError.failedToCreateAudioComponent
             }
-            
+
             var audioUnitOptional: AudioUnit?
             AudioComponentInstanceNew(audioComponent, &audioUnitOptional)
             guard let audioUnit = audioUnitOptional else {
                 throw ElevenLabsError.failedToCreateAudioComponentInstance
             }
-            
+
             // Create the Input instance
             let input = Input(audioUnit: audioUnit, audioFormat: AudioStreamBasicDescription())
-            
+
             // Enable IO for recording
             var enableIO: UInt32 = 1
             AudioUnitSetProperty(audioUnit,
@@ -253,7 +253,7 @@ public class ElevenLabsSDK {
                                  1,
                                  &enableIO,
                                  UInt32(MemoryLayout.size(ofValue: enableIO)))
-            
+
             // Disable output
             var disableIO: UInt32 = 0
             AudioUnitSetProperty(audioUnit,
@@ -262,7 +262,7 @@ public class ElevenLabsSDK {
                                  0,
                                  &disableIO,
                                  UInt32(MemoryLayout.size(ofValue: disableIO)))
-            
+
             // Set the audio format
             var audioFormat = AudioStreamBasicDescription(
                 mSampleRate: sampleRate,
@@ -275,16 +275,16 @@ public class ElevenLabsSDK {
                 mBitsPerChannel: 16,
                 mReserved: 0
             )
-            
+
             AudioUnitSetProperty(audioUnit,
                                  kAudioUnitProperty_StreamFormat,
                                  kAudioUnitScope_Output,
                                  1, // Bus 1 (Output scope of input element)
                                  &audioFormat,
                                  UInt32(MemoryLayout<AudioStreamBasicDescription>.size))
-            
+
             input.audioFormat = audioFormat
-            
+
             // Set the input callback
             var inputCallbackStruct = AURenderCallbackStruct(
                 inputProc: inputRenderCallback,
@@ -296,35 +296,35 @@ public class ElevenLabsSDK {
                                  1, // Bus 1
                                  &inputCallbackStruct,
                                  UInt32(MemoryLayout<AURenderCallbackStruct>.size))
-            
+
             // Initialize and start the audio unit
             AudioUnitInitialize(audioUnit)
             AudioOutputUnitStart(audioUnit)
-            
+
             return input
         }
-        
+
         public func setRecordCallback(_ callback: @escaping (AVAudioPCMBuffer, Float) -> Void) {
-            self.recordCallback = callback
+            recordCallback = callback
         }
-        
+
         public func close() {
             AudioOutputUnitStop(audioUnit)
             AudioUnitUninitialize(audioUnit)
             AudioComponentInstanceDispose(audioUnit)
         }
-        
-        private static let inputRenderCallback: AURenderCallback = { (
+
+        private static let inputRenderCallback: AURenderCallback = {
             inRefCon,
-            ioActionFlags,
-            inTimeStamp,
-            inBusNumber,
-            inNumberFrames,
-            ioData
-        ) -> OSStatus in
+                ioActionFlags,
+                inTimeStamp,
+                _,
+                inNumberFrames,
+                _
+                -> OSStatus in
             let input = Unmanaged<Input>.fromOpaque(inRefCon).takeUnretainedValue()
             let audioUnit = input.audioUnit
-            
+
             let byteSize = Int(inNumberFrames) * MemoryLayout<Int16>.size
             let data = UnsafeMutableRawPointer.allocate(byteCount: byteSize, alignment: MemoryLayout<Int16>.alignment)
             var audioBuffer = AudioBuffer(
@@ -336,14 +336,14 @@ public class ElevenLabsSDK {
                 mNumberBuffers: 1,
                 mBuffers: audioBuffer
             )
-            
+
             let status = AudioUnitRender(audioUnit,
                                          ioActionFlags,
                                          inTimeStamp,
                                          1, // inBusNumber
                                          inNumberFrames,
                                          &bufferList)
-            
+
             if status == noErr {
                 let frameCount = Int(inNumberFrames)
                 guard let audioFormat = AVAudioFormat(
@@ -367,7 +367,7 @@ public class ElevenLabsSDK {
                 if let channelData = pcmBuffer.int16ChannelData {
                     memcpy(channelData[0], dataPointer, byteSize)
                 }
-                
+
                 // Compute RMS value for volume level
                 var rms: Float = 0.0
                 for i in 0 ..< frameCount {
@@ -375,16 +375,15 @@ public class ElevenLabsSDK {
                     rms += sample * sample
                 }
                 rms = sqrt(rms / Float(frameCount))
-                
+
                 // Call the callback with the audio buffer and current audio level
                 input.recordCallback?(pcmBuffer, rms)
             }
-            
+
             data.deallocate()
             return status
         }
     }
-
 
     // MARK: - Output
 
@@ -732,7 +731,7 @@ public class ElevenLabsSDK {
                     self?.callbacks.onError("Failed to send WebSocket message", error)
                 }
             }
-            }
+        }
 
         private func setupAudioProcessing() {
             // Set the record callback to receive audio buffers
@@ -760,7 +759,6 @@ public class ElevenLabsSDK {
             }
         }
 
-        
         private func updateVolume(_ buffer: AVAudioPCMBuffer) {
             guard let channelData = buffer.floatChannelData else { return }
 
@@ -941,7 +939,7 @@ public class ElevenLabsSDK {
         case failedToCreateAudioFormat
         case failedToCreateAudioComponent
         case failedToCreateAudioComponentInstance
-        
+
         public var errorDescription: String? {
             switch self {
             case .invalidConfiguration:
