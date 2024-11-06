@@ -1,4 +1,3 @@
-
 ![convo](https://github.com/user-attachments/assets/1793b8ac-a273-4d70-ba53-f55a78179ba6)
 
 # Elevenlabs Conversational AI Swift SDK (experimental)
@@ -24,7 +23,7 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
 4. Select Version
 5. Import the SDK
    ```swift
-   import ElevenLabsSwift
+   import ElevenLabsSDK
    ```
 6. Ensure `NSMicrophoneUsageDescription` is added to your Info.plist to explain microphone access.
 
@@ -36,14 +35,14 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
    Create a `SessionConfig` with either an `agendId` or `signedUrl`.
 
    ```swift
-   let config = ElevenLabsSwift.SessionConfig(agentId: "your-agent-id")
+   let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")
    ```
 
 2. Define Callbacks
    Implement callbacks to handle various conversation events.
 
    ```swift
-   var callbacks = ElevenLabsSwift.Callbacks()
+   var callbacks = ElevenLabsSDK.Callbacks()
    callbacks.onConnect = { conversationId in
        print("Connected with ID: \(conversationId)")
    }
@@ -67,7 +66,7 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
    ```swift
    Task {
        do {
-           let conversation = try await ElevenLabsSwift.Conversation.startSession(config: config, callbacks: callbacks)
+           let conversation = try await ElevenLabsSDK.Conversation.startSession(config: config, callbacks: callbacks)
            // Use the conversation instance as needed
        } catch {
            print("Failed to start conversation: \(error)")
