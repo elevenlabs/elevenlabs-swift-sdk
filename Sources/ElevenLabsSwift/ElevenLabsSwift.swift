@@ -227,20 +227,23 @@ public class ElevenLabsSDK {
     public struct SessionConfig: Sendable {
         public let signedUrl: String?
         public let agentId: String?
+        public let apiKey: String?
         public let overrides: ConversationConfigOverride?
         public let customLlmExtraBody: [String: LlmExtraBodyValue]?
         public let dynamicVariables: [String: DynamicVariableValue]?
 
-        public init(signedUrl: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
+        public init(signedUrl: String, apiKey: String? = nil, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.signedUrl = signedUrl
+            self.apiKey = apiKey
             agentId = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
         }
 
-        public init(agentId: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
+        public init(agentId: String, apiKey: String? = nil, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.agentId = agentId
+            self.apiKey = apiKey
             signedUrl = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
@@ -276,7 +279,16 @@ public class ElevenLabsSDK {
                 throw ElevenLabsError.invalidURL
             }
 
-            let session = URLSession(configuration: .default)
+            // Create a URLSessionConfiguration and add api key in headers if set
+            let sessionConfiguration = URLSessionConfiguration.default
+            if let apiKey = config.apiKey {
+                sessionConfiguration.httpAdditionalHeaders = [
+                    "xi-api-key": apiKey
+                ]
+            }
+
+            // Create a session with the configuration
+            let session = URLSession(configuration: sessionConfiguration)
             let socket = session.webSocketTask(with: url)
             socket.resume()
 
