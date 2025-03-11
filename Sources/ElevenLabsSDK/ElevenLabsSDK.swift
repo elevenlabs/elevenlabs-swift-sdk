@@ -355,7 +355,8 @@ public class ElevenLabsSDK {
         }
 
         public func close() {
-            socket.cancel(with: .goingAway, reason: nil)
+            // Use a more graceful close code
+            socket.cancel(with: .normalClosure, reason: "Session ended normally".data(using: .utf8))
         }
     }
 
@@ -374,16 +375,22 @@ public class ElevenLabsSDK {
         }
 
         public static func create(sampleRate: Double) async throws -> Input {
-            // Initialize the Audio Session
+            // 1) Initialize Audio Session (iOS only)
+            #if os(iOS)
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
             try audioSession.setPreferredSampleRate(sampleRate)
             try audioSession.setActive(true)
+            #elseif os(macOS)
+            // ------------------------------------------------------------
+            // macOS: No AVAudioSession. Just skip session configuration
+            // ------------------------------------------------------------
+            #endif
 
-            // Define the Audio Component
+            // 2) Describe our VoiceProcessingIO Audio Unit
             var audioComponentDesc = AudioComponentDescription(
                 componentType: kAudioUnitType_Output,
-                componentSubType: kAudioUnitSubType_VoiceProcessingIO, // For echo cancellation
+                componentSubType: kAudioUnitSubType_VoiceProcessingIO, // echo cancellation
                 componentManufacturer: kAudioUnitManufacturer_Apple,
                 componentFlags: 0,
                 componentFlagsMask: 0
@@ -399,28 +406,38 @@ public class ElevenLabsSDK {
                 throw ElevenLabsError.failedToCreateAudioComponentInstance
             }
 
-            // Create the Input instance
+            // 3) Create the Input instance
             let input = Input(audioUnit: audioUnit, audioFormat: AudioStreamBasicDescription())
 
-            // Enable IO for recording
-            var enableIO: UInt32 = 1
+            // 4) Enable IO for input (bus 1)
+            var enableInput: UInt32 = 1
             AudioUnitSetProperty(audioUnit,
                                  kAudioOutputUnitProperty_EnableIO,
                                  kAudioUnitScope_Input,
                                  1,
-                                 &enableIO,
-                                 UInt32(MemoryLayout.size(ofValue: enableIO)))
+                                 &enableInput,
+                                 UInt32(MemoryLayout.size(ofValue: enableInput)))
 
-            // Disable output
-            var disableIO: UInt32 = 0
+            // 5) On macOS: Enable output (bus 0); On iOS: optionally disable it
+            #if os(macOS)
+            var enableOutput: UInt32 = 1
             AudioUnitSetProperty(audioUnit,
                                  kAudioOutputUnitProperty_EnableIO,
                                  kAudioUnitScope_Output,
                                  0,
-                                 &disableIO,
-                                 UInt32(MemoryLayout.size(ofValue: disableIO)))
+                                 &enableOutput,
+                                 UInt32(MemoryLayout.size(ofValue: enableOutput)))
+            #else
+            var disableOutput: UInt32 = 0
+            AudioUnitSetProperty(audioUnit,
+                                 kAudioOutputUnitProperty_EnableIO,
+                                 kAudioUnitScope_Output,
+                                 0,
+                                 &disableOutput,
+                                 UInt32(MemoryLayout.size(ofValue: disableOutput)))
+            #endif
 
-            // Set the audio format
+            // 6) Define common AudioStreamBasicDescription (16 kHz, 16-bit, mono)
             var audioFormat = AudioStreamBasicDescription(
                 mSampleRate: sampleRate,
                 mFormatID: kAudioFormatLinearPCM,
@@ -433,16 +450,28 @@ public class ElevenLabsSDK {
                 mReserved: 0
             )
 
+            // 7) Set the format on bus 1 (Output scope) for capturing
             AudioUnitSetProperty(audioUnit,
                                  kAudioUnitProperty_StreamFormat,
                                  kAudioUnitScope_Output,
-                                 1, // Bus 1 (Output scope of input element)
+                                 1, // bus 1
                                  &audioFormat,
-                                 UInt32(MemoryLayout<AudioStreamBasicDescription>.size))
+                                 UInt32(MemoryLayout.size(ofValue: audioFormat)))
 
+            // 8) On macOS, also set matching format on bus 0 (Input scope)
+            #if os(macOS)
+            AudioUnitSetProperty(audioUnit,
+                                 kAudioUnitProperty_StreamFormat,
+                                 kAudioUnitScope_Input,
+                                 0, // bus 0
+                                 &audioFormat,
+                                 UInt32(MemoryLayout.size(ofValue: audioFormat)))
+            #endif
+
+            // Keep track of the chosen format
             input.audioFormat = audioFormat
 
-            // Set the input callback
+            // 9) Set the input callback
             var inputCallbackStruct = AURenderCallbackStruct(
                 inputProc: inputRenderCallback,
                 inputProcRefCon: UnsafeMutableRawPointer(Unmanaged.passUnretained(input).toOpaque())
@@ -450,35 +479,56 @@ public class ElevenLabsSDK {
             AudioUnitSetProperty(audioUnit,
                                  kAudioOutputUnitProperty_SetInputCallback,
                                  kAudioUnitScope_Global,
-                                 1, // Bus 1
+                                 1, // bus 1
                                  &inputCallbackStruct,
                                  UInt32(MemoryLayout<AURenderCallbackStruct>.size))
 
-            // Initialize and start the audio unit
+            // 10) Initialize + Start
             AudioUnitInitialize(audioUnit)
             AudioOutputUnitStart(audioUnit)
 
             return input
         }
 
+
         public func setRecordCallback(_ callback: @escaping (AVAudioPCMBuffer, Float) -> Void) {
             recordCallback = callback
         }
 
         public func close() {
-            AudioOutputUnitStop(audioUnit)
-            AudioUnitUninitialize(audioUnit)
-            AudioComponentInstanceDispose(audioUnit)
+            // Use a safer approach to stop and dispose audio components
+            // First stop the audio unit
+            let stopStatus = AudioOutputUnitStop(audioUnit)
+            if stopStatus != noErr {
+                print("Warning: Failed to stop audio unit: \(stopStatus)")
+            }
+            
+            // Then uninitialize it
+            let uninitStatus = AudioUnitUninitialize(audioUnit)
+            if uninitStatus != noErr {
+                print("Warning: Failed to uninitialize audio unit: \(uninitStatus)")
+            }
+            
+            // Finally dispose of it
+            let disposeStatus = AudioComponentInstanceDispose(audioUnit)
+            if disposeStatus != noErr {
+                print("Warning: Failed to dispose audio component: \(disposeStatus)")
+            }
+            
+            // Clear the record callback to prevent any further processing
+            recordCallback = nil
         }
 
         private static let inputRenderCallback: AURenderCallback = {
             inRefCon,
                 ioActionFlags,
                 inTimeStamp,
-                _,
+                inBusNumber,
                 inNumberFrames,
                 _
                 -> OSStatus in
+            print("[inputRenderCallback] Called with \(inNumberFrames) frames on bus \(inBusNumber)")
+
             let input = Unmanaged<Input>.fromOpaque(inRefCon).takeUnretainedValue()
             let audioUnit = input.audioUnit
 
@@ -576,7 +626,22 @@ public class ElevenLabsSDK {
         }
 
         public func close() {
-            engine.stop()
+            // Stop the player node first
+            if playerNode.isPlaying {
+                playerNode.stop()
+            }
+            
+            // Then stop the engine
+            if engine.isRunning {
+                engine.stop()
+            }
+            
+            // Reset the engine
+            engine.reset()
+            
+            // Detach nodes
+            engine.detach(playerNode)
+            engine.detach(mixer)
         }
     }
 
@@ -608,7 +673,23 @@ public class ElevenLabsSDK {
         public var onModeChange: @Sendable (Mode) -> Void = { _ in }
         public var onVolumeUpdate: @Sendable (Float) -> Void = { _ in }
 
-        public init() {}
+        public init(
+               onConnect: @escaping @Sendable (String) -> Void = { _ in },
+               onDisconnect: @escaping @Sendable () -> Void = {},
+               onMessage: @escaping @Sendable (String, Role) -> Void = { _,_ in },
+               onError: @escaping @Sendable (String, Any?) -> Void = { _,_ in },
+               onStatusChange: @escaping @Sendable (Status) -> Void = { _ in },
+               onModeChange: @escaping @Sendable (Mode) -> Void = { _ in },
+               onVolumeUpdate: @escaping @Sendable (Float) -> Void = { _ in }
+           ) {
+               self.onConnect = onConnect
+               self.onDisconnect = onDisconnect
+               self.onMessage = onMessage
+               self.onError = onError
+               self.onStatusChange = onStatusChange
+               self.onModeChange = onModeChange
+               self.onVolumeUpdate = onVolumeUpdate
+           }
     }
 
     public class Conversation: @unchecked Sendable {
@@ -768,21 +849,58 @@ public class ElevenLabsSDK {
         }
 
         private func receiveMessages() {
+            // Don't attempt to receive messages if we're not connected
+            guard status == .connected else { return }
+            
             connection.socket.receive { [weak self] result in
                 guard let self = self else { return }
+                
+                // Don't process messages if we're disconnecting or disconnected
+                guard self.status == .connected else { return }
 
                 switch result {
                 case let .success(message):
-
                     self.handleWebSocketMessage(message)
+                    
+                    // Continue receiving messages if still connected
+                    if self.status == .connected {
+                        self.receiveMessages()
+                    }
+                    
                 case let .failure(error):
                     self.logger.error("WebSocket error: \(error.localizedDescription)")
-                    self.callbacks.onError("WebSocket error", error)
-                    self.endSession()
-                }
-
-                if self.status == .connected {
-                    self.receiveMessages()
+                    
+                    // Check if this is a connection error
+                    if (error as NSError).domain == NSPOSIXErrorDomain && 
+                       ((error as NSError).code == 57 || // Socket is not connected
+                        (error as NSError).code == 54 || // Connection reset by peer
+                        (error as NSError).code == 60 || // Operation timed out
+                        (error as NSError).code == 61) { // Connection refused
+                        
+                        // Handle connection errors by ending the session
+                        DispatchQueue.main.async {
+                            self.callbacks.onError("WebSocket connection error", error)
+                            
+                            // Only call endSession if we're still connected
+                            if self.status == .connected {
+                                self.endSession()
+                            }
+                        }
+                    } else {
+                        // For other errors, report them but try to continue
+                        DispatchQueue.main.async {
+                            self.callbacks.onError("WebSocket error", error)
+                        }
+                        
+                        // Try to continue receiving messages after a short delay
+                        if self.status == .connected {
+                            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                                if self.status == .connected {
+                                    self.receiveMessages()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -927,6 +1045,12 @@ public class ElevenLabsSDK {
         }
 
         private func sendWebSocketMessage(_ message: [String: Any]) {
+            // Check if the connection is still active before sending
+            guard status == .connected else {
+              
+                return
+            }
+            
             guard let data = try? JSONSerialization.data(withJSONObject: message),
                   let string = String(data: data, encoding: .utf8)
             else {
@@ -934,10 +1058,40 @@ public class ElevenLabsSDK {
                 return
             }
 
-            connection.socket.send(.string(string)) { [weak self] error in
-                if let error = error {
-                    self?.logger.error("Failed to send WebSocket message: \(error.localizedDescription)")
-                    self?.callbacks.onError("Failed to send WebSocket message", error)
+            // Use a dispatch queue to avoid blocking
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                
+                // Check again if we're still connected before sending
+                guard self.status == .connected else { return }
+                
+                self.connection.socket.send(.string(string)) { [weak self] error in
+                    guard let self = self else { return }
+                    
+                    if let error = error {
+                        self.logger.error("Failed to send WebSocket message: \(error.localizedDescription)")
+                        
+                        // Check if this is a connection error
+                        if (error as NSError).domain == NSPOSIXErrorDomain && 
+                           (error as NSError).code == 57 { // Socket is not connected
+                            
+                            // Only call endSession if we're still in connected state
+                            if self.status == .connected {
+                                self.logger.error("WebSocket connection lost, ending session")
+                                
+                                // Use the main queue for UI-related callbacks
+                                DispatchQueue.main.async {
+                                    self.callbacks.onError("WebSocket connection lost", error)
+                                    self.endSession()
+                                }
+                            }
+                        } else {
+                            // For other errors, just report them
+                            DispatchQueue.main.async {
+                                self.callbacks.onError("Failed to send WebSocket message", error)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -945,16 +1099,19 @@ public class ElevenLabsSDK {
         private func setupAudioProcessing() {
             // Maximum size for each audio chunk in bytes before base64 encoding
             // Since server can handle 16MB and base64 encoding increases size by ~33%,
-            // we'll use 12MB as our raw chunk size to stay safely under the limit
-            let maxRawChunkSize = 12 * 1024 * 1024
+            // we'll use 256 KB as our raw chunk size to stay safely under the limit
+            let maxRawChunkSize = 256 * 1024 // 256 KB
 
             input.setRecordCallback { [weak self] buffer, rms in
-                guard let self = self, self.isProcessingInput else { return }
+                guard let self = self, 
+                      self.isProcessingInput, 
+                      self.status == .connected else { return }
 
                 // Convert buffer data to base64 string
                 if let int16ChannelData = buffer.int16ChannelData {
                     let frameLength = Int(buffer.frameLength)
                     let totalSize = frameLength * MemoryLayout<Int16>.size
+                    print("Sending chunk of size \(totalSize) bytes at rate \(Constants.inputSampleRate) Hz")
 
                     // In most cases, the buffer will be small enough to send in one chunk
                     if totalSize <= maxRawChunkSize {
@@ -967,6 +1124,9 @@ public class ElevenLabsSDK {
                         // Split into smaller chunks if needed
                         var offset = 0
                         while offset < totalSize {
+                            // Check connection status before each chunk
+                            guard self.status == .connected else { break }
+                            
                             let chunkSize = min(maxRawChunkSize, totalSize - offset)
                             let chunkData = Data(bytes: int16ChannelData[0].advanced(by: offset / 2), count: chunkSize)
                             let base64String = chunkData.base64EncodedString()
@@ -1102,17 +1262,67 @@ public class ElevenLabsSDK {
 
         /// Ends the current conversation session
         public func endSession() {
-            guard status == .connected else { return }
-
-            updateStatus(.disconnecting)
-            connection.close()
-            input.close()
-            output.close()
-            updateStatus(.disconnected)
-
-            DispatchQueue.main.async {
-                self.inputVolumeUpdateTimer?.invalidate()
-                self.inputVolumeUpdateTimer = nil
+            // Use a lock to ensure thread safety during shutdown
+            statusLock.withLock {
+                // Only proceed if we're not already disconnecting or disconnected
+                guard _status == .connected else { return }
+                
+                // Update status first to prevent new operations
+                _status = .disconnecting
+                
+                // Notify status change on main thread
+                DispatchQueue.main.async {
+                    self.callbacks.onStatusChange(.disconnecting)
+                }
+            }
+            
+            // Stop processing input immediately
+            isProcessingInput = false
+            
+            // Clear audio buffers and stop playback on audio queue
+            output.audioQueue.async { [weak self] in
+                guard let self = self else { return }
+                
+                // Stop playback first
+                self.output.playerNode.stop()
+                
+                // Then clear buffers
+                self.audioBufferLock.withLock {
+                    self.audioBuffers.removeAll()
+                }
+                
+                self.audioConcatProcessor.handleMessage(["type": "clearInterrupted"])
+                
+                // Close connections on main thread to avoid blocking audio thread
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    
+                    // Close WebSocket connection
+                    self.connection.close()
+                    
+                    // Stop and close audio components with a slight delay
+                    // to allow any pending audio operations to complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                        guard let self = self else { return }
+                        
+                        // Close audio input and output
+                        self.input.close()
+                        self.output.close()
+                        
+                        // Clean up timers
+                        self.inputVolumeUpdateTimer?.invalidate()
+                        self.inputVolumeUpdateTimer = nil
+                        
+                        // Finally update status to disconnected
+                        self.statusLock.withLock {
+                            self._status = .disconnected
+                        }
+                        
+                        // Notify status change
+                        self.callbacks.onStatusChange(.disconnected)
+                        self.callbacks.onDisconnect()
+                    }
+                }
             }
         }
 
@@ -1197,6 +1407,7 @@ public class ElevenLabsSDK {
     // MARK: - Audio Session Configuration
 
     private static func configureAudioSession() throws {
+        #if os(iOS)
         let audioSession = AVAudioSession.sharedInstance()
         do {
             // Configure for voice chat with minimum latency
@@ -1207,7 +1418,7 @@ public class ElevenLabsSDK {
             // Set preferred IO buffer duration for lower latency
             try audioSession.setPreferredIOBufferDuration(0.005) // 5ms buffer
 
-            // Set preferred sample rate to match our target Note most IOS devices aren't able to go down this low
+            // Set preferred sample rate to match our target
             try audioSession.setPreferredSampleRate(16000)
 
             // Request input gain control if available
@@ -1217,11 +1428,15 @@ public class ElevenLabsSDK {
 
             // Activate the session
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-
         } catch {
             print("Failed to configure audio session: \(error.localizedDescription)")
             throw error
         }
+        #elseif os(macOS)
+        // ------------------------------------------------
+        // macOS: No AVAudioSession. Skip entirely.
+        // ------------------------------------------------
+        #endif
     }
 }
 

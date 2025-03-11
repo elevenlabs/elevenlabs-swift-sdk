@@ -5,11 +5,16 @@ let package = Package(
     name: "ElevenLabsSDK",
     platforms: [
         .iOS(.v16),
+        .macOS(.v11),
     ],
     products: [
         .library(
             name: "ElevenLabsSDK",
             targets: ["ElevenLabsSDK"]
+        ),
+        .executable(
+                  name: "MacOSExample",
+                  targets: ["MacOSExample"]
         ),
     ],
     dependencies: [
@@ -18,7 +23,15 @@ let package = Package(
     targets: [
         .target(
             name: "ElevenLabsSDK",
-            dependencies: ["Starscream"]
+            dependencies: ["Starscream"],
+            path: "Sources/ElevenLabsSDK"
+        ),
+        .executableTarget(
+            name: "MacOSExample",
+            dependencies: [
+                "ElevenLabsSDK"
+            ],
+            path: "Sources/MacOSExample"
         ),
     ]
 )
