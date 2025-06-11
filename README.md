@@ -31,7 +31,7 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
 ### Setting Up a Conversation Session
 
 1. Configure the Session
-   Create a `SessionConfig` with either an `agendId` or `signedUrl`.
+   Create a `SessionConfig` with either an `agentId` or `signedUrl`.
 
    ```swift
    let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")
@@ -57,6 +57,15 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
    callbacks.onModeChange = { mode in
        print("Mode changed to: \(mode.rawValue)")
    }
+   callbacks.onVolumeUpdate = { volume in
+       print("Input volume: \(volume)")
+   }
+   callbacks.onOutputVolumeUpdate = { volume in
+       print("Output volume: \(volume)")
+   }
+   callbacks.onMessageCorrection = { original, corrected, role in
+       print("Message corrected - Original: \(original), Corrected: \(corrected), Role: \(role.rawValue)")
+   }
    ```
 
 3. Start the Conversation
@@ -65,7 +74,7 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
    ```swift
    Task {
        do {
-           let conversation = try await ElevenLabsSDK.Conversation.startSession(config: config, callbacks: callbacks)
+           let conversation = try await ElevenLabsSDK.startSession(config: config, callbacks: callbacks)
            // Use the conversation instance as needed
        } catch {
            print("Failed to start conversation: \(error)")
@@ -79,12 +88,13 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
 
    ```swift
    var clientTools = ElevenLabsSDK.ClientTools()
-   clientTools.register("weather", handler: { async parameters throws -> String? in
+   clientTools.register("weather") { parameters in
        print("Weather parameters received:", parameters)
-       ...
-   })
+       // Handle the weather tool call and return response
+       return "The weather is sunny today"
+   }
 
-   let conversation = try await ElevenLabsSDK.Conversation.startSession(
+   let conversation = try await ElevenLabsSDK.startSession(
        config: config,
        callbacks: callbacks,
        clientTools: clientTools
@@ -107,7 +117,7 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
    )
    ```
 
-### Manage the Session
+### Managing the Session
 
 - End Session
 
@@ -120,6 +130,30 @@ Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Packa
   ```swift
   conversation.startRecording()
   conversation.stopRecording()
+  ```
+
+- Send Messages and Updates
+
+  ```swift
+  // Send a contextual update to the conversation
+  conversation.sendContextualUpdate("The user is now in the kitchen")
+  
+  // Send a user message directly
+  conversation.sendUserMessage("Hello, how are you?")
+  
+  // Send user activity signal
+  conversation.sendUserActivity()
+  ```
+
+- Volume Controls
+
+  ```swift
+  // Get current input/output volume levels
+  let inputVolume = conversation.getInputVolume()
+  let outputVolume = conversation.getOutputVolume()
+  
+  // Set conversation volume (0.0 to 1.0)
+  conversation.conversationVolume = 0.8
   ```
 
 ## Example
