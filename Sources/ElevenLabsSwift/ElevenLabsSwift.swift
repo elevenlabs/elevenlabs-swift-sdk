@@ -1,3 +1,4 @@
+import LiveKit
 import AVFoundation
 import Combine
 import DeviceKit
@@ -5,16 +6,44 @@ import Foundation
 import os.log
 
 /// Main class for ElevenLabsSwift package
+@available(macOS 11.0, iOS 14.0, *)
 public class ElevenLabsSDK {
-    public static let version = "1.1.3"
+    public static let version = "1.2.0"
 
-    private enum Constants {
+    // MARK: - Dependencies (Injectable) - Make thread-safe
+    private static let networkServiceLock = NSLock()
+    nonisolated(unsafe) private static var _networkService: ElevenLabsNetworkServiceProtocol = DefaultNetworkService()
+    @MainActor
+    public static var networkService: ElevenLabsNetworkServiceProtocol {
+        get { networkServiceLock.withLock { _networkService } }
+        set { networkServiceLock.withLock { _networkService = newValue } }
+    }
+
+    private static let conversationFactoryLock = NSLock()
+    nonisolated(unsafe) private static var _conversationFactory: LiveKitConversationFactoryProtocol = DefaultLiveKitConversationFactory()
+    @MainActor
+    public static var conversationFactory: LiveKitConversationFactoryProtocol {
+        get { conversationFactoryLock.withLock { _conversationFactory } }
+        set { conversationFactoryLock.withLock { _conversationFactory = newValue } }
+    }
+
+    private static let audioSessionConfiguratorLock = NSLock()
+    nonisolated(unsafe) private static var _audioSessionConfigurator: AudioSessionConfiguratorProtocol = DefaultAudioSessionConfigurator()
+    @MainActor
+    public static var audioSessionConfigurator: AudioSessionConfiguratorProtocol {
+        get { audioSessionConfiguratorLock.withLock { _audioSessionConfigurator } }
+        set { audioSessionConfiguratorLock.withLock { _audioSessionConfigurator = newValue } }
+    }
+
+    internal enum Constants {
+        static let liveKitUrl = "wss://livekit.elevenlabs.io"
+        static let apiBaseUrl = "https://api.elevenlabs.io"
+        static let volumeUpdateInterval: TimeInterval = 0.1
         static let defaultApiOrigin = "wss://api.elevenlabs.io"
         static let defaultApiPathname = "/v1/convai/conversation?agent_id="
         static let inputSampleRate: Double = 16000
         static let sampleRate: Double = 16000
         static let ioBufferDuration: Double = 0.005
-        static let volumeUpdateInterval: TimeInterval = 0.1
         static let fadeOutDuration: TimeInterval = 2.0
         static let bufferSize: AVAudioFrameCount = 1024
 
@@ -219,45 +248,6 @@ public class ElevenLabsSDK {
                 break
             }
         }
-    }
-
-    // MARK: - Device Check
-
-    /// Checks if the current device is likely an iPhone 13 or older model using DeviceKit.
-    private static func isOlderDeviceModel_DeviceKit() -> Bool {
-        let currentDevice = Device.current
-        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "DeviceCheck")
-
-        // Define the array of older iPhone models (up to iPhone 13 series)
-        // Note: This array might need updates if DeviceKit adds more specific older models or you need to support very old ones.
-        let olderModels: [Device] = [
-            // iPhone 13 Series
-            .iPhone13, .iPhone13Mini, .iPhone13Pro, .iPhone13ProMax,
-            // iPhone SE Series (relevant generations)
-            .iPhoneSE2, .iPhoneSE3, // Assuming SE 2/3 fall under 'older'
-            // iPhone 12 Series
-            .iPhone12, .iPhone12Mini, .iPhone12Pro, .iPhone12ProMax,
-            // iPhone 11 Series
-            .iPhone11, .iPhone11Pro, .iPhone11ProMax,
-            // iPhone X Series
-            .iPhoneX, .iPhoneXR, .iPhoneXS, .iPhoneXSMax,
-            // iPhone 8 Series
-            .iPhone8, .iPhone8Plus,
-            // iPhone 7 Series
-            .iPhone7, .iPhone7Plus,
-            // Older SE
-            .iPhoneSE,
-            // Add older models here if needed (e.g., .iPhone6s, .iPhone6sPlus, etc.)
-        ]
-
-        if currentDevice.isPhone && olderModels.contains(currentDevice) {
-            logger.debug("DeviceKit check: Detected older iPhone model (\(currentDevice.description)). Applying workaround.")
-            return true
-        }
-
-        // Covers iPhone 14 series and newer, iPads, iPods, Simulators, unknown devices.
-        logger.debug("DeviceKit check: Detected newer iPhone model (\(currentDevice.description)) or non-applicable device. No workaround needed.")
-        return false
     }
 
     // MARK: - Connection
@@ -820,48 +810,24 @@ public class ElevenLabsSDK {
         ///   - config: Session configuration
         ///   - callbacks: Callbacks for conversation events
         ///   - clientTools: Client tools callbacks (optional)
-        /// - Returns: A started `Conversation` instance
-        public static func startSession(config: SessionConfig, callbacks: Callbacks = Callbacks(), clientTools: ClientTools? = nil) async throws -> Conversation {
-            // Step 1: Configure the audio session
-            try ElevenLabsSDK.configureAudioSession()
-
-            // Step 2: Create the WebSocket connection
-            let connection = try await Connection.create(config: config)
-
-            // Step 3: Create the audio input
-            let input = try await Input.create(sampleRate: Constants.inputSampleRate)
-
-            // Step 4: Create the audio output
-            let output = try await Output.create(sampleRate: Double(connection.sampleRate))
-
-            // Step 5: Initialize the Conversation
-            let conversation = Conversation(connection: connection, input: input, output: output, callbacks: callbacks, clientTools: clientTools)
-
-            // Step 6: Start playing audio (implicitly activates session and engine)
-            try output.startPlaying()
-            conversation.logger.info("Audio engine started.")
-
-            // Step 6.5: Apply speaker output override for older devices
-            if isOlderDeviceModel_DeviceKit() { // Use the new DeviceKit-based check
-                conversation.logger.info("Applying speaker override for older device model.")
-                // Dispatch after a short delay to ensure session/engine are fully ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // 0.5s delay, adjust if needed
-                    do {
-                        try AVAudioSession.sharedInstance().overrideOutputAudioPort(.speaker)
-                        conversation.logger.info("Successfully overridden output audio port to speaker.")
-                    } catch {
-                        conversation.logger.error("Failed to override output audio port to speaker: \(error.localizedDescription)")
-                        // Optionally trigger onError callback
-                        // conversation.callbacks.onError("Failed to set speaker output", error)
-                    }
-                }
-            } else {
-                conversation.logger.info("Speaker override not needed for this device model.")
-            }
-
-            // Step 7: Start recording
-            conversation.startRecording()
-
+        /// - Returns: A started `LiveKitConversationProtocol` instance
+        public static func startSession(
+            config: SessionConfig, 
+            callbacks: Callbacks = Callbacks(), 
+            clientTools: ClientTools? = nil
+        ) async throws -> LiveKitConversationProtocol {
+            // Get LiveKit token from ElevenLabs backend (mockable)
+            let liveKitToken = try await networkService.getLiveKitToken(config: config)
+            
+            // Create and connect to LiveKit room (mockable)
+            let conversation = await conversationFactory.createConversation(
+                token: liveKitToken,
+                config: config,
+                callbacks: callbacks,
+                clientTools: clientTools
+            )
+            
+            try await conversation.connect()
             return conversation
         }
 
@@ -870,10 +836,8 @@ public class ElevenLabsSDK {
             updateStatus(.connected)
 
             // Configure WebSocket for larger messages if possible
-            if let urlSessionTask = connection.socket as? URLSessionWebSocketTask {
-                if #available(iOS 15.0, macOS 12.0, *) {
-                    urlSessionTask.maximumMessageSize = Constants.maxRequestedMessageSize
-                }
+            if #available(iOS 15.0, macOS 12.0, *) {
+                connection.socket.maximumMessageSize = Constants.maxRequestedMessageSize
             }
 
             receiveMessages()
@@ -1352,6 +1316,9 @@ public class ElevenLabsSDK {
         case failedToCreateAudioFormat
         case failedToCreateAudioComponent
         case failedToCreateAudioComponentInstance
+        case failedToConfigureAudioSession
+        case invalidResponse
+        case invalidTokenResponse
 
         public var errorDescription: String? {
             switch self {
@@ -1371,13 +1338,21 @@ public class ElevenLabsSDK {
                 return "Received an unexpected binary message."
             case .unknownMessageType:
                 return "Received an unknown message type."
+            case .failedToConfigureAudioSession:
+                return "Failed to configure audio session."
+            case .invalidResponse:
+                return "Invalid response from server."
+            case .invalidTokenResponse:
+                return "Invalid token response from server."
             }
         }
     }
 
     // MARK: - Audio Session Configuration
 
+    @available(macOS 11.0, iOS 14.0, *)
     private static func configureAudioSession() throws {
+        #if os(iOS) || os(tvOS)
         let audioSession = AVAudioSession.sharedInstance()
         let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
 
@@ -1411,6 +1386,11 @@ public class ElevenLabsSDK {
             print("ElevenLabsSDK: Failed to configure audio session: \(error.localizedDescription)")
             throw error
         }
+        #else
+        // macOS doesn't use AVAudioSession, just log that configuration is skipped
+        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
+        logger.info("Audio session configuration skipped on macOS")
+        #endif
     }
 }
 
@@ -1437,5 +1417,96 @@ extension Encodable {
     var dictionary: [String: Any]? {
         guard let data = try? JSONEncoder().encode(self) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data, options: .allowFragments)) as? [String: Any]
+    }
+}
+
+// MARK: - Default Implementations
+
+@available(macOS 11.0, iOS 14.0, *)
+public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetworkServiceProtocol {
+    public init() {}
+    
+    public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
+        let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
+        
+        guard let agentId = config.agentId else {
+            throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseUrl)/v1/convai/livekit/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let requestBody: [String: Any] = ["agent_id": agentId]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+        }
+        
+        guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = jsonResponse["token"] as? String else {
+            throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
+        }
+        
+        return token
+    }
+}
+
+@available(macOS 11.0, iOS 14.0, *)
+public final class DefaultLiveKitConversationFactory: @unchecked Sendable, LiveKitConversationFactoryProtocol {
+    public init() {}
+    
+    public func createConversation(
+        token: String,
+        config: ElevenLabsSDK.SessionConfig,
+        callbacks: ElevenLabsSDK.Callbacks,
+        clientTools: ElevenLabsSDK.ClientTools?
+    ) -> LiveKitConversationProtocol {
+        return LiveKitConversation(
+            token: token,
+            config: config,
+            callbacks: callbacks,
+            clientTools: clientTools
+        )
+    }
+}
+
+@available(macOS 11.0, iOS 14.0, *)
+public final class DefaultAudioSessionConfigurator: @unchecked Sendable, AudioSessionConfiguratorProtocol {
+    public init() {}
+    
+    public func configureAudioSession() throws {
+        #if os(iOS) || os(tvOS)
+        let audioSession = AVAudioSession.sharedInstance()
+        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
+
+        do {
+            let sessionMode: AVAudioSession.Mode = .voiceChat
+            logger.info("Configuring session with category: .playAndRecord, mode: .voiceChat")
+            try audioSession.setCategory(.playAndRecord, mode: sessionMode, options: [.defaultToSpeaker, .allowBluetooth])
+
+            try audioSession.setPreferredIOBufferDuration(ElevenLabsSDK.Constants.ioBufferDuration)
+            try audioSession.setPreferredSampleRate(ElevenLabsSDK.Constants.inputSampleRate)
+
+            if audioSession.isInputGainSettable {
+                try audioSession.setInputGain(1.0)
+            }
+
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            logger.info("Audio session configured and activated.")
+
+        } catch {
+            logger.error("Failed to configure audio session: \(error.localizedDescription)")
+            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
+        }
+        #else
+        // macOS doesn't use AVAudioSession, just log that configuration is skipped
+        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
+        logger.info("Audio session configuration skipped on macOS")
+        #endif
     }
 }
