@@ -2,18 +2,46 @@ import Foundation
 @testable import ElevenLabsSwift
 
 // MARK: - Mock Network Service
-public class MockNetworkService: ElevenLabsNetworkServiceProtocol {
-    public var shouldSucceed = true
-    public var mockToken = "mock-livekit-token-12345"
-    public var mockError: Error?
-    public var getLiveKitTokenCallCount = 0
-    public var lastConfig: ElevenLabsSDK.SessionConfig?
+public final class MockNetworkService: ElevenLabsNetworkServiceProtocol, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _shouldSucceed = true
+    private var _mockToken = "mock-livekit-token-12345"
+    private var _mockError: Error?
+    private var _getLiveKitTokenCallCount = 0
+    private var _lastConfig: ElevenLabsSDK.SessionConfig?
+    
+    public var shouldSucceed: Bool {
+        get { lock.withLock { _shouldSucceed } }
+        set { lock.withLock { _shouldSucceed = newValue } }
+    }
+    
+    public var mockToken: String {
+        get { lock.withLock { _mockToken } }
+        set { lock.withLock { _mockToken = newValue } }
+    }
+    
+    public var mockError: Error? {
+        get { lock.withLock { _mockError } }
+        set { lock.withLock { _mockError = newValue } }
+    }
+    
+    public var getLiveKitTokenCallCount: Int {
+        get { lock.withLock { _getLiveKitTokenCallCount } }
+    }
+    
+    public var lastConfig: ElevenLabsSDK.SessionConfig? {
+        get { lock.withLock { _lastConfig } }
+    }
     
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
-        getLiveKitTokenCallCount += 1
-        lastConfig = config
+        lock.withLock {
+            _getLiveKitTokenCallCount += 1
+            _lastConfig = config
+        }
         
-        if let error = mockError {
+        let (error, shouldSucceed, token) = lock.withLock { (_mockError, _shouldSucceed, _mockToken) }
+        
+        if let error = error {
             throw error
         }
         
@@ -21,81 +49,175 @@ public class MockNetworkService: ElevenLabsNetworkServiceProtocol {
             throw ElevenLabsSDK.ElevenLabsError.invalidResponse
         }
         
-        return mockToken
+        return token
     }
 }
 
 // MARK: - Mock Conversation
-public class MockLiveKitConversation: LiveKitConversationProtocol {
-    public var connectCallCount = 0
-    public var sendContextualUpdateCallCount = 0
-    public var sendUserMessageCallCount = 0
-    public var sendUserActivityCallCount = 0
-    public var endSessionCallCount = 0
-    public var startRecordingCallCount = 0
-    public var stopRecordingCallCount = 0
+public final class MockLiveKitConversation: LiveKitConversationProtocol, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _connectCallCount = 0
+    private var _sendContextualUpdateCallCount = 0
+    private var _sendUserMessageCallCount = 0
+    private var _sendUserActivityCallCount = 0
+    private var _endSessionCallCount = 0
+    private var _startRecordingCallCount = 0
+    private var _stopRecordingCallCount = 0
+    private var _shouldFailConnect = false
+    private var _mockConversationId = "mock-conversation-123"
+    private var _mockInputVolume: Float = 0.5
+    private var _mockOutputVolume: Float = 0.8
+    private var _conversationVolume: Float = 1.0
+    private var _lastContextualUpdateText: String?
+    private var _lastUserMessageText: String?
     
-    public var shouldFailConnect = false
-    public var mockConversationId = "mock-conversation-123"
-    public var mockInputVolume: Float = 0.5
-    public var mockOutputVolume: Float = 0.8
-    public var conversationVolume: Float = 1.0
+    public var connectCallCount: Int {
+        get { lock.withLock { _connectCallCount } }
+    }
     
-    public var lastContextualUpdateText: String?
-    public var lastUserMessageText: String?
+    public var sendContextualUpdateCallCount: Int {
+        get { lock.withLock { _sendContextualUpdateCallCount } }
+    }
+    
+    public var sendUserMessageCallCount: Int {
+        get { lock.withLock { _sendUserMessageCallCount } }
+    }
+    
+    public var sendUserActivityCallCount: Int {
+        get { lock.withLock { _sendUserActivityCallCount } }
+    }
+    
+    public var endSessionCallCount: Int {
+        get { lock.withLock { _endSessionCallCount } }
+    }
+    
+    public var startRecordingCallCount: Int {
+        get { lock.withLock { _startRecordingCallCount } }
+    }
+    
+    public var stopRecordingCallCount: Int {
+        get { lock.withLock { _stopRecordingCallCount } }
+    }
+    
+    public var shouldFailConnect: Bool {
+        get { lock.withLock { _shouldFailConnect } }
+        set { lock.withLock { _shouldFailConnect = newValue } }
+    }
+    
+    public var mockConversationId: String {
+        get { lock.withLock { _mockConversationId } }
+        set { lock.withLock { _mockConversationId = newValue } }
+    }
+    
+    public var mockInputVolume: Float {
+        get { lock.withLock { _mockInputVolume } }
+        set { lock.withLock { _mockInputVolume = newValue } }
+    }
+    
+    public var mockOutputVolume: Float {
+        get { lock.withLock { _mockOutputVolume } }
+        set { lock.withLock { _mockOutputVolume = newValue } }
+    }
+    
+    public var conversationVolume: Float {
+        get { lock.withLock { _conversationVolume } }
+        set { lock.withLock { _conversationVolume = newValue } }
+    }
+    
+    public var lastContextualUpdateText: String? {
+        get { lock.withLock { _lastContextualUpdateText } }
+    }
+    
+    public var lastUserMessageText: String? {
+        get { lock.withLock { _lastUserMessageText } }
+    }
     
     public func connect() async throws {
-        connectCallCount += 1
-        if shouldFailConnect {
+        let shouldFail = lock.withLock {
+            _connectCallCount += 1
+            return _shouldFailConnect
+        }
+        
+        if shouldFail {
             throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
         }
     }
     
     public func sendContextualUpdate(_ text: String) {
-        sendContextualUpdateCallCount += 1
-        lastContextualUpdateText = text
+        lock.withLock {
+            _sendContextualUpdateCallCount += 1
+            _lastContextualUpdateText = text
+        }
     }
     
     public func sendUserMessage(_ text: String?) {
-        sendUserMessageCallCount += 1
-        lastUserMessageText = text
+        lock.withLock {
+            _sendUserMessageCallCount += 1
+            _lastUserMessageText = text
+        }
     }
     
     public func sendUserActivity() {
-        sendUserActivityCallCount += 1
+        lock.withLock {
+            _sendUserActivityCallCount += 1
+        }
     }
     
     public func endSession() {
-        endSessionCallCount += 1
+        lock.withLock {
+            _endSessionCallCount += 1
+        }
     }
     
     public func getId() -> String {
-        return mockConversationId
+        return lock.withLock { _mockConversationId }
     }
     
     public func getInputVolume() -> Float {
-        return mockInputVolume
+        return lock.withLock { _mockInputVolume }
     }
     
     public func getOutputVolume() -> Float {
-        return mockOutputVolume
+        return lock.withLock { _mockOutputVolume }
     }
     
     public func startRecording() {
-        startRecordingCallCount += 1
+        lock.withLock {
+            _startRecordingCallCount += 1
+        }
     }
     
     public func stopRecording() {
-        stopRecordingCallCount += 1
+        lock.withLock {
+            _stopRecordingCallCount += 1
+        }
     }
 }
 
 // MARK: - Mock Conversation Factory
-public class MockLiveKitConversationFactory: LiveKitConversationFactoryProtocol {
-    public var mockConversation = MockLiveKitConversation()
-    public var createConversationCallCount = 0
-    public var lastToken: String?
-    public var lastConfig: ElevenLabsSDK.SessionConfig?
+public final class MockLiveKitConversationFactory: LiveKitConversationFactoryProtocol, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _mockConversation = MockLiveKitConversation()
+    private var _createConversationCallCount = 0
+    private var _lastToken: String?
+    private var _lastConfig: ElevenLabsSDK.SessionConfig?
+    
+    public var mockConversation: MockLiveKitConversation {
+        get { lock.withLock { _mockConversation } }
+        set { lock.withLock { _mockConversation = newValue } }
+    }
+    
+    public var createConversationCallCount: Int {
+        get { lock.withLock { _createConversationCallCount } }
+    }
+    
+    public var lastToken: String? {
+        get { lock.withLock { _lastToken } }
+    }
+    
+    public var lastConfig: ElevenLabsSDK.SessionConfig? {
+        get { lock.withLock { _lastConfig } }
+    }
     
     public func createConversation(
         token: String,
@@ -103,23 +225,43 @@ public class MockLiveKitConversationFactory: LiveKitConversationFactoryProtocol 
         callbacks: ElevenLabsSDK.Callbacks,
         clientTools: ElevenLabsSDK.ClientTools?
     ) -> LiveKitConversationProtocol {
-        createConversationCallCount += 1
-        lastToken = token
-        lastConfig = config
-        return mockConversation
+        return lock.withLock {
+            _createConversationCallCount += 1
+            _lastToken = token
+            _lastConfig = config
+            return _mockConversation
+        }
     }
 }
 
 // MARK: - Mock Audio Session Configurator
-public class MockAudioSessionConfigurator: AudioSessionConfiguratorProtocol {
-    public var configureCallCount = 0
-    public var shouldFail = false
-    public var mockError: Error?
+public final class MockAudioSessionConfigurator: AudioSessionConfiguratorProtocol, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _configureCallCount = 0
+    private var _shouldFail = false
+    private var _mockError: Error?
+    
+    public var configureCallCount: Int {
+        get { lock.withLock { _configureCallCount } }
+    }
+    
+    public var shouldFail: Bool {
+        get { lock.withLock { _shouldFail } }
+        set { lock.withLock { _shouldFail = newValue } }
+    }
+    
+    public var mockError: Error? {
+        get { lock.withLock { _mockError } }
+        set { lock.withLock { _mockError = newValue } }
+    }
     
     public func configureAudioSession() throws {
-        configureCallCount += 1
+        let (error, shouldFail) = lock.withLock {
+            _configureCallCount += 1
+            return (_mockError, _shouldFail)
+        }
         
-        if let error = mockError {
+        if let error = error {
             throw error
         }
         

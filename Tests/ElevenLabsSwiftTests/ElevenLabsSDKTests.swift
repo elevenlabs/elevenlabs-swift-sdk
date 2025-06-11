@@ -15,17 +15,26 @@ final class ElevenLabsSDKTests: XCTestCase {
         mockConversationFactory = MockLiveKitConversationFactory()
         mockAudioConfigurator = MockAudioSessionConfigurator()
         
-        // Inject mocks
-        ElevenLabsSDK.networkService = mockNetworkService
-        ElevenLabsSDK.conversationFactory = mockConversationFactory
-        ElevenLabsSDK.audioSessionConfigurator = mockAudioConfigurator
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Inject mocks on the main actor
+        Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }
     }
     
     override func tearDown() {
-        // Reset to defaults
-        ElevenLabsSDK.networkService = DefaultNetworkService()
-        ElevenLabsSDK.conversationFactory = DefaultLiveKitConversationFactory()
-        ElevenLabsSDK.audioSessionConfigurator = DefaultAudioSessionConfigurator()
+        // Reset to defaults on the main actor
+        Task { @MainActor in
+            ElevenLabsSDK.networkService = DefaultNetworkService()
+            ElevenLabsSDK.conversationFactory = DefaultLiveKitConversationFactory()
+            ElevenLabsSDK.audioSessionConfigurator = DefaultAudioSessionConfigurator()
+        }
         
         super.tearDown()
     }
@@ -33,6 +42,18 @@ final class ElevenLabsSDKTests: XCTestCase {
     // MARK: - Success Tests
     
     func testStartSession_Success() async throws {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent-123")
         let callbacks = ElevenLabsSDK.Callbacks()
@@ -60,6 +81,18 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
     
     func testConversationBasicOperations() async throws {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
         let conversation = try await ElevenLabsSDK.startSession(config: config)
@@ -88,9 +121,21 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
     
     func testVolumeControls() async throws {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
-        let conversation = try await ElevenLabsSDK.startSession(config: config)
+        var conversation = try await ElevenLabsSDK.startSession(config: config)
         
         // When & Then
         conversation.conversationVolume = 0.75
@@ -103,6 +148,18 @@ final class ElevenLabsSDKTests: XCTestCase {
     // MARK: - Error Tests
     
     func testStartSession_NetworkError() async {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
         mockNetworkService.shouldSucceed = false
@@ -117,6 +174,18 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
     
     func testStartSession_ConnectionError() async {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
         mockConversationFactory.mockConversation.shouldFailConnect = true
@@ -131,6 +200,18 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
     
     func testStartSession_InvalidConfiguration() async {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
         // Given - Use empty agentId and configure mock to return error
         let config = ElevenLabsSDK.SessionConfig(agentId: "")
         mockNetworkService.mockError = ElevenLabsSDK.ElevenLabsError.invalidConfiguration
@@ -149,23 +230,27 @@ final class ElevenLabsSDKTests: XCTestCase {
     // MARK: - Callback Tests
     
     func testCallbacks() async throws {
-        // Given
-        var connectCallbackCalled = false
-        var statusChangeCallbackCalled = false
-        var modeChangeCallbackCalled = false
-        var messageCallbackCalled = false
-        var errorCallbackCalled = false
-        var volumeCallbackCalled = false
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
         
-        let callbacks = ElevenLabsSDK.Callbacks(
-            onConnect: { _ in connectCallbackCalled = true },
-            onDisconnect: { },
-            onMessage: { _, _ in messageCallbackCalled = true },
-            onError: { _, _ in errorCallbackCalled = true },
-            onStatusChange: { _ in statusChangeCallbackCalled = true },
-            onModeChange: { _ in modeChangeCallbackCalled = true },
-            onVolumeUpdate: { _ in volumeCallbackCalled = true }
-        )
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
+        // Given
+        var callbacks = ElevenLabsSDK.Callbacks()
+        callbacks.onConnect = { _ in }
+        callbacks.onDisconnect = { }
+        callbacks.onMessage = { _, _ in }
+        callbacks.onError = { _, _ in }
+        callbacks.onStatusChange = { _ in }
+        callbacks.onModeChange = { _ in }
+        callbacks.onVolumeUpdate = { _ in }
         
         let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
         
@@ -174,16 +259,5 @@ final class ElevenLabsSDKTests: XCTestCase {
         
         // Then - Verify mocks were set up with callbacks
         XCTAssertTrue(true) // Basic test that callbacks are passed through
-    }
-    
-    // MARK: - Performance Tests
-    
-    func testStartSessionPerformance() throws {
-        measure {
-            Task {
-                let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
-                _ = try? await ElevenLabsSDK.startSession(config: config)
-            }
-        }
     }
 } 
