@@ -1,0 +1,69 @@
+name: 🧪 Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, macos-13]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      
+      - name: Cache Swift PM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      
+      - name: Build package
+        run: swift build
+        
+      - name: Run tests
+        run: swift test --verbose
+        
+      - name: Generate test report
+        if: failure()
+        run: |
+          swift test --verbose --parallel 2>&1 | tee test-results.txt
+          
+  # Additional iOS testing if needed
+  test-ios:
+    name: Test iOS
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+          
+      - name: List available simulators
+        run: xcrun simctl list devices available
+        
+      - name: Test on iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme ElevenLabsSwift \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -enableCodeCoverage YES \
+            | xcpretty 
