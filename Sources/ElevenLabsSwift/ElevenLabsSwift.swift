@@ -347,7 +347,16 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let requestBody: [String: Any] = ["agent_id": agentId]
+        var requestBody: [String: Any] = [:]
+        
+        if let agentId = config.agentId {
+            requestBody["agent_id"] = agentId
+        }
+        
+        if let signedUrl = config.signedUrl {
+            requestBody["signed_url"] = signedUrl
+        }
+        
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         
         let (data, response) = try await URLSession.shared.data(for: request)
