@@ -68,13 +68,47 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
         
         try await room.connect(url: ElevenLabsSDK.Constants.liveKitUrl, token: token, connectOptions: connectOptions)
         
-        // Initialize audio tracks
-        try await audioManager.initialize()
+        // Wait for room to be fully connected before proceeding
+        try await waitForConnectionState(.connected)
         
-        // Send conversation initiation via data channel
+        // Send conversation initiation immediately after connection (matching React behavior)
         try await dataChannelManager.sendConversationInitiation(config)
         
+        // Initialize audio tracks after sending initiation
+        try await audioManager.initialize()
+        
         logger.info("LiveKit conversation connected successfully")
+    }
+    
+    private func waitForConnectionState(_ targetState: ConnectionState) async throws {
+        if room.connectionState == targetState {
+            return
+        }
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            
+            let observer = room.observe(\.connectionState) { [weak self] _, _ in
+                guard let self = self, !hasResumed else { return }
+                
+                if self.room.connectionState == targetState {
+                    hasResumed = true
+                    continuation.resume()
+                } else if self.room.connectionState == .disconnected {
+                    hasResumed = true
+                    continuation.resume(throwing: ElevenLabsSDK.ElevenLabsError.invalidResponse)
+                }
+            }
+            
+            // Set up a timeout to avoid hanging indefinitely
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                if !hasResumed {
+                    hasResumed = true
+                    observer.invalidate()
+                    continuation.resume(throwing: ElevenLabsSDK.ElevenLabsError.invalidResponse)
+                }
+            }
+        }
     }
     
     // MARK: - Public API methods (matching current implementation)

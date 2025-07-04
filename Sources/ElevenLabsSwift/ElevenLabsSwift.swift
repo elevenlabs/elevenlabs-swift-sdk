@@ -39,8 +39,8 @@ public class ElevenLabsSDK {
         static let liveKitUrl = "wss://livekit.rtc.elevenlabs.io"
         static let apiBaseUrl = "https://api.elevenlabs.io"
         static let volumeUpdateInterval: TimeInterval = 0.1
-        static let inputSampleRate: Double = 16000
-        static let sampleRate: Double = 16000
+        static let inputSampleRate: Double = 48000  
+        static let sampleRate: Double = 48000 
         static let ioBufferDuration: Double = 0.005
         static let fadeOutDuration: TimeInterval = 2.0
         static let bufferSize: AVAudioFrameCount = 1024

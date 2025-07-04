@@ -36,8 +36,18 @@ public class DataChannelManager: @unchecked Sendable {
             initMessage["dynamic_variables"] = dynamicVars.mapValues { $0.jsonValue }
         }
         
-        sendMessage(initMessage)
+        // Send immediately and wait for completion to ensure it's sent before proceeding
+        try await sendMessageImmediate(initMessage)
         logger.info("Conversation initiation sent")
+    }
+    
+    // Immediate synchronous send for critical messages like conversation initiation
+    func sendMessageImmediate(_ message: [String: Any]) async throws {
+        let messageType = message["type"] as? String ?? "unknown"
+        
+        let messageData = try JSONSerialization.data(withJSONObject: message)
+        try await room.localParticipant.publish(data: messageData)
+        logger.debug("Data message sent immediately: \(messageType)")
     }
     
     func sendMessage(_ message: [String: Any]) {
@@ -71,6 +81,11 @@ public class DataChannelManager: @unchecked Sendable {
               let type = json["type"] as? String else {
             logger.error("Failed to parse incoming message")
             callbacks.onError("Failed to parse incoming message", nil)
+            return
+        }
+        
+        // Filter out audio messages for WebRTC - they're handled via audio tracks
+        if type == "audio" {
             return
         }
         

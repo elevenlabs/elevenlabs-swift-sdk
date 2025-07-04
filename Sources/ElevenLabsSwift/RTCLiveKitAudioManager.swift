@@ -50,6 +50,10 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
         localAudioPublication = try await room.localParticipant.publish(audioTrack: localAudioTrack!)
         logger.info("Microphone track published: \(self.localAudioPublication!.sid)")
         
+        // Ensure microphone is enabled after publishing
+        try await localAudioTrack?.unmute()
+        logger.info("Microphone track unmuted and ready to capture audio")
+        
         // Start volume monitoring
         startVolumeMonitoring()
     }
@@ -161,6 +165,15 @@ extension RTCLiveKitAudioManager: RoomDelegate {
             remoteAudioTrack = audioTrack
             attachRemoteAudio(audioTrack)
             logger.info("Agent audio track subscribed: \(publication.sid)")
+            
+            Task {
+                do {
+                    try await audioTrack.unmute()
+                    logger.info("Agent audio track unmuted and ready to play")
+                } catch {
+                    logger.error("Failed to unmute agent audio track: \(error)")
+                }
+            }
         }
     }
     
