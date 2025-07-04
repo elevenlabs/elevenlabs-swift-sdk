@@ -36,4 +36,4 @@ public protocol LiveKitConversationProtocol: Sendable {
 @available(macOS 11.0, iOS 14.0, *)
 public protocol AudioSessionConfiguratorProtocol: Sendable {
     func configureAudioSession() throws
-} 
+}

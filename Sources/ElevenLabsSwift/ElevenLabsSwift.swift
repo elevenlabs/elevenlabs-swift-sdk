@@ -1,8 +1,8 @@
-import LiveKit
 import AVFoundation
 import Combine
 import DeviceKit
 import Foundation
+import LiveKit
 import os.log
 
 /// Main class for ElevenLabsSwift package
@@ -11,8 +11,9 @@ public class ElevenLabsSDK {
     public static let version = "1.2.0"
 
     // MARK: - Dependencies (Injectable) - Make thread-safe
+
     private static let networkServiceLock = NSLock()
-    nonisolated(unsafe) private static var _networkService: ElevenLabsNetworkServiceProtocol = DefaultNetworkService()
+    private nonisolated(unsafe) static var _networkService: ElevenLabsNetworkServiceProtocol = DefaultNetworkService()
     @MainActor
     public static var networkService: ElevenLabsNetworkServiceProtocol {
         get { networkServiceLock.withLock { _networkService } }
@@ -20,7 +21,7 @@ public class ElevenLabsSDK {
     }
 
     private static let conversationFactoryLock = NSLock()
-    nonisolated(unsafe) private static var _conversationFactory: LiveKitConversationFactoryProtocol = DefaultLiveKitConversationFactory()
+    private nonisolated(unsafe) static var _conversationFactory: LiveKitConversationFactoryProtocol = DefaultLiveKitConversationFactory()
     @MainActor
     public static var conversationFactory: LiveKitConversationFactoryProtocol {
         get { conversationFactoryLock.withLock { _conversationFactory } }
@@ -28,19 +29,19 @@ public class ElevenLabsSDK {
     }
 
     private static let audioSessionConfiguratorLock = NSLock()
-    nonisolated(unsafe) private static var _audioSessionConfigurator: AudioSessionConfiguratorProtocol = DefaultAudioSessionConfigurator()
+    private nonisolated(unsafe) static var _audioSessionConfigurator: AudioSessionConfiguratorProtocol = DefaultAudioSessionConfigurator()
     @MainActor
     public static var audioSessionConfigurator: AudioSessionConfiguratorProtocol {
         get { audioSessionConfiguratorLock.withLock { _audioSessionConfigurator } }
         set { audioSessionConfiguratorLock.withLock { _audioSessionConfigurator = newValue } }
     }
 
-    internal enum Constants {
+    enum Constants {
         static let liveKitUrl = "wss://livekit.rtc.elevenlabs.io"
         static let apiBaseUrl = "https://api.elevenlabs.io"
         static let volumeUpdateInterval: TimeInterval = 0.1
-        static let inputSampleRate: Double = 48000  
-        static let sampleRate: Double = 48000 
+        static let inputSampleRate: Double = 48000
+        static let sampleRate: Double = 48000
         static let ioBufferDuration: Double = 0.005
         static let fadeOutDuration: TimeInterval = 2.0
         static let bufferSize: AVAudioFrameCount = 1024
@@ -181,8 +182,8 @@ public class ElevenLabsSDK {
 
         public init(signedUrl: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.signedUrl = signedUrl
-            self.agentId = nil
-            self.conversationToken = nil
+            agentId = nil
+            conversationToken = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -190,8 +191,8 @@ public class ElevenLabsSDK {
 
         public init(agentId: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.agentId = agentId
-            self.signedUrl = nil
-            self.conversationToken = nil
+            signedUrl = nil
+            conversationToken = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -199,8 +200,8 @@ public class ElevenLabsSDK {
 
         public init(conversationToken: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.conversationToken = conversationToken
-            self.agentId = nil
-            self.signedUrl = nil
+            agentId = nil
+            signedUrl = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -257,16 +258,16 @@ public class ElevenLabsSDK {
     ///   - clientTools: Client tools callbacks (optional)
     /// - Returns: A started `LiveKitConversationProtocol` instance
     public static func startSession(
-        config: SessionConfig, 
-        callbacks: Callbacks = Callbacks(), 
+        config: SessionConfig,
+        callbacks: Callbacks = Callbacks(),
         clientTools: ClientTools? = nil
     ) async throws -> LiveKitConversationProtocol {
         // Configure audio session before starting
         try await audioSessionConfigurator.configureAudioSession()
-        
+
         // Get LiveKit token from ElevenLabs backend (mockable)
         let liveKitToken = try await networkService.getLiveKitToken(config: config)
-        
+
         // Create and connect to LiveKit room (mockable)
         let conversation = await conversationFactory.createConversation(
             token: liveKitToken,
@@ -274,7 +275,7 @@ public class ElevenLabsSDK {
             callbacks: callbacks,
             clientTools: clientTools
         )
-        
+
         try await conversation.connect()
         return conversation
     }
@@ -347,10 +348,10 @@ extension Encodable {
 @available(macOS 11.0, iOS 14.0, *)
 public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetworkServiceProtocol {
     public init() {}
-    
+
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
         let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
-        
+
         // Handle different authentication scenarios like React implementation
         if let conversationToken = config.conversationToken {
             // Direct token provided
@@ -361,16 +362,16 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
             guard let url = URL(string: urlString) else {
                 throw ElevenLabsSDK.ElevenLabsError.invalidURL
             }
-            
+
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
-            
+
             let (data, response) = try await URLSession.shared.data(for: request)
-            
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw ElevenLabsSDK.ElevenLabsError.invalidResponse
             }
-            
+
             guard httpResponse.statusCode == 200 else {
                 let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
                 if httpResponse.statusCode == 401 {
@@ -378,16 +379,17 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
                 }
                 throw ElevenLabsSDK.ElevenLabsError.invalidResponse
             }
-            
+
             guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let token = jsonResponse["token"] as? String else {
+                  let token = jsonResponse["token"] as? String
+            else {
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
             }
-            
+
             if token.isEmpty {
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
             }
-            
+
             return token
         } else {
             throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
@@ -398,7 +400,7 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
 @available(macOS 11.0, iOS 14.0, *)
 public final class DefaultLiveKitConversationFactory: @unchecked Sendable, LiveKitConversationFactoryProtocol {
     public init() {}
-    
+
     public func createConversation(
         token: String,
         config: ElevenLabsSDK.SessionConfig,
@@ -417,35 +419,35 @@ public final class DefaultLiveKitConversationFactory: @unchecked Sendable, LiveK
 @available(macOS 11.0, iOS 14.0, *)
 public final class DefaultAudioSessionConfigurator: @unchecked Sendable, AudioSessionConfiguratorProtocol {
     public init() {}
-    
+
     public func configureAudioSession() throws {
         #if os(iOS) || os(tvOS)
-        let audioSession = AVAudioSession.sharedInstance()
-        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
+            let audioSession = AVAudioSession.sharedInstance()
+            let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
 
-        do {
-            let sessionMode: AVAudioSession.Mode = .voiceChat
-            logger.info("Configuring session with category: .playAndRecord, mode: .voiceChat")
-            try audioSession.setCategory(.playAndRecord, mode: sessionMode, options: [.defaultToSpeaker, .allowBluetooth])
+            do {
+                let sessionMode: AVAudioSession.Mode = .voiceChat
+                logger.info("Configuring session with category: .playAndRecord, mode: .voiceChat")
+                try audioSession.setCategory(.playAndRecord, mode: sessionMode, options: [.defaultToSpeaker, .allowBluetooth])
 
-            try audioSession.setPreferredIOBufferDuration(ElevenLabsSDK.Constants.ioBufferDuration)
-            try audioSession.setPreferredSampleRate(ElevenLabsSDK.Constants.inputSampleRate)
+                try audioSession.setPreferredIOBufferDuration(ElevenLabsSDK.Constants.ioBufferDuration)
+                try audioSession.setPreferredSampleRate(ElevenLabsSDK.Constants.inputSampleRate)
 
-            if audioSession.isInputGainSettable {
-                try audioSession.setInputGain(1.0)
+                if audioSession.isInputGainSettable {
+                    try audioSession.setInputGain(1.0)
+                }
+
+                try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+                logger.info("Audio session configured and activated.")
+
+            } catch {
+                logger.error("Failed to configure audio session: \(error.localizedDescription)")
+                throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
             }
-
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            logger.info("Audio session configured and activated.")
-
-        } catch {
-            logger.error("Failed to configure audio session: \(error.localizedDescription)")
-            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
-        }
         #else
-        // macOS doesn't use AVAudioSession, just log that configuration is skipped
-        let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
-        logger.info("Audio session configuration skipped on macOS")
+            // macOS doesn't use AVAudioSession, just log that configuration is skipped
+            let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "AudioSession")
+            logger.info("Audio session configuration skipped on macOS")
         #endif
     }
 }

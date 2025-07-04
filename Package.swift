@@ -5,7 +5,7 @@ let package = Package(
     name: "ElevenLabsSwift",
     platforms: [
         .iOS(.v16),
-        .macOS(.v10_15)
+        .macOS(.v10_15),
     ],
     products: [
         .library(
@@ -22,7 +22,7 @@ let package = Package(
             name: "ElevenLabsSwift",
             dependencies: [
                 .product(name: "LiveKit", package: "client-sdk-swift"),
-                "DeviceKit"
+                "DeviceKit",
             ]
         ),
         .testTarget(
