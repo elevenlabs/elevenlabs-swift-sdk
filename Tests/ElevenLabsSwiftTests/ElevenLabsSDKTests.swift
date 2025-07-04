@@ -80,6 +80,43 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertEqual(conversation.getId(), "mock-conversation-123")
     }
     
+    func testStartSession_WithConversationToken() async throws {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+        
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+        
+        // Given
+        let config = ElevenLabsSDK.SessionConfig(conversationToken: "direct-token-123")
+        let callbacks = ElevenLabsSDK.Callbacks()
+        
+        mockConversationFactory.mockConversation.shouldFailConnect = false
+        
+        // When
+        let conversation = try await ElevenLabsSDK.startSession(
+            config: config,
+            callbacks: callbacks
+        )
+        
+        // Then
+        // Should not call network service when token is provided directly
+        XCTAssertEqual(mockNetworkService.getLiveKitTokenCallCount, 0)
+        
+        XCTAssertEqual(mockConversationFactory.createConversationCallCount, 1)
+        XCTAssertEqual(mockConversationFactory.lastToken, "direct-token-123")
+        XCTAssertEqual(mockConversationFactory.lastConfig?.conversationToken, "direct-token-123")
+        
+        XCTAssertEqual(mockConversationFactory.mockConversation.connectCallCount, 1)
+        XCTAssertEqual(conversation.getId(), "mock-conversation-123")
+    }
+    
     func testConversationBasicOperations() async throws {
         // Capture mocks locally to avoid sending 'self'
         let networkService = mockNetworkService!

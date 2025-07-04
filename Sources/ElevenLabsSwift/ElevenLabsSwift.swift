@@ -36,7 +36,7 @@ public class ElevenLabsSDK {
     }
 
     internal enum Constants {
-        static let liveKitUrl = "wss://livekit.elevenlabs.io"
+        static let liveKitUrl = "wss://livekit.rtc.elevenlabs.io"
         static let apiBaseUrl = "https://api.elevenlabs.io"
         static let volumeUpdateInterval: TimeInterval = 0.1
         static let inputSampleRate: Double = 16000
@@ -174,13 +174,15 @@ public class ElevenLabsSDK {
     public struct SessionConfig: Sendable {
         public let signedUrl: String?
         public let agentId: String?
+        public let conversationToken: String?
         public let overrides: ConversationConfigOverride?
         public let customLlmExtraBody: [String: LlmExtraBodyValue]?
         public let dynamicVariables: [String: DynamicVariableValue]?
 
         public init(signedUrl: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.signedUrl = signedUrl
-            agentId = nil
+            self.agentId = nil
+            self.conversationToken = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -188,7 +190,17 @@ public class ElevenLabsSDK {
 
         public init(agentId: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.agentId = agentId
-            signedUrl = nil
+            self.signedUrl = nil
+            self.conversationToken = nil
+            self.overrides = overrides
+            self.customLlmExtraBody = customLlmExtraBody
+            self.dynamicVariables = dynamicVariables
+        }
+
+        public init(conversationToken: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
+            self.conversationToken = conversationToken
+            self.agentId = nil
+            self.signedUrl = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -339,39 +351,47 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
         let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
         
-        guard let agentId = config.agentId else {
+        // Handle different authentication scenarios like React implementation
+        if let conversationToken = config.conversationToken {
+            // Direct token provided
+            return conversationToken
+        } else if let agentId = config.agentId {
+            // Agent ID provided - fetch token from API using query parameter
+            let urlString = "\(baseUrl)/v1/convai/conversation/token?agent_id=\(agentId)"
+            guard let url = URL(string: urlString) else {
+                throw ElevenLabsSDK.ElevenLabsError.invalidURL
+            }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
+                if httpResponse.statusCode == 401 {
+                    throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
+                }
+                throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+            }
+            
+            guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = jsonResponse["token"] as? String else {
+                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
+            }
+            
+            if token.isEmpty {
+                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
+            }
+            
+            return token
+        } else {
             throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
         }
-        
-        var request = URLRequest(url: URL(string: "\(baseUrl)/v1/convai/livekit/token")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        var requestBody: [String: Any] = [:]
-        
-        if let agentId = config.agentId {
-            requestBody["agent_id"] = agentId
-        }
-        
-        if let signedUrl = config.signedUrl {
-            requestBody["signed_url"] = signedUrl
-        }
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw ElevenLabsSDK.ElevenLabsError.invalidResponse
-        }
-        
-        guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = jsonResponse["token"] as? String else {
-            throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
-        }
-        
-        return token
     }
 }
 
