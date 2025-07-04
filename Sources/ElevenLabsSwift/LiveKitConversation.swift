@@ -71,7 +71,7 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
         // Wait for room to be fully connected before proceeding
         try await waitForConnectionState(.connected)
         
-        // Send conversation initiation immediately after connection (matching React behavior)
+        // Send conversation initiation immediately after connection
         try await dataChannelManager.sendConversationInitiation(config)
         
         // Initialize audio tracks after sending initiation
