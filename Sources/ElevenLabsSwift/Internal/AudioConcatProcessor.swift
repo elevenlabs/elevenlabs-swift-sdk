@@ -13,7 +13,7 @@ final class AudioConcatProcessor {
     private var currentBuffer: Data?
     private var wasInterrupted: Bool = false
     private var finished: Bool = false
-    var onProcess: ((Bool) -> Void)?
+    var onProcess: (@Sendable (Bool) -> Void)?
 
     func process(outputs: inout [[Float]]) {
         var isFinished = false
