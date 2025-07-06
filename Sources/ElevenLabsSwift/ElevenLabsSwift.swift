@@ -149,7 +149,7 @@ public class ElevenLabsSDK {
         private var currentBuffer: Data?
         private var wasInterrupted: Bool = false
         private var finished: Bool = false
-        public var onProcess: ((Bool) -> Void)?
+        public var onProcess: (@Sendable (Bool) -> Void)?
 
         public func process(outputs: inout [[Float]]) {
             var isFinished = false
@@ -642,17 +642,17 @@ public class ElevenLabsSDK {
 
     // MARK: - Conversation
 
-    public enum Role: String {
+    public enum Role: String, Sendable {
         case user
         case ai
     }
 
-    public enum Mode: String {
+    public enum Mode: String, Sendable {
         case speaking
         case listening
     }
 
-    public enum Status: String {
+    public enum Status: String, Sendable {
         case connecting
         case connected
         case disconnecting
