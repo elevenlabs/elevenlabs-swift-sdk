@@ -8,7 +8,7 @@
 import AVFoundation
 import Foundation
 
-final class Output {
+final class AudioOutput {
     typealias ElevenLabsError = ElevenLabsSDK.ElevenLabsError
 
     let audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
@@ -30,7 +30,7 @@ final class Output {
         )
     }
 
-    static func create(sampleRate: Double) async throws -> Output {
+    static func create(sampleRate: Double) async throws -> AudioOutput {
         let engine = AVAudioEngine()
         let playerNode = AVAudioPlayerNode()
         let mixer = AVAudioMixerNode()
@@ -44,7 +44,7 @@ final class Output {
         engine.connect(playerNode, to: mixer, format: format)
         engine.connect(mixer, to: engine.mainMixerNode, format: format)
 
-        return Output(engine: engine, playerNode: playerNode, mixer: mixer, audioFormat: format)
+        return AudioOutput(engine: engine, playerNode: playerNode, mixer: mixer, audioFormat: format)
     }
 
     func close() {

@@ -328,7 +328,7 @@ public class ElevenLabsSDK {
     public class Conversation: @unchecked Sendable {
         private let connection: Connection
         private let input: AudioInput
-        private let output: Output
+        private let output: AudioOutput
         private let callbacks: Callbacks
         private let clientTools: ClientTools?
 
@@ -421,7 +421,7 @@ public class ElevenLabsSDK {
             }
         }
 
-        private init(connection: Connection, input: AudioInput, output: Output, callbacks: Callbacks, clientTools: ClientTools?) {
+        private init(connection: Connection, input: AudioInput, output: AudioOutput, callbacks: Callbacks, clientTools: ClientTools?) {
             self.connection = connection
             self.input = input
             self.output = output
@@ -477,7 +477,7 @@ public class ElevenLabsSDK {
             let input = try await AudioInput.create(sampleRate: Constants.inputSampleRate)
 
             // Step 4: Create the audio output
-            let output = try await Output.create(sampleRate: Double(connection.sampleRate))
+            let output = try await AudioOutput.create(sampleRate: Double(connection.sampleRate))
 
             // Step 5: Initialize the Conversation
             let conversation = Conversation(connection: connection, input: input, output: output, callbacks: callbacks, clientTools: clientTools)
