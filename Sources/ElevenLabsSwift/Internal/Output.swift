@@ -11,10 +11,10 @@ import Foundation
 final class Output {
     typealias ElevenLabsError = ElevenLabsSDK.ElevenLabsError
 
+    let audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
     let engine: AVAudioEngine
     let playerNode: AVAudioPlayerNode
     let mixer: AVAudioMixerNode
-    let audioQueue: DispatchQueue
     let audioFormat: AVAudioFormat
 
     private init(engine: AVAudioEngine, playerNode: AVAudioPlayerNode, mixer: AVAudioMixerNode, audioFormat: AVAudioFormat) {
@@ -22,7 +22,6 @@ final class Output {
         self.playerNode = playerNode
         self.mixer = mixer
         self.audioFormat = audioFormat
-        audioQueue = DispatchQueue(label: "com.elevenlabs.audioQueue", qos: .userInteractive)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleInterruption),
