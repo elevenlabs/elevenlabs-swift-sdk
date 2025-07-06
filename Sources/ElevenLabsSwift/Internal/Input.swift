@@ -8,12 +8,12 @@
 import AVFoundation
 import Foundation
 
-public class Input {
+final class Input {
     typealias ElevenLabsError = ElevenLabsSDK.ElevenLabsError
 
-    public let audioUnit: AudioUnit
-    public var audioFormat: AudioStreamBasicDescription
-    public var isRecording: Bool = false
+    let audioUnit: AudioUnit
+    var audioFormat: AudioStreamBasicDescription
+    var isRecording: Bool = false
     private var recordCallback: ((AVAudioPCMBuffer, Float) -> Void)?
     private var currentAudioLevel: Float = 0.0
 
@@ -22,7 +22,7 @@ public class Input {
         self.audioFormat = audioFormat
     }
 
-    public static func create(sampleRate: Double) async throws -> Input {
+    static func create(sampleRate: Double) async throws -> Input {
         // Define the Audio Component
         var audioComponentDesc = AudioComponentDescription(
             componentType: kAudioUnitType_Output,
@@ -104,11 +104,11 @@ public class Input {
         return input
     }
 
-    public func setRecordCallback(_ callback: @escaping (AVAudioPCMBuffer, Float) -> Void) {
+    func setRecordCallback(_ callback: @escaping (AVAudioPCMBuffer, Float) -> Void) {
         recordCallback = callback
     }
 
-    public func close() {
+    func close() {
         AudioOutputUnitStop(audioUnit)
         AudioUnitUninitialize(audioUnit)
         AudioComponentInstanceDispose(audioUnit)
