@@ -1,5 +1,5 @@
 //
-//  Input.swift
+//  AudioInput.swift
 //  ElevenLabsSDK
 //
 //  Created by Mathew Gacy on 7/6/25.
@@ -8,7 +8,7 @@
 import AVFoundation
 import Foundation
 
-final class Input {
+final class AudioInput {
     typealias ElevenLabsError = ElevenLabsSDK.ElevenLabsError
 
     let audioUnit: AudioUnit
@@ -22,7 +22,7 @@ final class Input {
         self.audioFormat = audioFormat
     }
 
-    static func create(sampleRate: Double) async throws -> Input {
+    static func create(sampleRate: Double) async throws -> AudioInput {
         // Define the Audio Component
         var audioComponentDesc = AudioComponentDescription(
             componentType: kAudioUnitType_Output,
@@ -43,7 +43,7 @@ final class Input {
         }
 
         // Create the Input instance
-        let input = Input(audioUnit: audioUnit, audioFormat: AudioStreamBasicDescription())
+        let input = AudioInput(audioUnit: audioUnit, audioFormat: AudioStreamBasicDescription())
 
         // Enable IO for recording
         var enableIO: UInt32 = 1
@@ -122,7 +122,7 @@ final class Input {
             inNumberFrames,
             _
             -> OSStatus in
-        let input = Unmanaged<Input>.fromOpaque(inRefCon).takeUnretainedValue()
+        let input = Unmanaged<AudioInput>.fromOpaque(inRefCon).takeUnretainedValue()
         let audioUnit = input.audioUnit
 
         let byteSize = Int(inNumberFrames) * MemoryLayout<Int16>.size
