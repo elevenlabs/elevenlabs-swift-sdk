@@ -8,12 +8,12 @@
 import AVFoundation
 import Foundation
 
-public class Output {
+final class Output {
     typealias ElevenLabsError = ElevenLabsSDK.ElevenLabsError
 
-    public let engine: AVAudioEngine
-    public let playerNode: AVAudioPlayerNode
-    public let mixer: AVAudioMixerNode
+    let engine: AVAudioEngine
+    let playerNode: AVAudioPlayerNode
+    let mixer: AVAudioMixerNode
     let audioQueue: DispatchQueue
     let audioFormat: AVAudioFormat
 
@@ -31,7 +31,7 @@ public class Output {
         )
     }
 
-    public static func create(sampleRate: Double) async throws -> Output {
+    static func create(sampleRate: Double) async throws -> Output {
         let engine = AVAudioEngine()
         let playerNode = AVAudioPlayerNode()
         let mixer = AVAudioMixerNode()
@@ -48,14 +48,14 @@ public class Output {
         return Output(engine: engine, playerNode: playerNode, mixer: mixer, audioFormat: format)
     }
 
-    public func close() {
+    func close() {
         engine.stop()
         // see AVAudioEngine documentation
         playerNode.stop()
         mixer.removeTap(onBus: 0)
     }
 
-    public func startPlaying() throws {
+    func startPlaying() throws {
         try engine.start()
         playerNode.play()
     }
