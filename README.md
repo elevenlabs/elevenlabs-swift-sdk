@@ -1,161 +1,162 @@
-# Elevenlabs Conversational AI Swift SDK
+# ElevenLabs Conversational AI Swift SDK
 
-![convai222](https://github.com/user-attachments/assets/ca4fa726-5e98-4bbc-91b2-d055e957df7d)
+<img src="https://github.com/user-attachments/assets/ca4fa726-5e98-4bbc-91b2-d055e957df7d" alt="ElevenLabs ConvAI" width="400">
 
-Elevenlabs Conversational AI Swift SDK is a framework designed to integrate ElevenLabs' powerful conversational AI capabilities into your Swift applications. Leverage advanced audio processing and seamless WebSocket communication to create interactive and intelligent conversational voice experiences.
+A Swift SDK for integrating ElevenLabs' conversational AI capabilities into your iOS and macOS applications. Built on top of LiveKit WebRTC for real-time audio streaming and communication.
 
-For detailed documentation, visit the [ElevenLabs Swift SDK documentation](https://elevenlabs.io/docs/conversational-ai/libraries/conversational-ai-sdk-swift).
+[![Swift Package Manager](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://github.com/apple/swift-package-manager)
+[![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20macOS-lightgrey.svg)](https://github.com/elevenlabs/ElevenLabsSwift)
 
-> [!NOTE]  
-> This library is launching to primarily support Conversational AI. The support for speech synthesis and other more generic use cases is planned for the future.
+## Quick Start
 
-## Install
+### Installation
 
-Add the Elevenlabs Conversational AI Swift SDK to your project using Swift Package Manager:
+Add to your project using Swift Package Manager:
 
-1. Open Your Project in Xcode
-   - Navigate to your project directory and open it in Xcode.
-2. Add Package Dependency
-   - Go to `File` > `Add Packages...`
-3. Enter Repository URL
-   - Input the following URL: `https://github.com/elevenlabs/ElevenLabsSwift`
-4. Select Version
-5. Import the SDK
-   ```swift
-   import ElevenLabsSDK
-   ```
-6. Ensure `NSMicrophoneUsageDescription` is added to your Info.plist to explain microphone access.
+```swift
+dependencies: [
+    .package(url: "https://github.com/elevenlabs/ElevenLabsSwift.git", from: "1.2.0")
+]
+```
 
-## Usage
+### Basic Usage
 
-### Setting Up a Conversation Session
+```swift
+import ElevenLabsSwift
 
-1. Configure the Session
-   Create a `SessionConfig` with either an `agentId` or `signedUrl`.
+// 1. Configure your session
+let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")
 
-   ```swift
-   let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")
-   ```
+// 2. Set up callbacks
+var callbacks = ElevenLabsSDK.Callbacks()
+callbacks.onConnect = { conversationId in
+    print("🟢 Connected: \(conversationId)")
+}
+callbacks.onMessage = { message, role in
+    print("💬 \(role.rawValue): \(message)")
+}
+callbacks.onError = { error, _ in
+    print("❌ Error: \(error)")
+}
 
-2. Define Callbacks
-   Implement callbacks to handle various conversation events.
+// 3. Start conversation
+Task {
+    do {
+        let conversation = try await ElevenLabsSDK.startSession(
+            config: config,
+            callbacks: callbacks
+        )
 
-   ```swift
-   var callbacks = ElevenLabsSDK.Callbacks()
-   callbacks.onConnect = { conversationId in
-       print("Connected with ID: \(conversationId)")
-   }
-   callbacks.onMessage = { message, role in
-       print("\(role.rawValue): \(message)")
-   }
-   callbacks.onError = { error, info in
-       print("Error: \(error), Info: \(String(describing: info))")
-   }
-   callbacks.onStatusChange = { status in
-       print("Status changed to: \(status.rawValue)")
-   }
-   callbacks.onModeChange = { mode in
-       print("Mode changed to: \(mode.rawValue)")
-   }
-   callbacks.onVolumeUpdate = { volume in
-       print("Input volume: \(volume)")
-   }
-   callbacks.onOutputVolumeUpdate = { volume in
-       print("Output volume: \(volume)")
-   }
-   callbacks.onMessageCorrection = { original, corrected, role in
-       print("Message corrected - Original: \(original), Corrected: \(corrected), Role: \(role.rawValue)")
-   }
-   ```
+        // Send messages
+        conversation.sendUserMessage("Hello!")
+        conversation.sendContextualUpdate("User is in the kitchen")
 
-3. Start the Conversation
-   Initiate the conversation session asynchronously.
+        // Control recording
+        conversation.startRecording()
+        conversation.stopRecording()
 
-   ```swift
-   Task {
-       do {
-           let conversation = try await ElevenLabsSDK.startSession(config: config, callbacks: callbacks)
-           // Use the conversation instance as needed
-       } catch {
-           print("Failed to start conversation: \(error)")
-       }
-   }
-   ```
+        // End session
+        conversation.endSession()
+    } catch {
+        print("Failed to start conversation: \(error)")
+    }
+}
+```
 
-### Advanced Configuration
+### Requirements
 
-1. Using Client Tools
+- iOS 16.0+ / macOS 10.15+
+- Swift 5.9+
+- Add `NSMicrophoneUsageDescription` to your Info.plist
 
-   ```swift
-   var clientTools = ElevenLabsSDK.ClientTools()
-   clientTools.register("weather") { parameters in
-       print("Weather parameters received:", parameters)
-       // Handle the weather tool call and return response
-       return "The weather is sunny today"
-   }
+## Advanced Features
 
-   let conversation = try await ElevenLabsSDK.startSession(
-       config: config,
-       callbacks: callbacks,
-       clientTools: clientTools
-   )
-   ```
+### Client Tools
 
-2. Using Overrides
+Register custom tools that your agent can call:
 
-   ```swift
-   let overrides = ElevenLabsSDK.ConversationConfigOverride(
-       agent: ElevenLabsSDK.AgentConfig(
-           prompt: ElevenLabsSDK.AgentPrompt(prompt: "You are a helpful assistant"),
-           language: .en
-       )
-   )
+```swift
+var clientTools = ElevenLabsSDK.ClientTools()
+clientTools.register("get_weather") { parameters in
+    let location = parameters["location"] as? String ?? "Unknown"
+    return "The weather in \(location) is sunny, 72°F"
+}
 
-   let config = ElevenLabsSDK.SessionConfig(
-       agentId: "your-agent-id",
-       overrides: overrides
-   )
-   ```
+let conversation = try await ElevenLabsSDK.startSession(
+    config: config,
+    callbacks: callbacks,
+    clientTools: clientTools
+)
+```
 
-### Managing the Session
+### Agent Configuration
 
-- End Session
+Override agent settings:
 
-  ```swift
-  conversation.endSession()
-  ```
+```swift
+let overrides = ElevenLabsSDK.ConversationConfigOverride(
+    agent: ElevenLabsSDK.AgentConfig(
+        prompt: ElevenLabsSDK.AgentPrompt(prompt: "You are a helpful cooking assistant"),
+        language: .en,
+        firstMessage: "Hello! How can I help you cook today?"
+    ),
+    tts: ElevenLabsSDK.TTSConfig(voiceId: "your-voice-id")
+)
 
-- Control Recording
+let config = ElevenLabsSDK.SessionConfig(
+    agentId: "your-agent-id",
+    overrides: overrides
+)
+```
 
-  ```swift
-  conversation.startRecording()
-  conversation.stopRecording()
-  ```
+### Audio Controls
 
-- Send Messages and Updates
+```swift
+// Volume management
+conversation.conversationVolume = 0.8
+let inputLevel = conversation.getInputVolume()
+let outputLevel = conversation.getOutputVolume()
 
-  ```swift
-  // Send a contextual update to the conversation
-  conversation.sendContextualUpdate("The user is now in the kitchen")
-  
-  // Send a user message directly
-  conversation.sendUserMessage("Hello, how are you?")
-  
-  // Send user activity signal
-  conversation.sendUserActivity()
-  ```
+// Recording controls
+conversation.startRecording()
+conversation.stopRecording()
 
-- Volume Controls
+// Volume callbacks
+callbacks.onVolumeUpdate = { level in
+    print("🎤 Input: \(level)")
+}
+callbacks.onOutputVolumeUpdate = { level in
+    print("🔊 Output: \(level)")
+}
+```
 
-  ```swift
-  // Get current input/output volume levels
-  let inputVolume = conversation.getInputVolume()
-  let outputVolume = conversation.getOutputVolume()
-  
-  // Set conversation volume (0.0 to 1.0)
-  conversation.conversationVolume = 0.8
-  ```
+## Architecture
 
-## Example
+The SDK is built with clean architecture principles:
 
-Explore examples in the [ElevenLabs Examples repository](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/swift).
+```
+ElevenLabsSDK (Main API)
+├── LiveKitConversation (WebRTC Management)
+├── RTCLiveKitAudioManager (Audio Streaming)
+├── DataChannelManager (Message Handling)
+└── NetworkService (Token Management)
+```
+
+## Examples
+
+Check out complete examples in the [ElevenLabs Examples repository](https://github.com/elevenlabs/elevenlabs-examples/tree/main/examples/conversational-ai/swift).
+
+## Contributing
+
+We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) and join us in the [ElevenLabs Discord](https://discord.gg/elevenlabs).
+
+## License
+
+This SDK is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Support
+
+- 📚 [Documentation](https://elevenlabs.io/docs/conversational-ai/libraries/conversational-ai-sdk-swift)
+- 💬 [Discord Community](https://discord.gg/elevenlabs)
+- 🐛 [Issues](https://github.com/elevenlabs/ElevenLabsSwift/issues)
+- 📧 [Support Email](mailto:support@elevenlabs.io)

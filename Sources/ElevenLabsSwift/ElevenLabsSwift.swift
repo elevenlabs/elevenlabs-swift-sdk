@@ -252,11 +252,39 @@ public class ElevenLabsSDK {
     // MARK: - Main Conversation API
 
     /// Starts a new conversation session using WebRTC/LiveKit
+    /// 
+    /// This method initializes a real-time conversation with an ElevenLabs agent.
+    /// It handles audio session configuration, WebRTC connection setup, and
+    /// agent communication through LiveKit infrastructure.
+    /// 
     /// - Parameters:
-    ///   - config: Session configuration
-    ///   - callbacks: Callbacks for conversation events
-    ///   - clientTools: Client tools callbacks (optional)
-    /// - Returns: A started `LiveKitConversationProtocol` instance
+    ///   - config: Session configuration containing agent ID or signed URL
+    ///   - callbacks: Event handlers for conversation lifecycle and messages
+    ///   - clientTools: Optional tools that the agent can call during conversation
+    /// - Returns: A connected conversation instance conforming to `LiveKitConversationProtocol`
+    /// - Throws: `ElevenLabsError` if configuration is invalid, connection fails, or audio setup fails
+    /// 
+    /// ## Usage Example:
+    /// ```swift
+    /// let config = ElevenLabsSDK.SessionConfig(agentId: "your-agent-id")
+    /// var callbacks = ElevenLabsSDK.Callbacks()
+    /// callbacks.onConnect = { id in print("Connected: \(id)") }
+    /// callbacks.onMessage = { msg, role in print("\(role): \(msg)") }
+    /// 
+    /// let conversation = try await ElevenLabsSDK.startSession(
+    ///     config: config,
+    ///     callbacks: callbacks
+    /// )
+    /// ```
+    /// 
+    /// ## Error Handling:
+    /// - `invalidConfiguration`: Check your agent ID or signed URL
+    /// - `failedToConfigureAudioSession`: Verify microphone permissions
+    /// - `connectionFailed`: Check internet connection and try again
+    /// - `authenticationFailed`: Verify API credentials
+    /// 
+    /// - Note: Requires microphone permission (`NSMicrophoneUsageDescription` in Info.plist)
+    /// - Warning: This method must be called from a Task or async context
     public static func startSession(
         config: SessionConfig,
         callbacks: Callbacks = Callbacks(),
@@ -283,43 +311,95 @@ public class ElevenLabsSDK {
     // MARK: - Errors
 
     /// Defines errors specific to ElevenLabsSDK
-    public enum ElevenLabsError: Error, LocalizedError {
-        case invalidConfiguration
-        case invalidURL
+    public enum ElevenLabsError: Error, LocalizedError, Equatable {
+        case invalidConfiguration(String)
+        case invalidURL(String)
         case invalidInitialMessageFormat
         case unexpectedBinaryMessage
-        case unknownMessageType
+        case unknownMessageType(String)
         case failedToCreateAudioFormat
         case failedToCreateAudioComponent
         case failedToCreateAudioComponentInstance
-        case failedToConfigureAudioSession
-        case invalidResponse
-        case invalidTokenResponse
+        case failedToConfigureAudioSession(String)
+        case invalidResponse(statusCode: Int)
+        case invalidTokenResponse(String)
+        case connectionFailed(String)
+        case authenticationFailed(String)
+        case networkError(String)
+        case audioSystemError(String)
+        case microphonePermissionDenied
+        case roomConnectionTimeout
+        case agentNotAvailable
 
         public var errorDescription: String? {
             switch self {
-            case .invalidConfiguration:
-                return "Invalid configuration provided."
-            case .invalidURL:
-                return "The provided URL is invalid."
+            case .invalidConfiguration(let details):
+                return "Invalid configuration: \(details)"
+            case .invalidURL(let url):
+                return "Invalid URL: \(url)"
             case .failedToCreateAudioFormat:
-                return "Failed to create the audio format."
+                return "Failed to create audio format for recording"
             case .failedToCreateAudioComponent:
-                return "Failed to create audio component."
+                return "Failed to create audio component"
             case .failedToCreateAudioComponentInstance:
-                return "Failed to create audio component instance."
+                return "Failed to create audio component instance"
             case .invalidInitialMessageFormat:
-                return "The initial message format is invalid."
+                return "Initial message format is invalid"
             case .unexpectedBinaryMessage:
-                return "Received an unexpected binary message."
-            case .unknownMessageType:
-                return "Received an unknown message type."
+                return "Received unexpected binary message"
+            case .unknownMessageType(let type):
+                return "Unknown message type: \(type)"
+            case .failedToConfigureAudioSession(let reason):
+                return "Failed to configure audio session: \(reason)"
+            case .invalidResponse(let statusCode):
+                return "Invalid response from server (HTTP \(statusCode))"
+            case .invalidTokenResponse(let reason):
+                return "Invalid token response: \(reason)"
+            case .connectionFailed(let reason):
+                return "Connection failed: \(reason)"
+            case .authenticationFailed(let reason):
+                return "Authentication failed: \(reason)"
+            case .networkError(let reason):
+                return "Network error: \(reason)"
+            case .audioSystemError(let reason):
+                return "Audio system error: \(reason)"
+            case .microphonePermissionDenied:
+                return "Microphone permission denied. Please enable microphone access in Settings."
+            case .roomConnectionTimeout:
+                return "Room connection timed out. Please check your internet connection."
+            case .agentNotAvailable:
+                return "Agent is not available. Please try again later."
+            }
+        }
+        
+        public var recoverySuggestion: String? {
+            switch self {
+            case .invalidConfiguration:
+                return "Please check your agent ID or signed URL configuration."
+            case .invalidURL:
+                return "Please verify the URL format and try again."
             case .failedToConfigureAudioSession:
-                return "Failed to configure audio session."
-            case .invalidResponse:
-                return "Invalid response from server."
-            case .invalidTokenResponse:
-                return "Invalid token response from server."
+                return "Please check your audio permissions and try again."
+            case .invalidResponse(let statusCode) where statusCode == 401:
+                return "Please verify your API key and authentication."
+            case .invalidResponse(let statusCode) where statusCode >= 500:
+                return "Server error. Please try again later."
+            case .connectionFailed:
+                return "Please check your internet connection and try again."
+            case .authenticationFailed:
+                return "Please verify your API credentials."
+            case .networkError:
+                return "Please check your internet connection."
+            case .audioSystemError:
+                return "Please check your audio settings and permissions."
+            case .microphonePermissionDenied:
+                return "Go to Settings > Privacy & Security > Microphone to enable access."
+            case .roomConnectionTimeout:
+                return "Please check your internet connection and try again."
+            case .agentNotAvailable:
+                return "The agent may be busy. Please try again in a few moments."
+            default:
+                return "Please try again or contact support if the issue persists."
             }
         }
     }
@@ -360,7 +440,7 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
             // Agent ID provided - fetch token from API using query parameter
             let urlString = "\(baseUrl)/v1/convai/conversation/token?agent_id=\(agentId)"
             guard let url = URL(string: urlString) else {
-                throw ElevenLabsSDK.ElevenLabsError.invalidURL
+                throw ElevenLabsSDK.ElevenLabsError.invalidURL(urlString)
             }
 
             var request = URLRequest(url: url)
@@ -369,30 +449,30 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+                throw ElevenLabsSDK.ElevenLabsError.networkError("Invalid response from server")
             }
 
             guard httpResponse.statusCode == 200 else {
                 let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
                 if httpResponse.statusCode == 401 {
-                    throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
+                    throw ElevenLabsSDK.ElevenLabsError.authenticationFailed(errorMessage)
                 }
-                throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+                throw ElevenLabsSDK.ElevenLabsError.invalidResponse(statusCode: httpResponse.statusCode)
             }
 
             guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let token = jsonResponse["token"] as? String
             else {
-                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
+                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Failed to parse token from response")
             }
 
             if token.isEmpty {
-                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse
+                throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Empty token received from server")
             }
 
             return token
         } else {
-            throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
+            throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration("Either agentId or conversationToken must be provided")
         }
     }
 }
@@ -442,7 +522,7 @@ public final class DefaultAudioSessionConfigurator: @unchecked Sendable, AudioSe
 
             } catch {
                 logger.error("Failed to configure audio session: \(error.localizedDescription)")
-                throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
+                throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession(error.localizedDescription)
             }
         #else
             // macOS doesn't use AVAudioSession, just log that configuration is skipped

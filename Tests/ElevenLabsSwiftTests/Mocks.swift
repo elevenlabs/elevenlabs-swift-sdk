@@ -31,6 +31,15 @@ public final class MockNetworkService: ElevenLabsNetworkServiceProtocol, @unchec
     public var lastConfig: ElevenLabsSDK.SessionConfig? { lock.withLock { _lastConfig } }
 
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
+        // Handle direct conversationToken like the real implementation
+        if let conversationToken = config.conversationToken {
+            // Don't increment call count or use mock token when direct token is provided
+            lock.withLock {
+                _lastConfig = config
+            }
+            return conversationToken
+        }
+        
         lock.withLock {
             _getLiveKitTokenCallCount += 1
             _lastConfig = config
@@ -43,7 +52,7 @@ public final class MockNetworkService: ElevenLabsNetworkServiceProtocol, @unchec
         }
 
         if !shouldSucceed {
-            throw ElevenLabsSDK.ElevenLabsError.invalidResponse
+            throw ElevenLabsSDK.ElevenLabsError.invalidResponse(statusCode: 500)
         }
 
         return token
@@ -119,7 +128,7 @@ public final class MockLiveKitConversation: LiveKitConversationProtocol, @unchec
         }
 
         if shouldFail {
-            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
+            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession("Mock connection failure")
         }
     }
 
@@ -171,6 +180,24 @@ public final class MockLiveKitConversation: LiveKitConversationProtocol, @unchec
         lock.withLock {
             _stopRecordingCallCount += 1
         }
+    }
+
+    // MARK: - Real-time Audio Level Monitoring
+
+    public func getCurrentInputLevel() -> Float {
+        return lock.withLock { _mockInputVolume }
+    }
+
+    public func getCurrentOutputLevel() -> Float {
+        return lock.withLock { _mockOutputVolume }
+    }
+
+    public func getInputLevelHistory() -> [Float] {
+        return lock.withLock { [_mockInputVolume, _mockInputVolume * 0.8, _mockInputVolume * 0.6] }
+    }
+
+    public func getOutputLevelHistory() -> [Float] {
+        return lock.withLock { [_mockOutputVolume, _mockOutputVolume * 0.9, _mockOutputVolume * 0.7] }
     }
 }
 
@@ -240,7 +267,7 @@ public final class MockAudioSessionConfigurator: AudioSessionConfiguratorProtoco
         }
 
         if shouldFail {
-            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
+            throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession("Mock audio session failure")
         }
     }
 }

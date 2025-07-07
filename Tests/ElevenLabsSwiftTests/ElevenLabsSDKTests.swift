@@ -181,6 +181,44 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertEqual(conversation.getOutputVolume(), 0.8) // Mock value
     }
 
+    func testAudioLevelMonitoring() async throws {
+        // Capture mocks locally to avoid sending 'self'
+        let networkService = mockNetworkService!
+        let conversationFactory = mockConversationFactory!
+        let audioConfigurator = mockAudioConfigurator!
+
+        // Ensure setup is complete
+        await Task { @MainActor in
+            ElevenLabsSDK.networkService = networkService
+            ElevenLabsSDK.conversationFactory = conversationFactory
+            ElevenLabsSDK.audioSessionConfigurator = audioConfigurator
+        }.value
+
+        // Given
+        let config = ElevenLabsSDK.SessionConfig(agentId: "test-agent")
+        let conversation = try await ElevenLabsSDK.startSession(config: config)
+
+        // Test real-time audio level monitoring
+        let currentInputLevel = conversation.getCurrentInputLevel()
+        XCTAssertEqual(currentInputLevel, 0.5) // Mock returns 0.5
+
+        let currentOutputLevel = conversation.getCurrentOutputLevel()
+        XCTAssertEqual(currentOutputLevel, 0.8) // Mock returns 0.8
+
+        // Test audio level history
+        let inputHistory = conversation.getInputLevelHistory()
+        XCTAssertEqual(inputHistory.count, 3)
+        XCTAssertEqual(inputHistory[0], 0.5)
+        XCTAssertEqual(inputHistory[1], 0.4, accuracy: 0.01) // 0.5 * 0.8
+        XCTAssertEqual(inputHistory[2], 0.3, accuracy: 0.01) // 0.5 * 0.6
+
+        let outputHistory = conversation.getOutputLevelHistory()
+        XCTAssertEqual(outputHistory.count, 3)
+        XCTAssertEqual(outputHistory[0], 0.8)
+        XCTAssertEqual(outputHistory[1], 0.72, accuracy: 0.01) // 0.8 * 0.9
+        XCTAssertEqual(outputHistory[2], 0.56, accuracy: 0.01) // 0.8 * 0.7
+    }
+
     // MARK: - Error Tests
 
     func testStartSession_NetworkError() async {
@@ -250,7 +288,7 @@ final class ElevenLabsSDKTests: XCTestCase {
 
         // Given - Use empty agentId and configure mock to return error
         let config = ElevenLabsSDK.SessionConfig(agentId: "")
-        mockNetworkService.mockError = ElevenLabsSDK.ElevenLabsError.invalidConfiguration
+        mockNetworkService.mockError = ElevenLabsSDK.ElevenLabsError.invalidConfiguration("Empty agent ID")
 
         // When & Then
         do {
