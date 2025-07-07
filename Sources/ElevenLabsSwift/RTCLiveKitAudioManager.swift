@@ -44,6 +44,16 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
     }
 
     func initialize() async throws {
+        // Wait for room to be ready before enabling microphone
+        var retries = 0
+        while room.connectionState != .connected {
+            if retries > 10 {
+                throw ElevenLabsSDK.ElevenLabsError.connectionFailed("Room not connected after retries")
+            }
+            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            retries += 1
+        }
+        
         // Enable microphone at participant level (this is the key fix)
         try await room.localParticipant.setMicrophone(enabled: true)
         

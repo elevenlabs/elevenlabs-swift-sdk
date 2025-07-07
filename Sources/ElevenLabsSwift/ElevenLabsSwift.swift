@@ -427,51 +427,85 @@ extension Encodable {
 
 @available(macOS 11.0, iOS 14.0, *)
 public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetworkServiceProtocol {
+    private let logger = Logger(subsystem: "com.elevenlabs.ElevenLabsSDK", category: "NetworkService")
+    
     public init() {}
 
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
         let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
+        
+        logger.info("🔑 Starting token fetch process")
+        logger.info("Config - AgentID: \(config.agentId ?? "nil"), HasToken: \(config.conversationToken != nil), HasSignedURL: \(config.signedUrl != nil)")
 
         // Handle different authentication scenarios like React implementation
         if let conversationToken = config.conversationToken {
             // Direct token provided
+            logger.info("✅ Using provided conversation token (length: \(conversationToken.count))")
             return conversationToken
         } else if let agentId = config.agentId {
             // Agent ID provided - fetch token from API using query parameter
             let urlString = "\(baseUrl)/v1/convai/conversation/token?agent_id=\(agentId)"
+            logger.info("🌐 Fetching token from: \(urlString)")
+            
             guard let url = URL(string: urlString) else {
+                logger.error("❌ Invalid URL: \(urlString)")
                 throw ElevenLabsSDK.ElevenLabsError.invalidURL(urlString)
             }
 
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
+            
+            logger.debug("📤 Sending GET request to ElevenLabs API")
 
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                logger.error("❌ Invalid response type - not HTTPURLResponse")
                 throw ElevenLabsSDK.ElevenLabsError.networkError("Invalid response from server")
             }
+            
+            logger.info("📥 Response status code: \(httpResponse.statusCode)")
+            logger.debug("Response headers: \(httpResponse.allHeaderFields)")
 
             guard httpResponse.statusCode == 200 else {
                 let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
+                logger.error("❌ \(errorMessage)")
+                
+                // Try to log error body
+                if let errorString = String(data: data, encoding: .utf8) {
+                    logger.error("Error response body: \(errorString)")
+                }
+                
                 if httpResponse.statusCode == 401 {
                     throw ElevenLabsSDK.ElevenLabsError.authenticationFailed(errorMessage)
                 }
                 throw ElevenLabsSDK.ElevenLabsError.invalidResponse(statusCode: httpResponse.statusCode)
             }
 
+            // Log raw response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                logger.debug("📝 Raw response: \(responseString)")
+            }
+
             guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let token = jsonResponse["token"] as? String
             else {
+                logger.error("❌ Failed to parse token from response")
+                logger.error("Response data: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Failed to parse token from response")
             }
 
             if token.isEmpty {
+                logger.error("❌ Received empty token")
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Empty token received from server")
             }
+            
+            logger.info("✅ Successfully retrieved token (length: \(token.count))")
+            logger.debug("Token preview: \(String(token.prefix(50)))...")
 
             return token
         } else {
+            logger.error("❌ No authentication method provided (no agentId or conversationToken)")
             throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration("Either agentId or conversationToken must be provided")
         }
     }
