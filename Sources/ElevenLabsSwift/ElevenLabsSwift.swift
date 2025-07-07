@@ -265,8 +265,12 @@ public class ElevenLabsSDK {
         // Configure audio session before starting
         try await audioSessionConfigurator.configureAudioSession()
 
-        // Get LiveKit token from ElevenLabs backend (mockable)
-        let liveKitToken = try await networkService.getLiveKitToken(config: config)
+        let liveKitToken: String
+        if let conversationToken = config.conversationToken {
+            liveKitToken = conversationToken
+        } else {
+            liveKitToken = try await networkService.getLiveKitToken(config: config)
+        }
 
         // Create and connect to LiveKit room (mockable)
         let conversation = await conversationFactory.createConversation(
@@ -352,7 +356,6 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
         let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
 
-        // Handle different authentication scenarios like React implementation
         if let conversationToken = config.conversationToken {
             // Direct token provided
             return conversationToken

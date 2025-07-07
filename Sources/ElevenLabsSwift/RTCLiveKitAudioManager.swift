@@ -48,7 +48,7 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
 
         // Publish microphone track
         localAudioPublication = try await room.localParticipant.publish(audioTrack: localAudioTrack!)
-        logger.info("Microphone track published: \(localAudioPublication!.sid)")
+        logger.info("Microphone track published: \(self.localAudioPublication!.sid)")
 
         // Ensure microphone is enabled after publishing
         try await localAudioTrack?.unmute()
@@ -91,30 +91,31 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
     }
 
     private func getInputVolumeLevel(completion: @escaping (Float) -> Void) {
-        // Get actual audio levels from the local audio track
-        // This is a simplified implementation - in production you'd use WebRTC stats
         guard localAudioTrack != nil else {
             completion(0.0)
             return
         }
 
-        // For now, return a simulated value
-        // In a real implementation, you would use RTCStatistics or audio level monitoring
-        let simulatedLevel = Float.random(in: 0.0 ... 0.8)
-        completion(simulatedLevel)
+        // Use LiveKit's real-time audio level from local participant
+        let audioLevel = room.localParticipant.audioLevel
+        completion(Float(audioLevel))
     }
 
     private func getOutputVolumeLevel(completion: @escaping (Float) -> Void) {
-        // Get actual audio levels from the remote audio track
         guard remoteAudioTrack != nil else {
             completion(0.0)
             return
         }
 
-        // For now, return a simulated value
-        // In a real implementation, you would use RTCStatistics or audio level monitoring
-        let simulatedLevel = Float.random(in: 0.0 ... 1.0)
-        completion(simulatedLevel)
+        // Find the remote participant with the agent audio track
+        if let remoteParticipant = room.remoteParticipants.values.first(where: { participant in
+            participant.audioTracks.contains { $0.track == remoteAudioTrack }
+        }) {
+            let audioLevel = remoteParticipant.audioLevel
+            completion(Float(audioLevel))
+        } else {
+            completion(0.0)
+        }
     }
 
     func setMicrophoneEnabled(_ enabled: Bool) {
@@ -169,12 +170,8 @@ extension RTCLiveKitAudioManager: RoomDelegate {
             logger.info("Agent audio track subscribed: \(publication.sid)")
 
             Task {
-                do {
-                    try await audioTrack.unmute()
-                    logger.info("Agent audio track unmuted and ready to play")
-                } catch {
-                    logger.error("Failed to unmute agent audio track: \(error)")
-                }
+                audioTrack.volume = 1.0
+                logger.info("Agent audio track volume set to max and ready to play")
             }
         }
     }
