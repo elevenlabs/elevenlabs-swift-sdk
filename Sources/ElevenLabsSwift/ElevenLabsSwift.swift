@@ -376,7 +376,6 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
             }
 
             guard httpResponse.statusCode == 200 else {
-                let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
                 if httpResponse.statusCode == 401 {
                     throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration
                 }
