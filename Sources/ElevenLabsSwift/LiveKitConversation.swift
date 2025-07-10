@@ -105,9 +105,9 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
             try await audioManager.initialize()
 
             logger.info("✅ LiveKit conversation connected successfully")
-            logger.info("Room SID: \(room.sid?.stringValue ?? "nil")")
-            logger.info("Room Name: \(room.name ?? "nil")")
-            logger.info("Local Participant: \(room.localParticipant.identity?.stringValue ?? "nil")")
+            logger.info("Room SID: \(self.room.sid?.stringValue ?? "nil")")
+            logger.info("Room Name: \(self.room.name ?? "nil")")
+            logger.info("Local Participant: \(self.room.localParticipant.identity?.stringValue ?? "nil")")
         } catch {
             updateStatus(.disconnected)
             logger.error("❌ Failed to connect: \(error.localizedDescription)")
@@ -131,7 +131,7 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
 
             logger.info("🔍 Setting up connection state observer")
 
-            let observer = room.observe(\.connectionState) { [weak self] _, _ in
+            let observer = self.room.observe(\.connectionState) { [weak self] _, _ in
                 guard let self = self, !hasResumed else { return }
                 
                 let currentState = self.room.connectionState
@@ -336,11 +336,7 @@ extension LiveKitConversation: RoomDelegate {
         if let error = error {
             logger.error("Failed to connect to room: \(error.localizedDescription)")
             logger.error("Error code: \(error.code), type: \(String(describing: error.type))")
-            
-            // Check for specific error types
-            if error.message.contains("token") || error.message.contains("unauthorized") {
-                logger.error("Token validation failed - check agent ID and token generation")
-            }
+        
         }
     }
 
@@ -353,9 +349,9 @@ extension LiveKitConversation: RoomDelegate {
         // Log additional details for debugging
         if connectionState == .disconnected {
             logger.warning("Disconnected - checking room details:")
-            logger.warning("Room name: \(room.name ?? "nil")")
-            logger.warning("Room sid: \(room.sid?.stringValue ?? "nil")")
-            logger.warning("Local participant: \(room.localParticipant.identity?.stringValue ?? "nil")")
+            logger.warning("Room name: \(self.room.name ?? "nil")")
+            logger.warning("Room sid: \(self.room.sid?.stringValue ?? "nil")")
+            logger.warning("Local participant: \(self.room.localParticipant.identity?.stringValue ?? "nil")")
         }
     }
 }
