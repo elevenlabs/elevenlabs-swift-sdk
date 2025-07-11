@@ -71,6 +71,59 @@ Task {
 
 ## Advanced Features
 
+### Private agents
+
+For private agents that require authentication, provide a conversation token in your `SessionConfig`. 
+
+The conversation token should be generated on your backend with a valid ElevenLabs API key. Do NOT store the API key within your app.
+
+```js
+// Node.js server
+app.get("/api/conversation-token", yourAuthMiddleware, async (req, res) => {
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${process.env.AGENT_ID}`,
+    {
+      headers: {
+        // Requesting a conversation token requires your ElevenLabs API key
+        // Do NOT expose your API key to the client!
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+      }
+    }
+  );
+
+  if (!response.ok) {
+    return res.status(500).send("Failed to get conversation token");
+  }
+
+  const body = await response.json();
+  res.send(body.token);
+);
+```
+
+```swift
+guard let url = URL(string: "https://your-backend-api.com/api/conversation-token") else {
+    throw URLError(.badURL)
+}
+
+// Create request. This is a simple implementation, in a real world app you should add security headers
+var request = URLRequest(url: url)
+request.httpMethod = "GET"
+
+// Make request
+let (data, _) = try await URLSession.shared.data(for: request)
+
+// Parse response
+let response = try JSONDecoder().decode([String: String].self, from: data)
+guard let conversationToken = response["conversationToken"] else {
+    throw NSError(domain: "TokenError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No token received"])
+}
+
+// Agent ID isn't required when providing a conversation token
+let config = ElevenLabsSDK.SessionConfig(conversationToken: conversationToken)
+
+let conversation = try await ElevenLabsSDK.startSession(config: config)
+```
+
 ### Client Tools
 
 Register custom tools that your agent can call:

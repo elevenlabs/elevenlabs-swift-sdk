@@ -8,7 +8,7 @@ import os.log
 /// Main class for ElevenLabsSwift package
 @available(macOS 11.0, iOS 14.0, *)
 public class ElevenLabsSDK {
-    public static let version = "1.2.0"
+    public static let version = "2.0.0"
 
     // MARK: - Dependencies (Injectable) - Make thread-safe
 
@@ -173,25 +173,14 @@ public class ElevenLabsSDK {
     }
 
     public struct SessionConfig: Sendable {
-        public let signedUrl: String?
         public let agentId: String?
         public let conversationToken: String?
         public let overrides: ConversationConfigOverride?
         public let customLlmExtraBody: [String: LlmExtraBodyValue]?
         public let dynamicVariables: [String: DynamicVariableValue]?
-
-        public init(signedUrl: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
-            self.signedUrl = signedUrl
-            agentId = nil
-            conversationToken = nil
-            self.overrides = overrides
-            self.customLlmExtraBody = customLlmExtraBody
-            self.dynamicVariables = dynamicVariables
-        }
-
+        
         public init(agentId: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.agentId = agentId
-            signedUrl = nil
             conversationToken = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
@@ -201,7 +190,6 @@ public class ElevenLabsSDK {
         public init(conversationToken: String, overrides: ConversationConfigOverride? = nil, customLlmExtraBody: [String: LlmExtraBodyValue]? = nil, clientTools _: ClientTools = ClientTools(), dynamicVariables: [String: DynamicVariableValue]? = nil) {
             self.conversationToken = conversationToken
             agentId = nil
-            signedUrl = nil
             self.overrides = overrides
             self.customLlmExtraBody = customLlmExtraBody
             self.dynamicVariables = dynamicVariables
@@ -251,14 +239,14 @@ public class ElevenLabsSDK {
 
     // MARK: - Main Conversation API
 
-    /// Starts a new conversation session using WebRTC/LiveKit
+    /// Starts a new conversation session using WebRTC
     /// 
     /// This method initializes a real-time conversation with an ElevenLabs agent.
     /// It handles audio session configuration, WebRTC connection setup, and
     /// agent communication through LiveKit infrastructure.
     /// 
     /// - Parameters:
-    ///   - config: Session configuration containing agent ID or signed URL
+    ///   - config: Session configuration containing agent ID for public agents or a conversation token for private agents
     ///   - callbacks: Event handlers for conversation lifecycle and messages
     ///   - clientTools: Optional tools that the agent can call during conversation
     /// - Returns: A connected conversation instance conforming to `LiveKitConversationProtocol`
@@ -278,7 +266,7 @@ public class ElevenLabsSDK {
     /// ```
     /// 
     /// ## Error Handling:
-    /// - `invalidConfiguration`: Check your agent ID or signed URL
+    /// - `invalidConfiguration`: Check your agent ID or conversation token
     /// - `failedToConfigureAudioSession`: Verify microphone permissions
     /// - `connectionFailed`: Check internet connection and try again
     /// - `authenticationFailed`: Verify API credentials
@@ -434,43 +422,30 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
     public func getLiveKitToken(config: ElevenLabsSDK.SessionConfig) async throws -> String {
         let baseUrl = ElevenLabsSDK.Constants.apiBaseUrl
         
-        logger.info("🔑 Starting token fetch process")
-        logger.info("Config - AgentID: \(config.agentId ?? "nil"), HasToken: \(config.conversationToken != nil), HasSignedURL: \(config.signedUrl != nil)")
-
         // Handle different authentication scenarios like React implementation
         if let conversationToken = config.conversationToken {
             // Direct token provided
-            logger.info("✅ Using provided conversation token (length: \(conversationToken.count))")
             return conversationToken
         } else if let agentId = config.agentId {
             // Agent ID provided - fetch token from API using query parameter
             let urlString = "\(baseUrl)/v1/convai/conversation/token?agent_id=\(agentId)"
-            logger.info("🌐 Fetching token from: \(urlString)")
             
             guard let url = URL(string: urlString) else {
-                logger.error("❌ Invalid URL: \(urlString)")
                 throw ElevenLabsSDK.ElevenLabsError.invalidURL(urlString)
             }
 
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             
-            logger.debug("📤 Sending GET request to ElevenLabs API")
-
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                logger.error("❌ Invalid response type - not HTTPURLResponse")
                 throw ElevenLabsSDK.ElevenLabsError.networkError("Invalid response from server")
             }
             
-            logger.info("📥 Response status code: \(httpResponse.statusCode)")
-            logger.debug("Response headers: \(httpResponse.allHeaderFields)")
-
             guard httpResponse.statusCode == 200 else {
                 let errorMessage = "ElevenLabs API returned \(httpResponse.statusCode)"
-                logger.error("❌ \(errorMessage)")
-                
+                            
                 // Try to log error body
                 if let errorString = String(data: data, encoding: .utf8) {
                     logger.error("Error response body: \(errorString)")
@@ -484,28 +459,21 @@ public final class DefaultNetworkService: @unchecked Sendable, ElevenLabsNetwork
 
             // Log raw response for debugging
             if let responseString = String(data: data, encoding: .utf8) {
-                logger.debug("📝 Raw response: \(responseString)")
+                logger.debug("Raw response: \(responseString)")
             }
 
             guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let token = jsonResponse["token"] as? String
             else {
-                logger.error("❌ Failed to parse token from response")
-                logger.error("Response data: \(String(data: data, encoding: .utf8) ?? "nil")")
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Failed to parse token from response")
             }
 
             if token.isEmpty {
-                logger.error("❌ Received empty token")
                 throw ElevenLabsSDK.ElevenLabsError.invalidTokenResponse("Empty token received from server")
             }
             
-            logger.info("✅ Successfully retrieved token (length: \(token.count))")
-            logger.debug("Token preview: \(String(token.prefix(50)))...")
-
             return token
         } else {
-            logger.error("❌ No authentication method provided (no agentId or conversationToken)")
             throw ElevenLabsSDK.ElevenLabsError.invalidConfiguration("Either agentId or conversationToken must be provided")
         }
     }
