@@ -55,6 +55,10 @@ public final class MockNetworkService: ElevenLabsNetworkServiceProtocol, @unchec
             throw ElevenLabsSDK.ElevenLabsError.invalidResponse(statusCode: 500)
         }
 
+        if let conversationToken = config.conversationToken {
+            return conversationToken
+        }
+
         return token
     }
 }
