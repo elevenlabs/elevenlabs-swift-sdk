@@ -1,22 +1,22 @@
 {
-  "originHash" : "b7468454fa5b586b31da1d077f21b3cc0d08138f7876be7c7d3825c677b9cb62",
+  "originHash" : "4fd531decce455c864e39ba8cf68afb4697087d44f17b04519e97d51c85edd21",
   "pins" : [
     {
       "identity" : "client-sdk-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/livekit/client-sdk-swift.git",
       "state" : {
-        "revision" : "d8995b7758cf2174488a4b143b0a2ef08e315719",
-        "version" : "2.6.0"
+        "revision" : "d0294781fe01ff47842e152a984533384e753a9d",
+        "version" : "2.6.1"
       }
     },
     {
-      "identity" : "devicekit",
+      "identity" : "swift-async-algorithms",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/devicekit/DeviceKit.git",
+      "location" : "https://github.com/apple/swift-async-algorithms.git",
       "state" : {
-        "revision" : "513b9d7e7a1bd46504a1009bbab943b75ce2f195",
-        "version" : "5.6.0"
+        "revision" : "042e1c4d9d19748c9c228f8d4ebc97bb1e339b0b",
+        "version" : "1.0.4"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/livekit/webrtc-xcframework.git",
       "state" : {
-        "revision" : "f2c6bd1e65a7ef59c4cd7ee6ba4eb2f96fee2b8a",
-        "version" : "125.6422.29"
+        "revision" : "5e93f981d3af01addbd5c4998e58bd7441c9ae95",
+        "version" : "125.6422.32"
       }
     }
   ],
