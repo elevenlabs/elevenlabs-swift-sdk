@@ -39,7 +39,7 @@ public final class MockNetworkService: ElevenLabsNetworkServiceProtocol, @unchec
             }
             return conversationToken
         }
-        
+
         lock.withLock {
             _getLiveKitTokenCallCount += 1
             _lastConfig = config

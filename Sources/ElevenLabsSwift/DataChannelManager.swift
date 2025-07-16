@@ -44,7 +44,7 @@ public class DataChannelManager: @unchecked Sendable {
     // Immediate synchronous send for critical messages like conversation initiation
     func sendMessageImmediate(_ message: [String: Any]) async throws {
         let messageType = message["type"] as? String ?? "unknown"
-        
+
         // Wait for local participant to be ready
         var retries = 0
         while room.connectionState != .connected || room.localParticipant.sid?.stringValue.isEmpty ?? true {

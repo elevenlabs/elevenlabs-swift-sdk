@@ -49,7 +49,7 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
         )
 
         room = Room(roomOptions: roomOptions)
-        
+
         dataChannelManager = DataChannelManager(room: room, callbacks: callbacks, clientTools: clientTools)
         audioManager = RTCLiveKitAudioManager(room: room, callbacks: callbacks)
 
@@ -62,7 +62,7 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
 
     public func connect() async throws {
         updateStatus(.connecting)
-        
+
         // Note: Audio session is configured in ElevenLabsSDK.startSession()
         // before this method is called, so we don't need to configure it again here
 
@@ -70,14 +70,14 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
             // Connect without pre-connect audio first to ensure data channel is ready
             let connectOptions = ConnectOptions(
                 autoSubscribe: true,
-                enableMicrophone: true  // Enable microphone during connection
+                enableMicrophone: true // Enable microphone during connection
             )
-            
+
             try await room.connect(url: ElevenLabsSDK.Constants.liveKitUrl, token: token, connectOptions: connectOptions)
-           
+
             // Wait for room to be fully connected before proceeding
             try await waitForConnectionState(.connected)
-            
+
             // Small delay to ensure data channel is ready
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
 
@@ -104,9 +104,9 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
 
             let observer = self.room.observe(\.connectionState) { [weak self] _, _ in
                 guard let self = self, !hasResumed else { return }
-                
+
                 let currentState = self.room.connectionState
-                
+
                 switch currentState {
                 case .connected where targetState == .connected:
                     hasResumed = true
@@ -300,7 +300,6 @@ extension LiveKitConversation: RoomDelegate {
         if let error = error {
             logger.error("Failed to connect to room: \(error.localizedDescription)")
             logger.error("Error code: \(error.code), type: \(String(describing: error.type))")
-        
         }
     }
 
@@ -309,13 +308,13 @@ extension LiveKitConversation: RoomDelegate {
         let stateString = String(describing: connectionState)
         let oldStateString = String(describing: oldState)
         logger.debug("Connection state updated: \(oldStateString) -> \(stateString)")
-        
+
         // Log additional details for debugging
         if connectionState == .disconnected {
             logger.warning("Disconnected - checking room details:")
-            logger.warning("Room name: \(self.room.name ?? "nil")")
-            logger.warning("Room sid: \(self.room.sid?.stringValue ?? "nil")")
-            logger.warning("Local participant: \(self.room.localParticipant.identity?.stringValue ?? "nil")")
+            logger.warning("Room name: \(room.name ?? "nil")")
+            logger.warning("Room sid: \(room.sid?.stringValue ?? "nil")")
+            logger.warning("Local participant: \(room.localParticipant.identity?.stringValue ?? "nil")")
         }
     }
 }

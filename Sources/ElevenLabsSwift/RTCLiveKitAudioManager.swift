@@ -53,26 +53,26 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
             try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             retries += 1
         }
-        
+
         // Enable microphone at participant level (this is the key fix)
         try await room.localParticipant.setMicrophone(enabled: true)
-        
+
         // Get the local audio track that was created by setMicrophone
         localAudioTrack = room.localParticipant.firstAudioTrack as? LocalAudioTrack
         localAudioPublication = room.localParticipant.audioTracks.first
-        
+
         guard let localTrack = localAudioTrack else {
             logger.error("Failed to get local audio track after enabling microphone")
             throw ElevenLabsSDK.ElevenLabsError.failedToCreateAudioComponent
         }
-        
+
         // Set up real-time audio level monitoring for input
         inputAudioRenderer = InputAudioRenderer { [weak self] level in
             self?.updateInputLevel(level)
         }
         localTrack.add(audioRenderer: inputAudioRenderer!)
-        
-        logger.info("Microphone enabled and track ready: \(self.localAudioPublication?.sid.stringValue ?? "unknown")")
+
+        logger.info("Microphone enabled and track ready: \(localAudioPublication?.sid.stringValue ?? "unknown")")
 
         // Start volume monitoring (now using real audio data)
         startVolumeMonitoring()
@@ -133,7 +133,7 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
             completion(0.0)
             return
         }
-        
+
         // Return the real-time audio level from the audio renderer
         let currentLevel = volumeLock.withLock { _lastInputLevel }
         completion(currentLevel)
@@ -158,7 +158,7 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
             do {
                 try await room.localParticipant.setMicrophone(enabled: enabled)
                 logger.debug("Microphone enabled: \(enabled)")
-                
+
                 // Reset input level when microphone state changes
                 volumeLock.withLock {
                     if !enabled {
@@ -184,19 +184,19 @@ public class RTCLiveKitAudioManager: @unchecked Sendable {
     func getCurrentInputLevel() -> Float {
         return volumeLock.withLock { _lastInputLevel }
     }
-    
+
     /// Get current output (agent) volume level
     /// - Returns: Current output audio level (0.0 to 1.0)
     func getCurrentOutputLevel() -> Float {
         return volumeLock.withLock { _lastOutputLevel }
     }
-    
+
     /// Get recent input level history for trend analysis
     /// - Returns: Array of recent input levels (newest last)
     func getInputLevelHistory() -> [Float] {
         return volumeLock.withLock { Array(_inputLevelHistory) }
     }
-    
+
     /// Get recent output level history for trend analysis
     /// - Returns: Array of recent output levels (newest last)
     func getOutputLevelHistory() -> [Float] {
@@ -249,60 +249,61 @@ private final class InputAudioRenderer: @unchecked Sendable, AudioRenderer {
     private let smoothingFactor: Float = 0.25
     private let lock = NSLock()
     private var _lastLevel: Float = 0.0
-    
+
     private var lastLevel: Float {
         get { lock.withLock { _lastLevel } }
         set { lock.withLock { _lastLevel = newValue } }
     }
-    
+
     init(onLevelUpdate: @escaping @Sendable (Float) -> Void) {
         self.onLevelUpdate = onLevelUpdate
     }
-    
+
     func render(pcmBuffer: AVAudioPCMBuffer) {
         // Calculate RMS (Root Mean Square) level from PCM data
         let rmsLevel = calculateRMSLevel(from: pcmBuffer)
-        
+
         // Apply smoothing to avoid jarring level changes
         let smoothedLevel = (lastLevel * (1.0 - smoothingFactor)) + (rmsLevel * smoothingFactor)
         lastLevel = smoothedLevel
-        
+
         // Normalize to 0.0-1.0 range and update
         let normalizedLevel = min(max(smoothedLevel, 0.0), 1.0)
         onLevelUpdate(normalizedLevel)
     }
-    
+
     private func calculateRMSLevel(from buffer: AVAudioPCMBuffer) -> Float {
         guard let channelData = buffer.floatChannelData,
-              buffer.frameLength > 0 else {
+              buffer.frameLength > 0
+        else {
             return 0.0
         }
-        
+
         let frameLength = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
-        
+
         var rms: Float = 0.0
-        
+
         // Calculate RMS for all channels
-        for channel in 0..<channelCount {
+        for channel in 0 ..< channelCount {
             let samples = channelData[channel]
             var sum: Float = 0.0
-            
-            for frame in 0..<frameLength {
+
+            for frame in 0 ..< frameLength {
                 let sample = samples[frame]
                 sum += sample * sample
             }
-            
+
             rms += sum / Float(frameLength)
         }
-        
+
         // Average across channels and take square root
         rms = sqrt(rms / Float(channelCount))
-        
+
         // Convert to decibels and normalize
         let dbLevel = 20.0 * log10(max(rms, 1e-10)) // Avoid log(0)
         let normalizedLevel = max((dbLevel + 60.0) / 60.0, 0.0) // Normalize -60dB to 0dB range
-        
+
         return normalizedLevel
     }
 }
@@ -313,60 +314,61 @@ private final class OutputAudioRenderer: @unchecked Sendable, AudioRenderer {
     private let smoothingFactor: Float = 0.25
     private let lock = NSLock()
     private var _lastLevel: Float = 0.0
-    
+
     private var lastLevel: Float {
         get { lock.withLock { _lastLevel } }
         set { lock.withLock { _lastLevel = newValue } }
     }
-    
+
     init(onLevelUpdate: @escaping @Sendable (Float) -> Void) {
         self.onLevelUpdate = onLevelUpdate
     }
-    
+
     func render(pcmBuffer: AVAudioPCMBuffer) {
         // Calculate RMS (Root Mean Square) level from PCM data
         let rmsLevel = calculateRMSLevel(from: pcmBuffer)
-        
+
         // Apply smoothing to avoid jarring level changes
         let smoothedLevel = (lastLevel * (1.0 - smoothingFactor)) + (rmsLevel * smoothingFactor)
         lastLevel = smoothedLevel
-        
+
         // Normalize to 0.0-1.0 range and update
         let normalizedLevel = min(max(smoothedLevel, 0.0), 1.0)
         onLevelUpdate(normalizedLevel)
     }
-    
+
     private func calculateRMSLevel(from buffer: AVAudioPCMBuffer) -> Float {
         guard let channelData = buffer.floatChannelData,
-              buffer.frameLength > 0 else {
+              buffer.frameLength > 0
+        else {
             return 0.0
         }
-        
+
         let frameLength = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
-        
+
         var rms: Float = 0.0
-        
+
         // Calculate RMS for all channels
-        for channel in 0..<channelCount {
+        for channel in 0 ..< channelCount {
             let samples = channelData[channel]
             var sum: Float = 0.0
-            
-            for frame in 0..<frameLength {
+
+            for frame in 0 ..< frameLength {
                 let sample = samples[frame]
                 sum += sample * sample
             }
-            
+
             rms += sum / Float(frameLength)
         }
-        
+
         // Average across channels and take square root
         rms = sqrt(rms / Float(channelCount))
-        
+
         // Convert to decibels and normalize
         let dbLevel = 20.0 * log10(max(rms, 1e-10)) // Avoid log(0)
         let normalizedLevel = max((dbLevel + 60.0) / 60.0, 0.0) // Normalize -60dB to 0dB range
-        
+
         return normalizedLevel
     }
 }
@@ -400,7 +402,7 @@ extension RTCLiveKitAudioManager: RoomDelegate {
             callbacks.onModeChange(newMode)
             let modeString = newMode == .listening ? "listening" : "speaking"
             logger.debug("Agent audio muted state changed: \(isMuted), mode: \(modeString)")
-            
+
             // Reset output level when mute state changes
             volumeLock.withLock {
                 if isMuted {
@@ -417,7 +419,7 @@ extension RTCLiveKitAudioManager: RoomDelegate {
             self?.updateOutputLevel(level)
         }
         audioTrack.add(audioRenderer: outputAudioRenderer!)
-        
+
         // Audio is automatically routed by WebRTC/LiveKit
         // Start monitoring output volume levels
         startOutputVolumeMonitoring()
