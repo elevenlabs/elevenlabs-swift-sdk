@@ -40,7 +40,12 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
         let roomOptions = RoomOptions(
             defaultCameraCaptureOptions: CameraCaptureOptions(),
             defaultScreenShareCaptureOptions: ScreenShareCaptureOptions(),
-            defaultAudioCaptureOptions: AudioCaptureOptions()
+            defaultAudioCaptureOptions: AudioCaptureOptions(
+                echoCancellation: true,
+                autoGainControl: true,
+                noiseSuppression: true,
+                typingNoiseDetection: true
+            )
         )
 
         room = Room(roomOptions: roomOptions)
@@ -58,26 +63,33 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
     public func connect() async throws {
         updateStatus(.connecting)
 
-        // Configure audio session for WebRTC
-        try configureAudioSession()
+        // Note: Audio session is configured in ElevenLabsSDK.startSession()
+        // before this method is called, so we don't need to configure it again here
 
-        // Connect to LiveKit room - updated ConnectOptions without publishOnlyMode
-        let connectOptions = ConnectOptions(
-            autoSubscribe: true
-        )
+        do {
+            // Connect without pre-connect audio first to ensure data channel is ready
+            let connectOptions = ConnectOptions(
+                autoSubscribe: true,
+                enableMicrophone: true // Enable microphone during connection
+            )
 
-        try await room.connect(url: ElevenLabsSDK.Constants.liveKitUrl, token: token, connectOptions: connectOptions)
+            try await room.connect(url: ElevenLabsSDK.Constants.liveKitUrl, token: token, connectOptions: connectOptions)
 
-        // Wait for room to be fully connected before proceeding
-        try await waitForConnectionState(.connected)
+            // Wait for room to be fully connected before proceeding
+            try await waitForConnectionState(.connected)
 
-        // Send conversation initiation immediately after connection
-        try await dataChannelManager.sendConversationInitiation(config)
+            // Small delay to ensure data channel is ready
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
 
-        // Initialize audio tracks after sending initiation
-        try await audioManager.initialize()
+            // Send conversation initiation after ensuring connection is stable
+            try await dataChannelManager.sendConversationInitiation(config)
 
-        logger.info("LiveKit conversation connected successfully")
+            // Initialize audio tracks after data channel is ready
+            try await audioManager.initialize()
+        } catch {
+            updateStatus(.disconnected)
+            throw error
+        }
     }
 
     private func waitForConnectionState(_ targetState: ConnectionState) async throws {
@@ -87,25 +99,48 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
 
         return try await withCheckedThrowingContinuation { continuation in
             var hasResumed = false
+            let timeout: TimeInterval = 30.0 // 30 seconds timeout
+            var timeoutTask: Task<Void, Error>?
 
-            let observer = room.observe(\.connectionState) { [weak self] _, _ in
+            let observer = self.room.observe(\.connectionState) { [weak self] _, _ in
                 guard let self = self, !hasResumed else { return }
 
-                if self.room.connectionState == targetState {
+                let currentState = self.room.connectionState
+
+                switch currentState {
+                case .connected where targetState == .connected:
                     hasResumed = true
+                    timeoutTask?.cancel() // Cancel timeout on success
                     continuation.resume()
-                } else if self.room.connectionState == .disconnected {
+                case .disconnected:
                     hasResumed = true
-                    continuation.resume(throwing: ElevenLabsSDK.ElevenLabsError.invalidResponse)
+                    timeoutTask?.cancel() // Cancel timeout on failure
+                    let error = ElevenLabsSDK.ElevenLabsError.connectionFailed("Room disconnected unexpectedly")
+                    continuation.resume(throwing: error)
+                case .reconnecting:
+                    // Continue waiting during reconnection
+                    break
+                case .connecting:
+                    break
+                @unknown default:
+                    break
                 }
             }
 
-            // Set up a timeout to avoid hanging indefinitely
-            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-                if !hasResumed {
-                    hasResumed = true
-                    observer.invalidate()
-                    continuation.resume(throwing: ElevenLabsSDK.ElevenLabsError.invalidResponse)
+            // Set up timeout with better error handling
+            timeoutTask = Task {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000)) // Convert seconds to nanoseconds
+                    if !hasResumed {
+                        hasResumed = true
+                        observer.invalidate()
+                        self.logger.error("❌ Connection timed out after \(timeout) seconds")
+                        let error = ElevenLabsSDK.ElevenLabsError.roomConnectionTimeout
+                        continuation.resume(throwing: error)
+                    }
+                } catch {
+                    // Task was cancelled, which is expected
+                    self.logger.debug("Timeout task cancelled")
                 }
             }
         }
@@ -176,6 +211,24 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
         return audioManager.volume
     }
 
+    // MARK: - Real-time Audio Level Monitoring
+
+    public func getCurrentInputLevel() -> Float {
+        return audioManager.getCurrentInputLevel()
+    }
+
+    public func getCurrentOutputLevel() -> Float {
+        return audioManager.getCurrentOutputLevel()
+    }
+
+    public func getInputLevelHistory() -> [Float] {
+        return audioManager.getInputLevelHistory()
+    }
+
+    public func getOutputLevelHistory() -> [Float] {
+        return audioManager.getOutputLevelHistory()
+    }
+
     // MARK: - Internal state management
 
     func updateStatus(_ newStatus: ElevenLabsSDK.Status) {
@@ -210,7 +263,7 @@ public class LiveKitConversation: @unchecked Sendable, LiveKitConversationProtoc
 
             } catch {
                 logger.error("Failed to configure audio session: \(error.localizedDescription)")
-                throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession
+                throw ElevenLabsSDK.ElevenLabsError.failedToConfigureAudioSession(error.localizedDescription)
             }
         #else
             // macOS doesn't use AVAudioSession
@@ -235,6 +288,9 @@ extension LiveKitConversation: RoomDelegate {
         callbacks.onDisconnect()
         if let error = error {
             logger.error("Room disconnected with error: \(error.localizedDescription)")
+            logger.error("Error code: \(error.code), type: \(String(describing: error.type))")
+        } else {
+            logger.warning("Room disconnected without error - possible server-side rejection")
         }
     }
 
@@ -243,12 +299,22 @@ extension LiveKitConversation: RoomDelegate {
         callbacks.onError("Failed to connect to room", error)
         if let error = error {
             logger.error("Failed to connect to room: \(error.localizedDescription)")
+            logger.error("Error code: \(error.code), type: \(String(describing: error.type))")
         }
     }
 
-    public func room(_: Room, didUpdateConnectionState connectionState: ConnectionState, from _: ConnectionState) {
+    public func room(_: Room, didUpdateConnectionState connectionState: ConnectionState, from oldState: ConnectionState) {
         // Handle connection state changes if needed
         let stateString = String(describing: connectionState)
-        logger.debug("Connection state updated: \(stateString)")
+        let oldStateString = String(describing: oldState)
+        logger.debug("Connection state updated: \(oldStateString) -> \(stateString)")
+
+        // Log additional details for debugging
+        if connectionState == .disconnected {
+            logger.warning("Disconnected - checking room details:")
+            logger.warning("Room name: \(room.name ?? "nil")")
+            logger.warning("Room sid: \(room.sid?.stringValue ?? "nil")")
+            logger.warning("Local participant: \(room.localParticipant.identity?.stringValue ?? "nil")")
+        }
     }
 }

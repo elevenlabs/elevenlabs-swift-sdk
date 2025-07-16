@@ -45,6 +45,16 @@ public class DataChannelManager: @unchecked Sendable {
     func sendMessageImmediate(_ message: [String: Any]) async throws {
         let messageType = message["type"] as? String ?? "unknown"
 
+        // Wait for local participant to be ready
+        var retries = 0
+        while room.connectionState != .connected || room.localParticipant.sid?.stringValue.isEmpty ?? true {
+            if retries > 10 {
+                throw ElevenLabsSDK.ElevenLabsError.connectionFailed("Local participant not ready after retries")
+            }
+            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            retries += 1
+        }
+
         let messageData = try JSONSerialization.data(withJSONObject: message)
         try await room.localParticipant.publish(data: messageData)
         logger.debug("Data message sent immediately: \(messageType)")
