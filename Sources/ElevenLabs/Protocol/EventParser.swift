@@ -1,13 +1,16 @@
 import Foundation
 
-/// Parse incoming JSON data into an IncomingEvent
-public static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? {
+enum EventParser {
+    /// Parse incoming JSON data into an IncomingEvent
+    static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? {
   guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
     let type = json["type"] as? String
   else {
+    print("🔨 EventParser: Failed to parse JSON or extract type from data")
     return nil
   }
 
+  print("🔨 EventParser: Parsing event of type: \(type)")
   switch type {
   case "user_transcript":
     if let event = json["user_transcription_event"] as? [String: Any],
@@ -75,12 +78,15 @@ public static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? 
     }
 
   case "client_tool_call":
+    print("🔨 EventParser: Parsing client_tool_call event")
     if let event = json["client_tool_call"] as? [String: Any],
       let toolName = event["tool_name"] as? String,
       let toolCallId = event["tool_call_id"] as? String,
-      let parameters = event["parameters"] as? [String: Any],
-      let expectsResponse = event["expects_response"] as? Bool
+      let parameters = event["parameters"] as? [String: Any]
     {
+      // expects_response is optional, defaulting to true if not specified
+      let expectsResponse = event["expects_response"] as? Bool ?? true
+      print("🔨 EventParser: Successfully parsed tool call - name: \(toolName), id: \(toolCallId), expects response: \(expectsResponse)")
       // Convert parameters to JSON data for Sendable compliance
       if let parametersData = try? JSONSerialization.data(withJSONObject: parameters) {
         return .clientToolCall(
@@ -90,7 +96,12 @@ public static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? 
             parametersData: parametersData,
             expectsResponse: expectsResponse,
           ))
+      } else {
+        print("🔨 EventParser: Failed to serialize parameters to JSON data")
       }
+    } else {
+      print("🔨 EventParser: Failed to extract required fields from client_tool_call event")
+      print("🔨 EventParser: Event structure: \(json)")
     }
 
   default:
@@ -98,4 +109,5 @@ public static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? 
   }
 
   return nil
+    }
 }

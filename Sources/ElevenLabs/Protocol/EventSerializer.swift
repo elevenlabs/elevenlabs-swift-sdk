@@ -1,5 +1,8 @@
+import Foundation
+
+enum EventSerializer {
     /// Serialize an OutgoingEvent to JSON data
-    public static func serializeOutgoingEvent(_ event: OutgoingEvent) throws -> Data {
+    static func serializeOutgoingEvent(_ event: OutgoingEvent) throws -> Data {
         var json: [String: Any] = [:]
 
         switch event {
@@ -106,3 +109,4 @@
 
         return json
     }
+}

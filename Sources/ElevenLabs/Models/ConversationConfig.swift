@@ -5,15 +5,15 @@ public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
     public var conversationOverrides: ConversationOverrides?
-    public var customLlmExtraBody: [String: Any]?
-    public var dynamicVariables: [String: Any]?
+    public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
+    public var dynamicVariables: [String: String]? // Simplified to be Sendable
 
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
         conversationOverrides: ConversationOverrides? = nil,
-        customLlmExtraBody: [String: Any]? = nil,
-        dynamicVariables: [String: Any]? = nil
+        customLlmExtraBody: [String: String]? = nil,
+        dynamicVariables: [String: String]? = nil
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -55,5 +55,20 @@ public struct ConversationOverrides: Sendable {
 
     public init(textOnly: Bool = false) {
         self.textOnly = textOnly
+    }
+}
+
+// MARK: - Conversion Extension
+
+extension ConversationConfig {
+    /// Convert ConversationConfig to ConversationOptions for internal use
+    func toConversationOptions() -> ConversationOptions {
+        return ConversationOptions(
+            conversationOverrides: self.conversationOverrides ?? ConversationOverrides(),
+            agentOverrides: self.agentOverrides,
+            ttsOverrides: self.ttsOverrides,
+            customLlmExtraBody: self.customLlmExtraBody,
+            dynamicVariables: self.dynamicVariables
+        )
     }
 }

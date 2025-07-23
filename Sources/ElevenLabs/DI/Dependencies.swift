@@ -19,9 +19,17 @@ final class Dependencies {
     // MARK: Services
 
     lazy var tokenService = TokenService()
+    lazy var connectionManager = ConnectionManager()
 
     private lazy var localMessageSender = LocalMessageSender(room: room)
-    private lazy var dataChannelReceiver = DataChannelReceiver(room: room)
+    private lazy var dataChannelReceiver: any MessageReceiver = {
+        if #available(macOS 11.0, iOS 14.0, *) {
+            return DataChannelReceiver(room: room)
+        } else {
+            // Fallback for older OS versions - could implement a simple receiver
+            return localMessageSender
+        }
+    }()
 
     lazy var messageSenders: [any MessageSender] = [
         localMessageSender,

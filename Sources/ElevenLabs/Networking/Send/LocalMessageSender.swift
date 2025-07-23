@@ -31,9 +31,9 @@ actor LocalMessageSender: MessageSender, MessageReceiver {
 
         // Try to send to agent (don't throw if it fails)
         do {
-            let userMessageEvent = ElevenLabs.UserMessageEvent(text: text)
-            let outgoingEvent = ElevenLabs.OutgoingEvent.userMessage(userMessageEvent)
-            let messageData = try ElevenLabs.serializeOutgoingEvent(outgoingEvent)
+            let userMessageEvent = UserMessageEvent(text: text)
+            let outgoingEvent = OutgoingEvent.userMessage(userMessageEvent)
+            let messageData = try EventSerializer.serializeOutgoingEvent(outgoingEvent)
             try await room.localParticipant.publish(data: messageData, options: DataPublishOptions(reliable: true))
         } catch {
             // Message is already shown in UI, just log the error

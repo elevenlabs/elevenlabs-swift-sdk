@@ -4,13 +4,14 @@ import os.log
 
 /// Receives and processes ElevenLabs messages from the data channel
 /// Provides AsyncStreams for different event types, following modern Swift concurrency patterns
+@available(macOS 11.0, iOS 14.0, *)
 actor DataChannelReceiver: MessageReceiver {
     private let room: Room
     private let logger = Logger(subsystem: "VoiceAgent", category: "DataChannelReceiver")
 
     // Stream continuations for different event types
     private var messageContinuation: AsyncStream<ReceivedMessage>.Continuation?
-    private var eventContinuation: AsyncStream<ElevenLabs.IncomingEvent>.Continuation?
+    private var eventContinuation: AsyncStream<IncomingEvent>.Continuation?
 
     init(room: Room) {
         self.room = room
@@ -38,8 +39,8 @@ actor DataChannelReceiver: MessageReceiver {
     }
 
     /// Stream of all ElevenLabs events for advanced use cases
-    func events() async -> AsyncStream<ElevenLabs.IncomingEvent> {
-        let (stream, continuation) = AsyncStream<ElevenLabs.IncomingEvent>.makeStream()
+    func events() async -> AsyncStream<IncomingEvent> {
+        let (stream, continuation) = AsyncStream<IncomingEvent>.makeStream()
         eventContinuation = continuation
         return stream
     }
@@ -55,13 +56,14 @@ actor DataChannelReceiver: MessageReceiver {
         messageContinuation?.yield(message)
     }
 
-    private func yield(event: ElevenLabs.IncomingEvent) {
+    private func yield(event: IncomingEvent) {
         eventContinuation?.yield(event)
     }
 }
 
 // MARK: - RoomDelegate
 
+@available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(_: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String) {
         // Only process messages from the agent
@@ -74,7 +76,7 @@ extension DataChannelReceiver: RoomDelegate {
 
     private func handleDataMessage(_ data: Data) async {
         do {
-            guard let event = try ElevenLabs.parseIncomingEvent(from: data) else {
+            guard let event = try EventParser.parseIncomingEvent(from: data) else {
                 return
             }
             yield(event: event)
@@ -113,7 +115,7 @@ extension DataChannelReceiver: RoomDelegate {
         }
     }
 
-    private func handleAgentResponse(_ event: ElevenLabs.AgentResponseEvent) {
+    private func handleAgentResponse(_ event: AgentResponseEvent) {
         let message = ReceivedMessage(
             id: UUID().uuidString,
             timestamp: Date(),
@@ -123,7 +125,7 @@ extension DataChannelReceiver: RoomDelegate {
         logger.debug("Agent response: \(event.response)")
     }
 
-    private func handleAgentResponseCorrection(_ event: ElevenLabs.AgentResponseCorrectionEvent) {
+    private func handleAgentResponseCorrection(_ event: AgentResponseCorrectionEvent) {
         // For corrections, we yield a new message with the corrected content
         // In a more sophisticated implementation, you might update the original message
         let message = ReceivedMessage(
@@ -135,7 +137,7 @@ extension DataChannelReceiver: RoomDelegate {
         logger.debug("Agent correction: \(event.correctedUpTo)")
     }
 
-    private func handleUserTranscript(_ event: ElevenLabs.UserTranscriptEvent) {
+    private func handleUserTranscript(_ event: UserTranscriptEvent) {
         let message = ReceivedMessage(
             id: UUID().uuidString,
             timestamp: Date(),
@@ -145,38 +147,38 @@ extension DataChannelReceiver: RoomDelegate {
         logger.debug("User transcript: \(event.transcript)")
     }
 
-    private func handleInterruption(_ event: ElevenLabs.InterruptionEvent) {
+    private func handleInterruption(_ event: InterruptionEvent) {
         logger.info("User interrupted the agent (event ID: \(event.eventId))")
         // Interruptions don't generate messages, but are available in the event stream
     }
 
-    private func handleTentativeAgentResponse(_ event: ElevenLabs.TentativeAgentResponseEvent) {
+    private func handleTentativeAgentResponse(_ event: TentativeAgentResponseEvent) {
         logger.debug("Tentative response: \(event.tentativeResponse)")
         // Tentative responses are available in the event stream but don't generate messages
         // You could extend ReceivedMessage to include tentative responses if needed
     }
 
-    private func handleConversationMetadata(_ event: ElevenLabs.ConversationMetadataEvent) {
+    private func handleConversationMetadata(_ event: ConversationMetadataEvent) {
         logger.info("Conversation initialized with ID: \(event.conversationId)")
         if let userFormat = event.userInputAudioFormat {
             logger.debug("User audio format: \(userFormat)")
         }
     }
 
-    private func handlePing(_ event: ElevenLabs.PingEvent) async {
+    private func handlePing(_ event: PingEvent) async {
         // Automatically respond with pong
-        let pongEvent = ElevenLabs.PongEvent(eventId: event.eventId)
-        let outgoingEvent = ElevenLabs.OutgoingEvent.pong(pongEvent)
+        let pongEvent = PongEvent(eventId: event.eventId)
+        let outgoingEvent = OutgoingEvent.pong(pongEvent)
 
         do {
-            let data = try ElevenLabs.serializeOutgoingEvent(outgoingEvent)
+            let data = try EventSerializer.serializeOutgoingEvent(outgoingEvent)
             try await room.localParticipant.publish(data: data, options: DataPublishOptions(reliable: true))
         } catch {
             logger.error("Failed to send pong response: \(error)")
         }
     }
 
-    private func handleClientToolCall(_ event: ElevenLabs.ClientToolCallEvent) {
+    private func handleClientToolCall(_ event: ClientToolCallEvent) {
         logger.info("Received client tool call: \(event.toolName) (ID: \(event.toolCallId))")
         // Tool calls are available in the event stream
     }
