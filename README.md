@@ -1,11 +1,8 @@
 # ElevenLabs Conversational AI Swift SDK
 
-<img src="https://github.com/user-attachments/assets/ca4fa726-5e98-4bbc-91b2-d055e957df7d" alt="ElevenLabs ConvAI" width="400">
+![SwiftSDK](https://github.com/user-attachments/assets/b91ef903-ff1f-4dda-9822-a6afad3437fc)
 
 A Swift SDK for integrating ElevenLabs' conversational AI capabilities into your iOS and macOS applications. Built on top of LiveKit WebRTC for real-time audio streaming and communication.
-
-[![Swift Package Manager](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://github.com/apple/swift-package-manager)
-[![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20macOS-lightgrey.svg)](https://github.com/elevenlabs/ElevenLabsSwift)
 
 ## Quick Start
 
@@ -15,7 +12,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/ElevenLabsSwift.git", from: "2.0.0")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.0")
 ]
 ```
 
@@ -408,28 +405,3 @@ class ConversationViewModel: ObservableObject {
     }
 }
 ```
-
-## Examples
-
-Complete example implementations are available in the SDK repository showcasing:
-
-- Basic voice conversations
-- Text-only chat mode
-- Client tool integration
-- SwiftUI reactive patterns
-- Error handling and recovery
-
-## Contributing
-
-We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) and join us in the [ElevenLabs Discord](https://discord.gg/elevenlabs).
-
-## License
-
-This SDK is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Support
-
-- 📚 [Documentation](https://elevenlabs.io/docs/conversational-ai/libraries/conversational-ai-sdk-swift)
-- 💬 [Discord Community](https://discord.gg/elevenlabs)
-- 🐛 [Issues](https://github.com/elevenlabs/ElevenLabsSwift/issues)
-- 📧 [Support Email](mailto:support@elevenlabs.io)
