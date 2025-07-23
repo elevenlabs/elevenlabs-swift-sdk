@@ -15,7 +15,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/ElevenLabsSwift.git", from: "2.0.0")
+    .package(url: "https://github.com/elevenlabs/client-sdk-swift.git", from: "2.0.0")
 ]
 ```
 
