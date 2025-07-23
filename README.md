@@ -1,6 +1,6 @@
 # ElevenLabs Conversational AI Swift SDK
 
-<img src="https://github.com/user-attachments/assets/ca4fa726-5e98-4bbc-91b2-d055e957df7d" alt="ElevenLabs ConvAI" width="400">
+![SwiftSDK](https://github.com/user-attachments/assets/b91ef903-ff1f-4dda-9822-a6afad3437fc)
 
 A Swift SDK for integrating ElevenLabs' conversational AI capabilities into your iOS and macOS applications. Built on top of LiveKit WebRTC for real-time audio streaming and communication.
 
