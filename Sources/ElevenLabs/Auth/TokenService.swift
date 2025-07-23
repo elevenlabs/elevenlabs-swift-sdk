@@ -182,7 +182,7 @@ enum TokenError: LocalizedError, Sendable {
     case authenticationFailed
     case invalidTokenResponse
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .invalidURL:
             "Invalid URL for token request"

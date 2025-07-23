@@ -5,34 +5,33 @@
 //  Refactored from AppViewModel.swift into a headless SDK surface.
 //
 
-import Foundation
-import Combine
-import LiveKit
 import AVFoundation
+import Combine
+import Foundation
+import LiveKit
 
 @MainActor
 public final class Conversation: ObservableObject {
-
     // MARK: - Public State
 
     @Published public private(set) var state: ConversationState = .idle
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var agentState: AgentState = .listening
     @Published public private(set) var isMuted: Bool = false
-    
+
     /// Stream of client tool calls that need to be executed by the app
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
     // Device lists (optional to expose; keep `internal` if you don't want them public)
     @Published public private(set) var audioDevices: [AudioDevice] = AudioManager.shared.inputDevices
     @Published public private(set) var selectedAudioDeviceID: String = AudioManager.shared.inputDevice.deviceId
-    
+
     // Audio tracks for advanced use cases
     public var inputTrack: LocalAudioTrack? {
         guard let deps, let room = deps.connectionManager.room else { return nil }
         return room.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
     }
-    
+
     public var agentAudioTrack: RemoteAudioTrack? {
         guard let deps, let room = deps.connectionManager.room else { return nil }
         // Find the first remote participant (agent) with audio track
@@ -41,9 +40,10 @@ public final class Conversation: ObservableObject {
 
     // MARK: - Init
 
-    internal init(dependencies: Task<Dependencies, Never>,
-                  options: ConversationOptions = .default) {
-        self._depsTask = dependencies
+    init(dependencies: Task<Dependencies, Never>,
+         options: ConversationOptions = .default)
+    {
+        _depsTask = dependencies
         self.options = options
         observeDeviceChanges()
     }
@@ -56,14 +56,16 @@ public final class Conversation: ObservableObject {
 
     /// Start a conversation with an agent using agent ID.
     public func startConversation(with agentId: String,
-                                  options: ConversationOptions = .default) async throws {
+                                  options: ConversationOptions = .default) async throws
+    {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         try await startConversation(auth: authConfig, options: options)
     }
-    
+
     /// Start a conversation using authentication configuration.
     public func startConversation(auth: ElevenLabsConfiguration,
-                                  options: ConversationOptions = .default) async throws {
+                                  options: ConversationOptions = .default) async throws
+    {
         guard state == .idle || state.isEnded else {
             throw ConversationError.alreadyActive
         }
@@ -77,7 +79,7 @@ public final class Conversation: ObservableObject {
 
         // Acquire token / connection details
         let connDetails = try await deps.tokenService.fetchConnectionDetails(configuration: auth)
-        
+
         // Connect room
         try await deps.connectionManager.connect(details: connDetails,
                                                  enableMic: !options.conversationOverrides.textOnly)
@@ -93,11 +95,11 @@ public final class Conversation: ObservableObject {
         let agentId = extractAgentId(from: auth)
         state = .active(.init(agentId: agentId))
     }
-    
+
     /// Extract agent ID from authentication configuration for state tracking
     private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
         switch auth.authSource {
-        case .publicAgentId(let id):
+        case let .publicAgentId(id):
             return id
         case .conversationToken, .customTokenProvider:
             return "unknown" // We don't have access to the agent ID in these cases
@@ -154,18 +156,18 @@ public final class Conversation: ObservableObject {
         let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
         try await publish(event)
     }
-    
+
     /// Send the result of a client tool call back to the agent.
     public func sendToolResult(for toolCallId: String, result: Any, isError: Bool = false) async throws {
         guard state.isActive else { throw ConversationError.notConnected }
         let toolResult = try ClientToolResultEvent(toolCallId: toolCallId, result: result, isError: isError)
         let event = OutgoingEvent.clientToolResult(toolResult)
         try await publish(event)
-        
+
         // Remove the tool call from pending list
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
-    
+
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
     public func markToolCallCompleted(_ toolCallId: String) {
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
@@ -228,21 +230,21 @@ public final class Conversation: ObservableObject {
     }
 
     private func startProtocolEventLoop() {
-        guard let deps else { 
-            return 
+        guard let deps else {
+            return
         }
         protocolEventsTask?.cancel()
         protocolEventsTask = Task { [weak self] in
-            guard let self else { 
-                return 
+            guard let self else {
+                return
             }
-            
+
             // Use DataChannelReceiver directly instead of ConnectionManager stream
             guard let room = deps.connectionManager.room else {
                 print("❌ SDK: No room available for DataChannelReceiver")
                 return
             }
-            
+
             if #available(macOS 11.0, iOS 14.0, *) {
                 let dataChannelReceiver = DataChannelReceiver(room: room)
                 let eventStream = await dataChannelReceiver.events()
@@ -261,21 +263,21 @@ public final class Conversation: ObservableObject {
 
     private func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
-        case .userTranscript(let e):
+        case let .userTranscript(e):
             agentState = .listening
             appendUserTranscript(e.transcript)
 
-        case .tentativeAgentResponse(let e):
+        case let .tentativeAgentResponse(e):
             agentState = .speaking
             scheduleBackToListening()
             appendTentativeAgent(e.tentativeResponse)
 
-        case .agentResponse(let e):
+        case let .agentResponse(e):
             agentState = .speaking
             scheduleBackToListening()
             appendAgentMessage(e.response)
 
-        case .agentResponseCorrection(_):
+        case .agentResponseCorrection:
             // Handle agent response corrections
             break
 
@@ -289,12 +291,12 @@ public final class Conversation: ObservableObject {
         case .conversationMetadata:
             agentState = .listening
 
-        case .ping(let p):
+        case let .ping(p):
             // Respond to ping with pong
             let pong = OutgoingEvent.pong(PongEvent(eventId: p.eventId))
             try? await publish(pong)
 
-        case .clientToolCall(let toolCall):
+        case let .clientToolCall(toolCall):
             print("🔨 SDK: Received client tool call: \(toolCall.toolName) (ID: \(toolCall.toolCallId)) - expects response: \(toolCall.expectsResponse)")
             print("🔨 SDK: Current pendingToolCalls count before append: \(pendingToolCalls.count)")
             // Add to pending tool calls for the app to handle
@@ -311,25 +313,25 @@ public final class Conversation: ObservableObject {
             if let event = try EventParser.parseIncomingEvent(from: data) {
                 print("✅ SDK: Parsed event: \(event)")
                 switch event {
-                case .userTranscript(let e):
+                case let .userTranscript(e):
                     print("🎤 SDK: Received userTranscript event: '\(e.transcript)'")
                     agentState = .listening
                     // optional: update transcription state
                     appendUserTranscript(e.transcript)
 
-                case .tentativeAgentResponse(let e):
+                case let .tentativeAgentResponse(e):
                     print("💭 SDK: Received tentativeAgentResponse event: '\(e.tentativeResponse)'")
                     agentState = .speaking
                     scheduleBackToListening()
                     appendTentativeAgent(e.tentativeResponse)
 
-                case .agentResponse(let e):
+                case let .agentResponse(e):
                     print("🤖 SDK: Received agentResponse event: '\(e.response)'")
                     agentState = .speaking
                     scheduleBackToListening()
                     appendAgentMessage(e.response)
 
-                case .agentResponseCorrection(_):
+                case .agentResponseCorrection:
                     // Handle agent response corrections
                     break
 
@@ -343,12 +345,12 @@ public final class Conversation: ObservableObject {
                 case .conversationMetadata:
                     agentState = .listening
 
-                case .ping(let p):
+                case let .ping(p):
                     // respond
                     let pong = OutgoingEvent.pong(PongEvent(eventId: p.eventId))
                     try await publish(pong)
 
-                case .clientToolCall(_):
+                case .clientToolCall:
                     // surface to client via Combine/stream later; omitted here
                     break
                 }
@@ -376,11 +378,11 @@ public final class Conversation: ObservableObject {
             print("❌ SDK: Cannot publish - no room connection")
             throw ConversationError.notConnected
         }
-        
+
         print("📤 SDK: Publishing event: \(event)")
         let data = try EventSerializer.serializeOutgoingEvent(event)
         print("📤 SDK: Serialized event data size: \(data.count) bytes")
-        
+
         do {
             let options = DataPublishOptions(reliable: true)
             print("📤 SDK: Publishing with options: reliable=\(options.reliable), topic='\(options.topic ?? "default")'")
@@ -456,7 +458,7 @@ public enum ConversationState: Equatable, Sendable {
         if case .active = self { return true }
         return false
     }
-    
+
     var isEnded: Bool {
         if case .ended = self { return true }
         return false
@@ -504,7 +506,8 @@ public struct ConversationOptions: Sendable {
                 agentOverrides: AgentOverrides? = nil,
                 ttsOverrides: TTSOverrides? = nil,
                 customLlmExtraBody: [String: String]? = nil,
-                dynamicVariables: [String: String]? = nil) {
+                dynamicVariables: [String: String]? = nil)
+    {
         self.conversationOverrides = conversationOverrides
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -539,19 +542,19 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     public static func connectionFailed(_ error: Error) -> ConversationError {
         .connectionFailed(error.localizedDescription)
     }
-    
+
     public static func microphoneToggleFailed(_ error: Error) -> ConversationError {
         .microphoneToggleFailed(error.localizedDescription)
     }
 
     public var errorDescription: String? {
         switch self {
-        case .notConnected:                      "Conversation is not connected."
-        case .alreadyActive:                     "Conversation is already active."
-        case .connectionFailed(let description): "Connection failed: \(description)"
-        case .authenticationFailed(let msg):     "Authentication failed: \(msg)"
-        case .agentTimeout:                      "Agent did not join in time."
-        case .microphoneToggleFailed(let description): "Failed to toggle microphone: \(description)"
+        case .notConnected: "Conversation is not connected."
+        case .alreadyActive: "Conversation is already active."
+        case let .connectionFailed(description): "Connection failed: \(description)"
+        case let .authenticationFailed(msg): "Authentication failed: \(msg)"
+        case .agentTimeout: "Agent did not join in time."
+        case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
         }
     }
 }

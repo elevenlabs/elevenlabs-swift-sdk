@@ -64,11 +64,11 @@ extension ConversationConfig {
     /// Convert ConversationConfig to ConversationOptions for internal use
     func toConversationOptions() -> ConversationOptions {
         return ConversationOptions(
-            conversationOverrides: self.conversationOverrides ?? ConversationOverrides(),
-            agentOverrides: self.agentOverrides,
-            ttsOverrides: self.ttsOverrides,
-            customLlmExtraBody: self.customLlmExtraBody,
-            dynamicVariables: self.dynamicVariables
+            conversationOverrides: conversationOverrides ?? ConversationOverrides(),
+            agentOverrides: agentOverrides,
+            ttsOverrides: ttsOverrides,
+            customLlmExtraBody: customLlmExtraBody,
+            dynamicVariables: dynamicVariables
         )
     }
 }

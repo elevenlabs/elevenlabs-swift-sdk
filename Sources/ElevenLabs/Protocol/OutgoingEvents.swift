@@ -66,7 +66,7 @@ public struct ClientToolResultEvent: Sendable {
 
     public init(toolCallId: String, result: Any, isError: Bool = false) throws {
         self.toolCallId = toolCallId
-        self.resultData = try JSONSerialization.data(withJSONObject: result)
+        resultData = try JSONSerialization.data(withJSONObject: result)
         self.isError = isError
     }
 

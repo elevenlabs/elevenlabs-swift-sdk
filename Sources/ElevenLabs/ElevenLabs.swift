@@ -9,16 +9,15 @@ import LiveKit
 ///     agentId: "agent_123",
 ///     config: .init(conversationOverrides: .init(textOnly: false))
 /// )
-/// 
+///
 /// // Send a message
 /// try await conversation.sendMessage("Hello!")
-/// 
+///
 /// // End the conversation
 /// await conversation.endConversation()
 /// ```
 
 public enum ElevenLabs {
-
     // MARK: - Version
 
     public static let version = "2.0.0"
@@ -33,7 +32,7 @@ public enum ElevenLabs {
     }
 
     // MARK: - SDK interface
-    
+
     /// Start a conversation with an ElevenLabs agent using a public agent ID - the most common use case.
     ///
     /// This method handles all the complexity of connection setup, authentication,
@@ -72,7 +71,7 @@ public enum ElevenLabs {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         return try await startConversation(auth: authConfig, config: config)
     }
-    
+
     /// Start a conversation using a conversation token from your backend - for private agents.
     ///
     /// Use this method when you have private agents that require authentication.
@@ -89,7 +88,7 @@ public enum ElevenLabs {
     /// ```swift
     /// // Get token from your backend
     /// let token = try await fetchTokenFromMyBackend()
-    /// 
+    ///
     /// // Start conversation with private agent
     /// let conversation = try await ElevenLabs.startConversation(
     ///     conversationToken: token,
@@ -106,7 +105,7 @@ public enum ElevenLabs {
         let authConfig = ElevenLabsConfiguration.conversationToken(conversationToken)
         return try await startConversation(auth: authConfig, config: config)
     }
-    
+
     /// Start a conversation using a custom token provider - for advanced authentication scenarios.
     ///
     /// Use this method when you need dynamic token generation or complex authentication flows.
@@ -136,7 +135,7 @@ public enum ElevenLabs {
         let authConfig = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
         return try await startConversation(auth: authConfig, config: config)
     }
-    
+
     /// Advanced: Start a conversation with full authentication control.
     ///
     /// This is the most flexible method that all other convenience methods use internally.
@@ -155,9 +154,9 @@ public enum ElevenLabs {
         try await conversation.startConversation(auth: auth, options: config.toConversationOptions())
         return conversation
     }
-    
+
     // MARK: - Internal Factory Methods
-    
+
     /// Creates a new Conversation instance with proper dependency injection.
     @MainActor
     private static func createConversation() -> Conversation {
@@ -166,11 +165,11 @@ public enum ElevenLabs {
     }
 
     // MARK: - Re-exports
-    
+
     // Protocol event types are already public from their respective files
     // Re-export AgentState from LiveKit for SDK users
     public typealias AgentState = LiveKit.AgentState
-    
+
     // Re-export audio track types for advanced audio handling
     public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
     public typealias RemoteAudioTrack = LiveKit.RemoteAudioTrack
@@ -190,16 +189,17 @@ public enum ElevenLabs {
 
 // MARK: - ElevenLabs.Configuration
 
-extension ElevenLabs {
+public extension ElevenLabs {
     /// Global SDK configuration.
-    public struct Configuration: Sendable {
+    struct Configuration: Sendable {
         public var apiEndpoint: URL?
         public var logLevel: LogLevel
         public var debugMode: Bool
 
         public init(apiEndpoint: URL? = nil,
                     logLevel: LogLevel = .warning,
-                    debugMode: Bool = false) {
+                    debugMode: Bool = false)
+        {
             self.apiEndpoint = apiEndpoint
             self.logLevel = logLevel
             self.debugMode = debugMode
@@ -209,12 +209,12 @@ extension ElevenLabs {
     }
 
     /// Minimal, per-conversation bootstrap options.
-    public struct ConversationBootstrapOptions: Sendable {
+    struct ConversationBootstrapOptions: Sendable {
         public init() {}
     }
 
     /// Simple log levels.
-    public enum LogLevel: Int, Sendable {
+    enum LogLevel: Int, Sendable {
         case error
         case warning
         case info
