@@ -92,15 +92,6 @@ public final class Conversation: ObservableObject {
         // Extract agent ID for state tracking
         let agentId = extractAgentId(from: auth)
         state = .active(.init(agentId: agentId))
-        
-        // Monitor for agent joining (optional diagnostic)
-        Task {
-            try await Task.sleep(nanoseconds: 3_000_000_000) // Wait 3 seconds
-            guard let room = deps.connectionManager.room else { return }
-            if room.remoteParticipants.isEmpty {
-                print("⚠️ ElevenLabs SDK: No agent joined the room. Check agent ID: \(agentId)")
-            }
-        }
     }
     
     /// Extract agent ID from authentication configuration for state tracking
@@ -238,14 +229,11 @@ public final class Conversation: ObservableObject {
 
     private func startProtocolEventLoop() {
         guard let deps else { 
-            print("❌ SDK: No deps available for protocol event loop")
             return 
         }
-        print("🔄 SDK: Starting protocol event loop...")
         protocolEventsTask?.cancel()
         protocolEventsTask = Task { [weak self] in
             guard let self else { 
-                print("❌ SDK: Self is nil in protocol event loop")
                 return 
             }
             
@@ -445,7 +433,6 @@ public final class Conversation: ObservableObject {
     }
 
     private func appendTentativeAgent(_ text: String) {
-        print("💭 SDK: Appending tentative agent message: '\(text)'")
         // Could present as typing indicator; here we just append
         messages.append(
             Message(id: UUID().uuidString,
@@ -453,7 +440,6 @@ public final class Conversation: ObservableObject {
                     content: text,
                     timestamp: Date())
         )
-        print("💭 SDK: Total messages after tentative append: \(messages.count)")
     }
 }
 
