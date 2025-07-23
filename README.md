@@ -408,28 +408,3 @@ class ConversationViewModel: ObservableObject {
     }
 }
 ```
-
-## Examples
-
-Complete example implementations are available in the SDK repository showcasing:
-
-- Basic voice conversations
-- Text-only chat mode
-- Client tool integration
-- SwiftUI reactive patterns
-- Error handling and recovery
-
-## Contributing
-
-We welcome contributions! Please check out our [Contributing Guide](CONTRIBUTING.md) and join us in the [ElevenLabs Discord](https://discord.gg/elevenlabs).
-
-## License
-
-This SDK is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Support
-
-- 📚 [Documentation](https://elevenlabs.io/docs/conversational-ai/libraries/conversational-ai-sdk-swift)
-- 💬 [Discord Community](https://discord.gg/elevenlabs)
-- 🐛 [Issues](https://github.com/elevenlabs/ElevenLabsSwift/issues)
-- 📧 [Support Email](mailto:support@elevenlabs.io)
