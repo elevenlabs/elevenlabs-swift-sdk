@@ -27,12 +27,12 @@ public struct ConversationConfig: Sendable {
 public struct AgentOverrides: Sendable {
     public var prompt: String?
     public var firstMessage: String?
-    public var language: String?
+    public var language: Language?
 
     public init(
         prompt: String? = nil,
         firstMessage: String? = nil,
-        language: String? = nil
+        language: Language? = nil
     ) {
         self.prompt = prompt
         self.firstMessage = firstMessage

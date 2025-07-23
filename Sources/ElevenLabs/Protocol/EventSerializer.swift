@@ -66,7 +66,7 @@ enum EventSerializer {
                 agent["first_message"] = firstMessage
             }
             if let language = agentOverrides.language {
-                agent["language"] = language
+                agent["language"] = language.rawValue
             }
             if !agent.isEmpty {
                 configOverride["agent"] = agent
