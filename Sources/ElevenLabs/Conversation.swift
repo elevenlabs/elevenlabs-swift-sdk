@@ -241,7 +241,6 @@ public final class Conversation: ObservableObject {
 
             // Use DataChannelReceiver directly instead of ConnectionManager stream
             guard let room = deps.connectionManager.room else {
-                print("❌ SDK: No room available for DataChannelReceiver")
                 return
             }
 
@@ -297,42 +296,33 @@ public final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            print("🔨 SDK: Received client tool call: \(toolCall.toolName) (ID: \(toolCall.toolCallId)) - expects response: \(toolCall.expectsResponse)")
-            print("🔨 SDK: Current pendingToolCalls count before append: \(pendingToolCalls.count)")
             // Add to pending tool calls for the app to handle
             pendingToolCalls.append(toolCall)
-            print("🔨 SDK: Added to pending tool calls. Total pending: \(pendingToolCalls.count)")
-            print("🔨 SDK: pendingToolCalls array contents: \(pendingToolCalls.map { "\($0.toolName):\($0.toolCallId)" })")
         }
     }
 
     private func handleIncomingData(_ data: Data) async {
         guard deps != nil else { return }
         do {
-            print("📦 SDK: Received incoming data, parsing...")
             if let event = try EventParser.parseIncomingEvent(from: data) {
-                print("✅ SDK: Parsed event: \(event)")
                 switch event {
                 case let .userTranscript(e):
-                    print("🎤 SDK: Received userTranscript event: '\(e.transcript)'")
                     agentState = .listening
                     // optional: update transcription state
                     appendUserTranscript(e.transcript)
 
                 case let .tentativeAgentResponse(e):
-                    print("💭 SDK: Received tentativeAgentResponse event: '\(e.tentativeResponse)'")
                     agentState = .speaking
                     scheduleBackToListening()
                     appendTentativeAgent(e.tentativeResponse)
 
                 case let .agentResponse(e):
-                    print("🤖 SDK: Received agentResponse event: '\(e.response)'")
                     agentState = .speaking
                     scheduleBackToListening()
                     appendAgentMessage(e.response)
 
                 case .agentResponseCorrection:
-                    // Handle agent response corrections
+                    // TODO: Handle agent response corrections
                     break
 
                 case .audio:
@@ -355,10 +345,9 @@ public final class Conversation: ObservableObject {
                     break
                 }
             } else {
-                print("⚠️ SDK: Failed to parse event from data")
+                // swallow parsing errors for now or surface via a delegate/stream
             }
         } catch {
-            print("❌ SDK: Error parsing incoming data: \(error)")
             // swallow parsing errors for now or surface via a delegate/stream
         }
     }
@@ -375,44 +364,33 @@ public final class Conversation: ObservableObject {
 
     private func publish(_ event: OutgoingEvent) async throws {
         guard let deps, let room = deps.connectionManager.room else {
-            print("❌ SDK: Cannot publish - no room connection")
             throw ConversationError.notConnected
         }
 
-        print("📤 SDK: Publishing event: \(event)")
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        print("📤 SDK: Serialized event data size: \(data.count) bytes")
 
         do {
             let options = DataPublishOptions(reliable: true)
-            print("📤 SDK: Publishing with options: reliable=\(options.reliable), topic='\(options.topic ?? "default")'")
             try await room.localParticipant.publish(data: data, options: options)
-            print("✅ SDK: Successfully published event")
         } catch {
-            print("❌ SDK: Failed to publish event: \(error)")
             throw error
         }
     }
 
     private func sendConversationInit(config: ConversationConfig) async throws {
-        print("🚀 SDK: Sending conversation init with config: \(config)")
         let initEvent = ConversationInitEvent(config: config)
-        print("🚀 SDK: Created init event: \(initEvent)")
         try await publish(.conversationInit(initEvent))
-        print("✅ SDK: Conversation init sent successfully")
     }
 
     // MARK: - Message Helpers
 
     private func appendLocalMessage(_ text: String) {
-        print("🏠 SDK: Appending local/user message: '\(text)'")
         messages.append(
             Message(id: UUID().uuidString,
                     role: .user,
                     content: text,
                     timestamp: Date())
         )
-        print("🏠 SDK: Total messages after local append: \(messages.count)")
     }
 
     private func appendAgentMessage(_ text: String) {
@@ -435,7 +413,6 @@ public final class Conversation: ObservableObject {
     }
 
     private func appendTentativeAgent(_ text: String) {
-        // Could present as typing indicator; here we just append
         messages.append(
             Message(id: UUID().uuidString,
                     role: .agent,
