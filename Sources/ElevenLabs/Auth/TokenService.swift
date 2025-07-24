@@ -129,7 +129,11 @@ public struct TokenService: Sendable {
         // Build URL with agent ID as query parameter
         let apiUrl = configuration.apiEndpoint ?? ConnectionConstants.tokenUrl
         var components = URLComponents(string: apiUrl)!
-        components.queryItems = [URLQueryItem(name: "agent_id", value: agentId)]
+        components.queryItems = [
+            URLQueryItem(name: "agent_id", value: agentId),
+            URLQueryItem(name: "source", value: "swift_sdk"),
+            URLQueryItem(name: "version", value: SDKVersion.version)
+        ]
 
         guard let url = components.url else {
             throw TokenError.invalidURL
