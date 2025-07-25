@@ -95,8 +95,8 @@ public final class Conversation: ObservableObject {
 
         deps.connectionManager.onAgentReady = { [weak self, auth, options] in
             Task { @MainActor in
-                guard let self else { 
-                    return 
+                guard let self else {
+                    return
                 }
                 // send conversation init exactly when the agent appears
                 try? await self.sendConversationInit(config: options.toConversationConfig())
@@ -104,7 +104,7 @@ public final class Conversation: ObservableObject {
                 self.state = .active(.init(agentId: self.extractAgentId(from: auth)))
             }
         }
-        
+
         deps.connectionManager.onAgentDisconnected = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }

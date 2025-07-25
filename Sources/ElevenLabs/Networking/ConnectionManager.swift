@@ -5,7 +5,7 @@ import LiveKit
 @MainActor
 class ConnectionManager {
     private var _room: Room?
-    
+
     private var readyDelegate: ReadyDelegate?
 
     var onAgentReady: (() -> Void)?
@@ -21,7 +21,7 @@ class ConnectionManager {
             onReady: { [weak self] in self?.onAgentReady?() },
             onDisconnected: { [weak self] in self?.onAgentDisconnected?() }
         )
-        readyDelegate = rd  // Keep strong reference
+        readyDelegate = rd // Keep strong reference
         room.add(delegate: rd)
 
         let (_, continuation) = AsyncStream<Data>.makeStream()
@@ -38,7 +38,7 @@ class ConnectionManager {
     func disconnect() async {
         await _room?.disconnect()
         _room = nil
-        readyDelegate = nil  // Clean up delegate reference
+        readyDelegate = nil // Clean up delegate reference
     }
 
     func dataEventsStream() -> AsyncStream<Data> {
@@ -64,32 +64,30 @@ class ConnectionManager {
         private var agentConnected = false
         private let onReady: () -> Void
         private let onDisconnected: () -> Void
-        
-        init(onReady: @escaping () -> Void, onDisconnected: @escaping () -> Void) { 
+
+        init(onReady: @escaping () -> Void, onDisconnected: @escaping () -> Void) {
             self.onReady = onReady
             self.onDisconnected = onDisconnected
         }
 
-        func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
-            guard !agentConnected else { 
-                return 
+        func room(_: Room, participantDidConnect _: RemoteParticipant) {
+            guard !agentConnected else {
+                return
             }
             agentConnected = true
             onReady()
         }
-        
-        func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
-            if agentConnected && room.remoteParticipants.isEmpty {
+
+        func room(_ room: Room, participantDidDisconnect _: RemoteParticipant) {
+            if agentConnected, room.remoteParticipants.isEmpty {
                 agentConnected = false
                 onDisconnected()
             }
         }
-        
-        func roomDidConnect(_ room: Room) {
-        }
-        
-        func room(_ room: Room, didUpdate connectionState: ConnectionState, from previousState: ConnectionState) {
-        }
+
+        func roomDidConnect(_: Room) {}
+
+        func room(_: Room, didUpdate _: ConnectionState, from _: ConnectionState) {}
     }
 }
 
