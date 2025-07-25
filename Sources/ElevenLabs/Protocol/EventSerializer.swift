@@ -107,6 +107,17 @@ enum EventSerializer {
             json["dynamic_variables"] = dynamicVars
         }
 
+        // Add source_info (equivalent to client in React Native)
+        var sourceInfo: [String: Any] = [:]
+        sourceInfo["source"] = "swift_sdk"
+        sourceInfo["version"] = SDKVersion.version
+        json["source_info"] = sourceInfo
+
+        // Add user_id if provided
+        if let userId = config.userId {
+            json["user_id"] = userId
+        }
+
         return json
     }
 }

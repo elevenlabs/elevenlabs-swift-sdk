@@ -512,18 +512,21 @@ public struct ConversationOptions: Sendable {
     public var ttsOverrides: TTSOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    public var userId: String?
 
     public init(conversationOverrides: ConversationOverrides = .init(),
                 agentOverrides: AgentOverrides? = nil,
                 ttsOverrides: TTSOverrides? = nil,
                 customLlmExtraBody: [String: String]? = nil,
-                dynamicVariables: [String: String]? = nil)
+                dynamicVariables: [String: String]? = nil,
+                userId: String? = nil)
     {
         self.conversationOverrides = conversationOverrides
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
+        self.userId = userId
     }
 
     public static let `default` = ConversationOptions()

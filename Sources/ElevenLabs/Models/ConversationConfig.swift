@@ -7,19 +7,22 @@ public struct ConversationConfig: Sendable {
     public var conversationOverrides: ConversationOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    public var userId: String?
 
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
         conversationOverrides: ConversationOverrides? = nil,
         customLlmExtraBody: [String: String]? = nil,
-        dynamicVariables: [String: String]? = nil
+        dynamicVariables: [String: String]? = nil,
+        userId: String? = nil
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
         self.conversationOverrides = conversationOverrides
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
+        self.userId = userId
     }
 }
 
@@ -68,7 +71,8 @@ extension ConversationConfig {
             agentOverrides: agentOverrides,
             ttsOverrides: ttsOverrides,
             customLlmExtraBody: customLlmExtraBody,
-            dynamicVariables: dynamicVariables
+            dynamicVariables: dynamicVariables,
+            userId: userId
         )
     }
 }
