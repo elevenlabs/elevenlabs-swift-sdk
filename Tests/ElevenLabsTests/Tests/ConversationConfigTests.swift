@@ -89,6 +89,7 @@ final class ConversationConfigTests: XCTestCase {
         XCTAssertEqual(Language.russian.rawValue, "ru")
         XCTAssertEqual(Language.slovak.rawValue, "sk")
         XCTAssertEqual(Language.slovenian.rawValue, "sl")
+        XCTAssertEqual(Language.tagalog.rawValue, "tl")
         XCTAssertEqual(Language.ukrainian.rawValue, "uk")
         XCTAssertEqual(Language.chinese.rawValue, "zh")
     }

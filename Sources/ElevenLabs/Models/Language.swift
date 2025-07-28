@@ -26,6 +26,7 @@ public enum Language: String, Codable, Sendable {
     case malay = "ms"
     case danish = "da"
     case tamil = "ta"
+    case tagalog = "tl"
     case ukrainian = "uk"
     case russian = "ru"
     case hungarian = "hu"
