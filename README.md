@@ -12,7 +12,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.3")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.6")
 ]
 ```
 
@@ -62,6 +62,7 @@ The SDK provides a streamlined `Conversation` class that handles all aspects of 
 
 ```swift
 import ElevenLabs
+import LiveKit
 
 @MainActor
 class ConversationManager: ObservableObject {
@@ -391,6 +392,7 @@ conversation.$state
 ```swift
 import SwiftUI
 import ElevenLabs
+import LiveKit
 import Combine
 
 struct ConversationView: View {

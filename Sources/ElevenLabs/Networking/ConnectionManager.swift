@@ -85,7 +85,15 @@ class ConnectionManager {
             }
         }
 
-        func roomDidConnect(_: Room) {}
+        func roomDidConnect(_ room: Room) {
+            // Check if agent is already in the room
+            if !agentConnected, !room.remoteParticipants.isEmpty {
+                print("[ElevenLabs] ConnectionManager: Agent already in room at connection time")
+                agentConnected = true
+                print("[ElevenLabs] ConnectionManager: Marking agent as connected and calling onReady()")
+                onReady()
+            }
+        }
 
         func room(_: Room, didUpdate _: ConnectionState, from _: ConnectionState) {}
     }

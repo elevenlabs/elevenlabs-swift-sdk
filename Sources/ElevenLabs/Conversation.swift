@@ -465,7 +465,7 @@ public enum ConversationState: Equatable, Sendable {
     case ended(reason: EndReason)
     case error(ConversationError)
 
-    var isActive: Bool {
+    public var isActive: Bool {
         if case .active = self { return true }
         return false
     }
