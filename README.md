@@ -62,6 +62,7 @@ The SDK provides a streamlined `Conversation` class that handles all aspects of 
 
 ```swift
 import ElevenLabs
+import LiveKit
 
 @MainActor
 class ConversationManager: ObservableObject {
@@ -391,6 +392,7 @@ conversation.$state
 ```swift
 import SwiftUI
 import ElevenLabs
+import LiveKit
 import Combine
 
 struct ConversationView: View {

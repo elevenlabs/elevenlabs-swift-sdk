@@ -88,7 +88,7 @@ public struct TokenService: Sendable {
         public init(
             configuration: Configuration = .default,
             urlSession: URLSession = .shared,
-            debugApiKey: String? = nil,
+            debugApiKey: String? = nil
         ) {
             self.configuration = configuration
             self.urlSession = urlSession
@@ -97,7 +97,7 @@ public struct TokenService: Sendable {
     #else
         public init(
             configuration: Configuration = .default,
-            urlSession: URLSession = .shared,
+            urlSession: URLSession = .shared
         ) {
             self.configuration = configuration
             self.urlSession = urlSession
