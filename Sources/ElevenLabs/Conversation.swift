@@ -11,7 +11,7 @@ import Foundation
 import LiveKit
 
 @MainActor
-public final class Conversation: ObservableObject {
+public final class Conversation: ObservableObject, RoomDelegate {
     // MARK: - Public State
 
     @Published public private(set) var state: ConversationState = .idle
@@ -248,6 +248,9 @@ public final class Conversation: ObservableObject {
             guard let self else { return }
             // For now, just update once - in a real implementation this would listen to room events
             updateFromRoom(room)
+
+            // Monitor room delegate events for speaking state
+            room.add(delegate: self)
         }
     }
 
@@ -263,6 +266,12 @@ public final class Conversation: ObservableObject {
 
         // Audio/Video toggles
         isMuted = !room.localParticipant.isMicrophoneEnabled()
+
+        // Monitor existing remote participants
+        for participant in room.remoteParticipants.values {
+            print("[AgentState] Found existing remote participant: \(participant.sid)")
+            participant.add(delegate: self)
+        }
     }
 
     private func startProtocolEventLoop() {
@@ -299,16 +308,14 @@ public final class Conversation: ObservableObject {
     private func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
-            agentState = .listening
+            print("[AgentState] Received userTranscript: \(e.transcript)")
             appendUserTranscript(e.transcript)
 
         case let .tentativeAgentResponse(e):
-            agentState = .speaking
-            scheduleBackToListening()
+            print("[AgentState] Received tentative agent response: \(e.tentativeResponse)")
 
         case let .agentResponse(e):
-            agentState = .speaking
-            scheduleBackToListening()
+            print("[AgentState] Received agentResponse: \(e.response)")
             appendAgentMessage(e.response)
 
         case .agentResponseCorrection:
@@ -316,14 +323,15 @@ public final class Conversation: ObservableObject {
             break
 
         case .audio:
-            agentState = .speaking
-            scheduleBackToListening(delay: 0.8)
+            print("[AgentState] Received audio event")
+            speakingTimer?.cancel()
 
         case .interruption:
+            print("[AgentState] Received interruption event")
             agentState = .listening
 
         case .conversationMetadata:
-            agentState = .listening
+            print("[AgentState] Received conversationMetadata event")
 
         case let .ping(p):
             // Respond to ping with pong
@@ -342,17 +350,16 @@ public final class Conversation: ObservableObject {
             if let event = try EventParser.parseIncomingEvent(from: data) {
                 switch event {
                 case let .userTranscript(e):
-                    agentState = .listening
-                    // optional: update transcription state
+                    print("[AgentState] Received userTranscript: \(e.transcript)")
+
                     appendUserTranscript(e.transcript)
 
                 case let .tentativeAgentResponse(e):
-                    agentState = .speaking
-                    scheduleBackToListening()
+                    print("tentative agent response")
 
                 case let .agentResponse(e):
-                    agentState = .speaking
-                    scheduleBackToListening()
+                    print("[AgentState] Received agentResponse: \(e.response)")
+
                     appendAgentMessage(e.response)
 
                 case .agentResponseCorrection:
@@ -360,14 +367,16 @@ public final class Conversation: ObservableObject {
                     break
 
                 case .audio:
-                    agentState = .speaking
-                    scheduleBackToListening(delay: 0.8)
+                    print("[AgentState] Received audio event")
+
+                    speakingTimer?.cancel()
 
                 case .interruption:
+                    print("[AgentState] Received interruption event")
                     agentState = .listening
 
                 case .conversationMetadata:
-                    agentState = .listening
+                    print("[AgentState] Received conversationMetadata event")
 
                 case let .ping(p):
                     // respond
@@ -453,6 +462,37 @@ public final class Conversation: ObservableObject {
                     content: text,
                     timestamp: Date())
         )
+    }
+}
+
+// MARK: - RoomDelegate
+
+public extension Conversation {
+    nonisolated func room(_: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
+        if participant is RemoteParticipant {
+            print("[AgentState] Agent isSpeaking: \(isSpeaking)")
+            Task { @MainActor in
+                self.agentState = isSpeaking ? .speaking : .listening
+            }
+        }
+    }
+
+    nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
+        print("[AgentState] Remote participant joined: \(participant.sid)")
+        participant.add(delegate: self)
+    }
+}
+
+// MARK: - ParticipantDelegate
+
+extension Conversation: ParticipantDelegate {
+    public nonisolated func participant(_ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
+        if participant is RemoteParticipant {
+            print("[AgentState] Participant speaking update: \(isSpeaking)")
+            Task { @MainActor in
+                self.agentState = isSpeaking ? .speaking : .listening
+            }
+        }
     }
 }
 
