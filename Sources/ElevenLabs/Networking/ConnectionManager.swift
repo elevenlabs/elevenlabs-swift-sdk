@@ -112,9 +112,10 @@ class ConnectionManager {
             }
         }
 
-        func room(_: Room, participant _: RemoteParticipant, didSubscribeToTrack publication: RemoteTrackPublication) {
+        func room(_: Room, participant _: RemoteParticipant, didPublishTrack publication: RemoteTrackPublication) {
+            print("[ConnectionManager] Agent audio track subscribed, checking readiness... \(publication.kind) \(agentConnected) \(agentTrackSubscribed)")
             // Only trigger for agent audio tracks
-            if publication.kind == .audio, agentConnected, !agentTrackSubscribed {
+            if publication.kind == .audio, agentConnected {
                 agentTrackSubscribed = true
                 print("[ConnectionManager] Agent audio track subscribed, checking readiness...")
                 checkAgentReady()
@@ -137,10 +138,11 @@ class ConnectionManager {
             timeoutTask = Task {
                 try? await Task.sleep(nanoseconds: UInt64(timeoutDuration * 1_000_000_000))
                 if !Task.isCancelled && agentConnected && !agentTrackSubscribed {
-                    print("[ConnectionManager] Timeout waiting for agent track, proceeding anyway")
-                    // Proceed even without track subscription to prevent indefinite waiting
-                    agentTrackSubscribed = true
-                    checkAgentReady()
+                    print("[ConnectionManager] Timeout waiting for agent track - connection failed")
+                    // Reset state and trigger disconnection
+                    agentConnected = false
+                    agentTrackSubscribed = false
+                    onDisconnected()
                 }
             }
         }
