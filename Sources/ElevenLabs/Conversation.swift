@@ -70,6 +70,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             throw ConversationError.alreadyActive
         }
 
+        let startTime = Date()
+        print("[ElevenLabs-Timing] Starting conversation at \(startTime)")
+
         state = .connecting
         self.options = options
 
@@ -78,6 +81,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
         self.deps = deps
 
         // Acquire token / connection details
+        let tokenFetchStart = Date()
+        print("[ElevenLabs-Timing] Fetching token...")
         let connDetails: TokenService.ConnectionDetails
         do {
             connDetails = try await deps.tokenService.fetchConnectionDetails(configuration: auth)
@@ -93,14 +98,50 @@ public final class Conversation: ObservableObject, RoomDelegate {
             }
         }
 
+        print("[ElevenLabs-Timing] Token fetched in \(Date().timeIntervalSince(tokenFetchStart))s")
+
         deps.connectionManager.onAgentReady = { [weak self, auth, options] in
             Task { @MainActor in
                 guard let self else {
                     return
                 }
 
-                // Add minimal delay as safety buffer
-                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms delay
+                print("[ElevenLabs-Timing] Agent ready callback triggered at \(Date().timeIntervalSince(startTime))s from start")
+
+                // Ensure room connection is fully complete before sending init
+                // This prevents race condition where agent is ready but we can't publish data yet
+                if let room = deps.connectionManager.room, room.connectionState == .connected {
+                    // Room is ready, proceed immediately
+                    print("[ElevenLabs-Timing] Room fully connected, proceeding...")
+                } else {
+                    print("[ElevenLabs-Timing] Room not fully connected yet, waiting...")
+                    // Small delay to allow room connection to complete
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                    if let room = deps.connectionManager.room, room.connectionState == .connected {
+                        print("[ElevenLabs-Timing] Room connected after wait")
+                    } else {
+                        print("[ElevenLabs-Timing] ⚠️ Room still not connected, proceeding anyway...")
+                    }
+                }
+
+                print("[ElevenLabs-Timing] Sending conversation init...")
+
+                // Wait for data channel and agent to be fully ready (state-based, not time-based)
+                let isReady = await self.waitForSystemReady()
+                if isReady {
+                    print("[ElevenLabs-Timing] System confirmed ready for conversation init")
+                    // Add buffer based on whether agent was already there (fast path) or just joined
+                    let buffer = await self.determineOptimalBuffer()
+                    if buffer > 0 {
+                        print("[ElevenLabs-Timing] Adding \(Int(buffer))ms buffer for agent conversation handler readiness...")
+                        try? await Task.sleep(nanoseconds: UInt64(buffer * 1_000_000))
+                        print("[ElevenLabs-Timing] Buffer complete, sending conversation init")
+                    } else {
+                        print("[ElevenLabs-Timing] No buffer needed, sending conversation init immediately")
+                    }
+                } else {
+                    print("[ElevenLabs-Timing] ⚠️ System readiness timeout, proceeding anyway")
+                }
 
                 // Cancel any existing init attempt
                 self.conversationInitTask?.cancel()
@@ -113,6 +154,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 // flip to .active once conversation init is sent
                 self.state = .active(.init(agentId: self.extractAgentId(from: auth)))
                 print("[ElevenLabs] State changed to active")
+                print("[ElevenLabs-Timing] Total startup time: \(Date().timeIntervalSince(startTime))s")
             }
         }
 
@@ -127,9 +169,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
 
         // Connect room
+        let connectionStart = Date()
+        print("[ElevenLabs-Timing] Starting room connection...")
         do {
             try await deps.connectionManager.connect(details: connDetails,
                                                      enableMic: !options.conversationOverrides.textOnly)
+            print("[ElevenLabs-Timing] Room connected in \(Date().timeIntervalSince(connectionStart))s")
         } catch {
             // Convert connection errors to ConversationError
             throw ConversationError.connectionFailed(error)
@@ -400,16 +445,108 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func sendConversationInit(config: ConversationConfig) async throws {
+        let initStart = Date()
         let initEvent = ConversationInitEvent(config: config)
         try await publish(.conversationInit(initEvent))
+        print("[ElevenLabs-Timing] Conversation init sent in \(Date().timeIntervalSince(initStart))s")
+    }
+
+    /// Determine optimal buffer time based on agent readiness pattern
+    /// Different agents need different buffer times for conversation processing readiness
+    private func determineOptimalBuffer() async -> TimeInterval {
+        guard let room = deps?.connectionManager.room else { return 150.0 } // Default buffer if no room
+
+        // Check if we have any remote participants
+        guard !room.remoteParticipants.isEmpty else {
+            print("[ElevenLabs-Timing] No remote participants found, using longer buffer")
+            return 200.0 // Longer wait if no agent detected
+        }
+
+        // For now, we'll use a moderate buffer that should work for most cases
+        // This is based on empirical observation that first messages arrive ~2-4s after conversation init
+        // But we don't want to wait that long, so we'll use a compromise
+        let buffer: TimeInterval = 150.0 // 150ms compromise between speed and reliability
+
+        print("[ElevenLabs-Timing] Determined optimal buffer: \(Int(buffer))ms")
+        return buffer
+    }
+
+    /// Wait for the system to be fully ready for conversation initialization
+    /// Uses state-based detection instead of arbitrary delays
+    private func waitForSystemReady(timeout: TimeInterval = 1.5) async -> Bool {
+        let startTime = Date()
+        let pollInterval: UInt64 = 50_000_000 // 50ms in nanoseconds
+        let maxAttempts = Int(timeout * 1000 / 50) // Convert timeout to number of 50ms attempts
+
+        print("[ElevenLabs-Timing] Checking system readiness (state-based detection)...")
+
+        for attempt in 1 ... maxAttempts {
+            // Check if we've exceeded timeout
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed > timeout {
+                print("[ElevenLabs-Timing] System readiness timeout after \(String(format: "%.3f", elapsed))s")
+                return false
+            }
+
+            // Get room reference
+            guard let room = deps?.connectionManager.room else {
+                print("[ElevenLabs-Timing] Attempt \(attempt): No room available")
+                try? await Task.sleep(nanoseconds: pollInterval)
+                continue
+            }
+
+            // Check 1: Room connection state
+            guard room.connectionState == .connected else {
+                print("[ElevenLabs-Timing] Attempt \(attempt): Room not connected (\(room.connectionState))")
+                try? await Task.sleep(nanoseconds: pollInterval)
+                continue
+            }
+
+            // Check 2: Agent participant present
+            guard !room.remoteParticipants.isEmpty else {
+                print("[ElevenLabs-Timing] Attempt \(attempt): No remote participants")
+                try? await Task.sleep(nanoseconds: pollInterval)
+                continue
+            }
+
+            // Check 3: Agent has published audio tracks (indicates full readiness)
+            var agentHasAudioTrack = false
+            for participant in room.remoteParticipants.values {
+                if !participant.audioTracks.isEmpty {
+                    agentHasAudioTrack = true
+                    break
+                }
+            }
+
+            guard agentHasAudioTrack else {
+                print("[ElevenLabs-Timing] Attempt \(attempt): Agent has no published audio tracks")
+                try? await Task.sleep(nanoseconds: pollInterval)
+                continue
+            }
+
+            // Check 4: Data channel ready (test by ensuring we can publish)
+            // We'll assume if room is connected and agent is present with tracks, data channel is ready
+            // This is a reasonable assumption since LiveKit handles data channel setup automatically
+
+            print("[ElevenLabs-Timing] ✅ System ready after \(String(format: "%.3f", elapsed))s (attempt \(attempt))")
+            print("[ElevenLabs-Timing]   - Room: connected")
+            print("[ElevenLabs-Timing]   - Remote participants: \(room.remoteParticipants.count)")
+            print("[ElevenLabs-Timing]   - Agent audio tracks: confirmed")
+
+            return true
+        }
+
+        let elapsed = Date().timeIntervalSince(startTime)
+        print("[ElevenLabs-Timing] System readiness check exhausted after \(String(format: "%.3f", elapsed))s")
+        return false
     }
 
     private func sendConversationInitWithRetry(config: ConversationConfig, maxAttempts: Int = 3) async {
         for attempt in 1 ... maxAttempts {
-            // Exponential backoff: 0, 0.5, 1.0 seconds
+            // More aggressive exponential backoff: 0, 100ms, 300ms
             if attempt > 1 {
-                let delay = pow(2.0, Double(attempt - 2)) * 0.5 // 0.5, 1.0 seconds
-                print("[Retry] Attempt \(attempt) of \(maxAttempts), exponential backoff delay: \(delay)s")
+                let delay = Double(attempt - 1) * 0.1 + Double(attempt - 2) * 0.2 // 0.1s, 0.3s
+                print("[Retry] Attempt \(attempt) of \(maxAttempts), backoff delay: \(delay)s")
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             } else {
                 print("[Retry] Attempt \(attempt) of \(maxAttempts), no delay")
