@@ -69,8 +69,14 @@ final class ConnectionManager {
         print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
 
         if enableMic {
-            // Do not await—mic enabling should never gate readiness.
-            Task { try? await room.localParticipant.setMicrophone(enabled: true) }
+            // Enable microphone and wait for it to complete to ensure consistent state
+            do {
+                try await room.localParticipant.setMicrophone(enabled: true)
+                print("[ConnectionManager-Timing] Microphone enabled successfully")
+            } catch {
+                print("[ConnectionManager-Timing] Failed to enable microphone: \(error)")
+                // Continue anyway - the user can unmute manually if needed
+            }
         }
     }
 

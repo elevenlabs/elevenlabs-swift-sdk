@@ -17,6 +17,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     @Published public private(set) var state: ConversationState = .idle
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var agentState: AgentState = .listening
+    /// Whether the user's microphone is muted
     @Published public private(set) var isMuted: Bool = false
 
     /// Stream of client tool calls that need to be executed by the app
@@ -98,6 +99,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         state = .connecting
         self.options = options
+        
+        // Set initial muted state based on text-only mode
+        // In text-only mode, the microphone won't be enabled
+        isMuted = options.conversationOverrides.textOnly
 
         // Acquire token / connection details
         let tokenFetchStart = Date()
@@ -214,6 +219,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Wire up streams
         startRoomObservers()
         startProtocolEventLoop()
+        
+        // Now that microphone has been configured, we can allow updateFromRoom to update isMuted
+        isInitialSetup = false
     }
 
     /// Extract agent ID from authentication configuration for state tracking
@@ -312,12 +320,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
     private var roomChangesTask: Task<Void, Never>?
     private var protocolEventsTask: Task<Void, Never>?
     private var conversationInitTask: Task<Void, Never>?
+    private var isInitialSetup: Bool = true
 
     private func resetFlags() {
         isMuted = false
         agentState = .listening
         pendingToolCalls.removeAll()
         conversationInitTask?.cancel()
+        isInitialSetup = true
     }
 
     /// Clean up state from any previous conversation to ensure a fresh start.
@@ -397,8 +407,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
         default: break
         }
 
-        // Audio/Video toggles
-        isMuted = !room.localParticipant.isMicrophoneEnabled()
+        // Audio/Video toggles - don't update during initial setup as microphone
+        // is being enabled asynchronously in ConnectionManager
+        if !isInitialSetup {
+            isMuted = !room.localParticipant.isMicrophoneEnabled()
+        }
     }
 
     private func startProtocolEventLoop() {
