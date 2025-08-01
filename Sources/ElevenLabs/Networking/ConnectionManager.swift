@@ -44,7 +44,7 @@ final class ConnectionManager {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
-        graceTimeout: TimeInterval = 0.2 // Reduced from 0.5 to 200ms for faster device startup
+        graceTimeout: TimeInterval = 0.5 // 500ms to ensure agent is fully ready on slower devices
     ) async throws {
         let room = Room()
         self.room = room

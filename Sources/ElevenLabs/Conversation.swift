@@ -147,8 +147,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                     isDevice = true
                     #endif
                     
-                    // On device, use shorter wait or skip entirely
-                    let waitTime: UInt64 = isDevice ? 20_000_000 : 100_000_000  // 20ms on device, 100ms on simulator
+                    // On device, use LONGER wait for room connection
+                    let waitTime: UInt64 = isDevice ? 200_000_000 : 100_000_000  // 200ms on device, 100ms on simulator
                     
                     let waitStart = Date()
                     try? await Task.sleep(nanoseconds: waitTime)
@@ -552,12 +552,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Determine optimal buffer time based on agent readiness pattern
     /// Different agents need different buffer times for conversation processing readiness
     private func determineOptimalBuffer() async -> TimeInterval {
-        guard let room = deps?.connectionManager.room else { return 50.0 }  // Reduced default buffer
+        guard let room = deps?.connectionManager.room else { return 200.0 }  // Default buffer
         
         // Check if we have any remote participants
         guard !room.remoteParticipants.isEmpty else {
             print("[ElevenLabs-Timing] No remote participants found, using longer buffer")
-            return 100.0  // Reduced from 200ms to 100ms
+            return 300.0  // Longer wait if no agent detected
         }
         
         // Check if running on simulator vs device
@@ -568,9 +568,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
         isSimulator = false
         #endif
         
-        // Use shorter buffer on device since data channel setup can be slower
-        // but we don't want to wait too long
-        let buffer: TimeInterval = isSimulator ? 150.0 : 50.0
+        // IMPORTANT: Devices need MORE time, not less!
+        // On device, data channel and agent initialization is slower due to:
+        // - Network latency (cellular/wifi vs simulator's ethernet)
+        // - CPU performance differences
+        // - Background processes competing for resources
+        let buffer: TimeInterval = isSimulator ? 100.0 : 250.0  // More time on device!
         
         print("[ElevenLabs-Timing] Determined optimal buffer: \(Int(buffer))ms (simulator: \(isSimulator))")
         return buffer
