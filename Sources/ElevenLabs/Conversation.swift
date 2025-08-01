@@ -219,9 +219,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Wire up streams
         startRoomObservers()
         startProtocolEventLoop()
-        
-        // Now that microphone has been configured, we can allow updateFromRoom to update isMuted
-        isInitialSetup = false
     }
 
     /// Extract agent ID from authentication configuration for state tracking
@@ -388,6 +385,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             }
 
             updateFromRoom(room)
+            
+            // Now that initial room state has been processed, allow future updates
+            isInitialSetup = false
         }
     }
 
