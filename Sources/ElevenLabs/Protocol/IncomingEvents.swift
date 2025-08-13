@@ -14,6 +14,7 @@ public enum IncomingEvent: Sendable {
     case conversationMetadata(ConversationMetadataEvent)
     case ping(PingEvent)
     case clientToolCall(ClientToolCallEvent)
+    case agentToolResponse(AgentToolResponseEvent)
 }
 
 /// User's speech transcription
@@ -77,4 +78,12 @@ public struct ClientToolCallEvent: Sendable {
     public func getParameters() throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: parametersData) as? [String: Any] ?? [:]
     }
+}
+
+/// Agent tool response event
+public struct AgentToolResponseEvent: Sendable {
+    public let toolName: String
+    public let toolCallId: String
+    public let toolType: String
+    public let isError: Bool
 }

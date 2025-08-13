@@ -112,6 +112,22 @@ enum EventParser {
                 }
             }
 
+        case "agent_tool_response":
+            if let event = json["agent_tool_response"] as? [String: Any],
+               let toolName = event["tool_name"] as? String,
+               let toolCallId = event["tool_call_id"] as? String,
+               let toolType = event["tool_type"] as? String,
+               let isError = event["is_error"] as? Bool
+            {
+                return .agentToolResponse(
+                    AgentToolResponseEvent(
+                        toolName: toolName,
+                        toolCallId: toolCallId,
+                        toolType: toolType,
+                        isError: isError
+                    ))
+            }
+
         default:
             throw EventParseError.unknownEventType(type)
         }

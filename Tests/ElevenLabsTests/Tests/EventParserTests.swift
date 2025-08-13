@@ -102,6 +102,32 @@ final class EventParserTests: XCTestCase {
         XCTAssertEqual(toolCall.toolName, "weather")
     }
 
+    func testParseAgentToolResponseEvent() throws {
+        let json = """
+        {
+            "type": "agent_tool_response",
+            "agent_tool_response": {
+                "tool_name": "end_call",
+                "tool_call_id": "toolu_vrtx_01Vvmrto87Dvc2RFCoCPMKzx",
+                "tool_type": "system",
+                "is_error": false
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentToolResponse(toolResponse) = event else {
+            XCTFail("Expected agentToolResponse event")
+            return
+        }
+
+        XCTAssertEqual(toolResponse.toolName, "end_call")
+        XCTAssertEqual(toolResponse.toolCallId, "toolu_vrtx_01Vvmrto87Dvc2RFCoCPMKzx")
+        XCTAssertEqual(toolResponse.toolType, "system")
+        XCTAssertEqual(toolResponse.isError, false)
+    }
+
     func testParseInvalidJSON() {
         let json = "invalid json".data(using: .utf8)!
 

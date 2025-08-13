@@ -114,6 +114,9 @@ extension DataChannelReceiver: RoomDelegate {
 
             case let .clientToolCall(toolCallEvent):
                 handleClientToolCall(toolCallEvent)
+
+            case let .agentToolResponse(toolResponseEvent):
+                handleAgentToolResponse(toolResponseEvent)
             }
         } catch {
             logger.error("Failed to parse incoming event: \(error)")
@@ -191,5 +194,10 @@ extension DataChannelReceiver: RoomDelegate {
     private func handleClientToolCall(_ event: ClientToolCallEvent) {
         logger.info("Received client tool call: \(event.toolName) (ID: \(event.toolCallId))")
         // Tool calls are available in the event stream
+    }
+
+    private func handleAgentToolResponse(_ event: AgentToolResponseEvent) {
+        logger.info("Received agent tool response: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType), Error: \(event.isError))")
+        // Agent tool responses are available in the event stream
     }
 }
