@@ -440,7 +440,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Don't change agent state - let voice activity detection handle it
             appendUserTranscript(e.transcript)
 
-        case .tentativeAgentResponse:
+        case let .tentativeAgentResponse(e):
             // Don't change agent state - let voice activity detection handle it
             break
 
@@ -474,11 +474,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Add to pending tool calls for the app to handle
             pendingToolCalls.append(toolCall)
 
-        case .vadScore:
+        case let .vadScore(vadScoreEvent):
             // VAD scores are available in the event stream
             break
 
-        case .agentToolResponse:
+        case let .agentToolResponse(toolResponse):
             // Agent tool response is available in the event stream
             // This can be used to track tool executions by the agent
             break
