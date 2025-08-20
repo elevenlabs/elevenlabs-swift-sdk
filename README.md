@@ -12,7 +12,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.10")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.11")
 ]
 ```
 
