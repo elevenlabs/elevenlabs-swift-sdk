@@ -53,6 +53,7 @@ await conversation.endConversation()
 - iOS 14.0+ / macOS 11.0+
 - Swift 5.9+
 - Add `NSMicrophoneUsageDescription` to your Info.plist
+- Add `NSCameraUsageDescription` to your Info.plist. Your app won't fail to work in development but uploading to App Store Connect will fail without this.
 
 ## Core Features
 
