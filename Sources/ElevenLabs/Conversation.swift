@@ -21,6 +21,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// Stream of client tool calls that need to be executed by the app
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
+    
+    /// Agent tool responses received during the conversation
+    @Published public private(set) var agentToolResponses: [AgentToolResponseEvent] = []
 
     // Device lists (optional to expose; keep `internal` if you don't want them public)
     @Published public private(set) var audioDevices: [AudioDevice] = AudioManager.shared
@@ -324,6 +327,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Don't reset isMuted - it should reflect actual room state
         agentState = .listening
         pendingToolCalls.removeAll()
+        agentToolResponses.removeAll()
         conversationInitTask?.cancel()
     }
 
@@ -346,6 +350,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Clear conversation state
         messages.removeAll()
         pendingToolCalls.removeAll()
+        agentToolResponses.removeAll()
 
         // Reset agent state
         agentState = .listening
@@ -479,9 +484,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
             break
 
         case let .agentToolResponse(toolResponse):
-            // Agent tool response is available in the event stream
-            // This can be used to track tool executions by the agent
-            break
+            // Capture agent tool responses for tracking and debugging
+            agentToolResponses.append(toolResponse)
         }
     }
 
