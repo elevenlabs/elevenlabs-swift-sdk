@@ -17,6 +17,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     @Published public private(set) var state: ConversationState = .idle
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var agentState: AgentState = .listening
+    @Published public private(set) var conversationId: String?
     @Published public private(set) var isMuted: Bool = true // Start as true, will be updated based on actual state
 
     /// Stream of client tool calls that need to be executed by the app
@@ -349,6 +350,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         // Reset agent state
         agentState = .listening
+        conversationId = nil
         isMuted = true // Start muted, will be updated based on actual room state
 
         print("[ElevenLabs] Previous conversation state cleaned up for fresh Room")
@@ -468,8 +470,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             speakingTimer?.cancel()
             agentState = .listening
 
-        case .conversationMetadata:
+        case let .conversationMetadata(e):
             // Don't change agent state on metadata
+            conversationId = e.conversationId
             break
 
         case let .ping(p):
