@@ -25,6 +25,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Conversation metadata including conversation ID, received when the conversation is initialized
     @Published public private(set) var conversationMetadata: ConversationMetadataEvent?
 
+    /// MCP tool calls from the agent
+    @Published public private(set) var mcpToolCalls: [MCPToolCallEvent] = []
+
+    /// Current MCP connection status for all integrations
+    @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
+
     // Device lists (optional to expose; keep `internal` if you don't want them public)
     @Published public private(set) var audioDevices: [AudioDevice] = AudioManager.shared
         .inputDevices
@@ -327,6 +333,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Don't reset isMuted - it should reflect actual room state
         agentState = .listening
         pendingToolCalls.removeAll()
+        mcpToolCalls.removeAll()
+        mcpConnectionStatus = nil
         conversationMetadata = nil
         conversationInitTask?.cancel()
     }
@@ -350,6 +358,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Clear conversation state
         messages.removeAll()
         pendingToolCalls.removeAll()
+        mcpToolCalls.removeAll()
+        mcpConnectionStatus = nil
         conversationMetadata = nil
 
         // Reset agent state
@@ -493,6 +503,30 @@ public final class Conversation: ObservableObject, RoomDelegate {
         case .agentToolResponse:
             // Agent tool response is available in the event stream
             // This can be used to track tool executions by the agent
+            break
+
+        case .tentativeUserTranscript:
+            // Tentative user transcript (in-progress transcription)
+            break
+
+        case let .mcpToolCall(toolCall):
+            // Update or append MCP tool call based on toolCallId
+            if let index = mcpToolCalls.firstIndex(where: { $0.toolCallId == toolCall.toolCallId }) {
+                mcpToolCalls[index] = toolCall
+            } else {
+                mcpToolCalls.append(toolCall)
+            }
+
+        case let .mcpConnectionStatus(status):
+            // Update MCP connection status
+            mcpConnectionStatus = status
+
+        case .asrInitiationMetadata:
+            // ASR initiation metadata is available in the event stream
+            break
+
+        case .error:
+            // Error events are available in the event stream
             break
         }
     }

@@ -65,7 +65,9 @@ actor DataChannelReceiver: MessageReceiver {
 
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
-    nonisolated func room(_: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String) {
+    nonisolated func room(
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String
+    ) {
         // Only process messages from the agent
         guard participant != nil else {
             print("[DataChannelReceiver] Received data but no participant, ignoring")
@@ -93,6 +95,9 @@ extension DataChannelReceiver: RoomDelegate {
             case let .userTranscript(transcriptEvent):
                 handleUserTranscript(transcriptEvent)
 
+            case let .tentativeUserTranscript(tentativeTranscriptEvent):
+                handleTentativeUserTranscript(tentativeTranscriptEvent)
+
             case let .interruption(interruptionEvent):
                 handleInterruption(interruptionEvent)
 
@@ -117,6 +122,19 @@ extension DataChannelReceiver: RoomDelegate {
 
             case let .agentToolResponse(toolResponseEvent):
                 handleAgentToolResponse(toolResponseEvent)
+
+            case let .mcpToolCall(mcpToolCallEvent):
+                handleMCPToolCall(mcpToolCallEvent)
+
+            case let .mcpConnectionStatus(mcpConnectionStatusEvent):
+                handleMCPConnectionStatus(mcpConnectionStatusEvent)
+
+            case let .asrInitiationMetadata(asrMetadataEvent):
+                handleASRInitiationMetadata(asrMetadataEvent)
+
+            case .error:
+                // Error handling - placeholder for now
+                logger.error("Received error event")
             }
         } catch {
             logger.error("Failed to parse incoming event: \(error)")
@@ -142,7 +160,8 @@ extension DataChannelReceiver: RoomDelegate {
             content: .agentTranscript(event.correctedAgentResponse),
         )
         yield(message: message)
-        logger.debug("Agent correction: \(event.originalAgentResponse) -> \(event.correctedAgentResponse)")
+        logger.debug(
+            "Agent correction: \(event.originalAgentResponse) -> \(event.correctedAgentResponse)")
     }
 
     private func handleUserTranscript(_ event: UserTranscriptEvent) {
@@ -173,9 +192,7 @@ extension DataChannelReceiver: RoomDelegate {
 
     private func handleConversationMetadata(_ event: ConversationMetadataEvent) {
         logger.info("Conversation initialized with ID: \(event.conversationId)")
-        if let userFormat = event.userInputAudioFormat {
-            logger.debug("User audio format: \(userFormat)")
-        }
+        logger.debug("User audio format: \(event.userInputAudioFormat)")
     }
 
     private func handlePing(_ event: PingEvent) async {
@@ -185,7 +202,9 @@ extension DataChannelReceiver: RoomDelegate {
 
         do {
             let data = try EventSerializer.serializeOutgoingEvent(outgoingEvent)
-            try await room.localParticipant.publish(data: data, options: DataPublishOptions(reliable: true))
+            try await room.localParticipant.publish(
+                data: data, options: DataPublishOptions(reliable: true)
+            )
         } catch {
             logger.error("Failed to send pong response: \(error)")
         }
@@ -197,7 +216,46 @@ extension DataChannelReceiver: RoomDelegate {
     }
 
     private func handleAgentToolResponse(_ event: AgentToolResponseEvent) {
-        logger.info("Received agent tool response: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType), Error: \(event.isError))")
+        logger.info(
+            "Received agent tool response: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType), Error: \(event.isError))"
+        )
         // Agent tool responses are available in the event stream
+    }
+
+    private func handleTentativeUserTranscript(_ event: TentativeUserTranscriptEvent) {
+        logger.debug("Tentative user transcript: \(event.transcript)")
+    }
+
+    private func handleMCPToolCall(_ event: MCPToolCallEvent) {
+        logger.info(
+            "MCP tool call: \(event.toolName) (Service: \(event.serviceId)")
+
+        switch event.state {
+        case .loading:
+            logger.debug("MCP tool \(event.toolName) is loading...")
+        case .awaitingApproval:
+            logger.info(
+                "MCP tool \(event.toolName) awaiting approval (timeout: \(event.approvalTimeoutSecs ?? 0)s)"
+            )
+        case .success:
+            logger.info("MCP tool \(event.toolName) completed successfully")
+        case .failure:
+            logger.error("MCP tool \(event.toolName) failed: \(event.errorMessage ?? "Unknown error")")
+        }
+    }
+
+    private func handleMCPConnectionStatus(_ event: MCPConnectionStatusEvent) {
+        logger.info("MCP connection status update: \(event.integrations.count) integrations")
+        for integration in event.integrations {
+            logger.debug(
+                "Integration \(integration.integrationId): connected=\(integration.isConnected), tools=\(integration.toolCount)"
+            )
+        }
+        // MCP connection status is available in the event stream
+    }
+
+    private func handleASRInitiationMetadata(_: ASRInitiationMetadataEvent) {
+        logger.debug("ASR initiation metadata received")
+        // ASR metadata is available in the event stream
     }
 }

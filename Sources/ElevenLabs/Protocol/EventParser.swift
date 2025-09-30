@@ -17,34 +17,38 @@ enum EventParser {
         switch type {
         case "user_transcript":
             if let event = json["user_transcription_event"] as? [String: Any],
-               let transcript = event["user_transcript"] as? String
+               let transcript = event["user_transcript"] as? String,
+               let eventId = event["event_id"] as? Int
             {
-                return .userTranscript(UserTranscriptEvent(transcript: transcript))
+                return .userTranscript(UserTranscriptEvent(transcript: transcript, eventId: eventId))
             }
 
         case "agent_response":
             if let event = json["agent_response_event"] as? [String: Any],
-               let response = event["agent_response"] as? String
+               let response = event["agent_response"] as? String,
+               let eventId = event["event_id"] as? Int
             {
-                return .agentResponse(AgentResponseEvent(response: response))
+                return .agentResponse(AgentResponseEvent(response: response, eventId: eventId))
             }
 
         case "agent_response_correction":
             if let event = json["agent_response_correction_event"] as? [String: Any],
                let originalResponse = event["original_agent_response"] as? String,
-               let correctedResponse = event["corrected_agent_response"] as? String
+               let correctedResponse = event["corrected_agent_response"] as? String,
+               let eventId = event["event_id"] as? Int
             {
                 return .agentResponseCorrection(AgentResponseCorrectionEvent(
                     originalAgentResponse: originalResponse,
-                    correctedAgentResponse: correctedResponse
+                    correctedAgentResponse: correctedResponse,
+                    eventId: eventId
                 ))
             }
 
         case "audio":
-            if let event = json["audio"] as? [String: Any],
+            if let event = json["audio_event"] as? [String: Any],
+               let audioBase64 = event["audio_base_64"] as? String,
                let eventId = event["event_id"] as? Int
             {
-                let audioBase64 = event["audio_base_64"] as? String
                 return .audio(AudioEvent(audioBase64: audioBase64, eventId: eventId))
             }
 
@@ -72,14 +76,14 @@ enum EventParser {
         case "conversation_initiation_metadata":
             if let event = json["conversation_initiation_metadata_event"] as? [String: Any],
                let conversationId = event["conversation_id"] as? String,
-               let agentFormat = event["agent_output_audio_format"] as? String
+               let agentFormat = event["agent_output_audio_format"] as? String,
+               let userFormat = event["user_input_audio_format"] as? String
             {
-                let userFormat = event["user_input_audio_format"] as? String
                 return .conversationMetadata(
                     ConversationMetadataEvent(
                         conversationId: conversationId,
                         agentOutputAudioFormat: agentFormat,
-                        userInputAudioFormat: userFormat,
+                        userInputAudioFormat: userFormat
                     ))
             }
 
@@ -95,11 +99,9 @@ enum EventParser {
             if let event = json["client_tool_call"] as? [String: Any],
                let toolName = event["tool_name"] as? String,
                let toolCallId = event["tool_call_id"] as? String,
-               let parameters = event["parameters"] as? [String: Any]
+               let parameters = event["parameters"] as? [String: Any],
+               let eventId = event["event_id"] as? Int
             {
-                // expects_response is optional, defaulting to true if not specified
-                let expectsResponse = event["expects_response"] as? Bool ?? true
-
                 // Convert parameters to JSON data for Sendable compliance
                 if let parametersData = try? JSONSerialization.data(withJSONObject: parameters) {
                     return .clientToolCall(
@@ -107,7 +109,7 @@ enum EventParser {
                             toolName: toolName,
                             toolCallId: toolCallId,
                             parametersData: parametersData,
-                            expectsResponse: expectsResponse,
+                            eventId: eventId
                         ))
                 }
             }
@@ -117,16 +119,95 @@ enum EventParser {
                let toolName = event["tool_name"] as? String,
                let toolCallId = event["tool_call_id"] as? String,
                let toolType = event["tool_type"] as? String,
-               let isError = event["is_error"] as? Bool
+               let isError = event["is_error"] as? Bool,
+               let eventId = event["event_id"] as? Int
             {
                 return .agentToolResponse(
                     AgentToolResponseEvent(
                         toolName: toolName,
                         toolCallId: toolCallId,
                         toolType: toolType,
-                        isError: isError
+                        isError: isError,
+                        eventId: eventId
                     ))
             }
+
+        case "tentative_user_transcript":
+            if let event = json["tentative_user_transcription_event"] as? [String: Any],
+               let transcript = event["user_transcript"] as? String,
+               let eventId = event["event_id"] as? Int
+            {
+                return .tentativeUserTranscript(TentativeUserTranscriptEvent(transcript: transcript, eventId: eventId))
+            }
+
+        case "mcp_tool_call":
+            if let event = json["mcp_tool_call"] as? [String: Any],
+               let serviceId = event["service_id"] as? String,
+               let toolCallId = event["tool_call_id"] as? String,
+               let toolName = event["tool_name"] as? String,
+               let parameters = event["parameters"] as? [String: Any],
+               let timestamp = event["timestamp"] as? String,
+               let state = event["state"] as? String
+            {
+                if let parametersData = try? JSONSerialization.data(withJSONObject: parameters),
+                   let stateEnum = MCPToolCallEvent.State(rawValue: state)
+                {
+                    let toolDescription = event["tool_description"] as? String
+                    let approvalTimeoutSecs = event["approval_timeout_secs"] as? Int
+                    let errorMessage = event["error_message"] as? String
+
+                    var resultData: Data? = nil
+                    if let result = event["result"] as? [[String: Any]] {
+                        resultData = try? JSONSerialization.data(withJSONObject: result)
+                    }
+
+                    return .mcpToolCall(MCPToolCallEvent(
+                        serviceId: serviceId,
+                        toolCallId: toolCallId,
+                        toolName: toolName,
+                        toolDescription: toolDescription,
+                        parametersData: parametersData,
+                        timestamp: timestamp,
+                        state: stateEnum,
+                        approvalTimeoutSecs: approvalTimeoutSecs,
+                        resultData: resultData,
+                        errorMessage: errorMessage
+                    ))
+                }
+            }
+
+        case "mcp_connection_status":
+            if let event = json["mcp_connection_status"] as? [String: Any],
+               let integrationsArray = event["integrations"] as? [[String: Any]]
+            {
+                let integrations = integrationsArray.compactMap { intData -> MCPConnectionStatusEvent.Integration? in
+                    guard let integrationId = intData["integration_id"] as? String,
+                          let integrationType = intData["integration_type"] as? String,
+                          let isConnected = intData["is_connected"] as? Bool,
+                          let toolCount = intData["tool_count"] as? Int
+                    else { return nil }
+
+                    return MCPConnectionStatusEvent.Integration(
+                        integrationId: integrationId,
+                        integrationType: integrationType,
+                        isConnected: isConnected,
+                        toolCount: toolCount
+                    )
+                }
+
+                return .mcpConnectionStatus(MCPConnectionStatusEvent(integrations: integrations))
+            }
+
+        case "asr_initiation_metadata":
+            if let event = json["asr_initiation_metadata_event"] as? [String: Any],
+               let metadataData = try? JSONSerialization.data(withJSONObject: event)
+            {
+                return .asrInitiationMetadata(ASRInitiationMetadataEvent(metadataData: metadataData))
+            }
+
+        case "error":
+            // Skip for now as requested
+            break
 
         default:
             throw EventParseError.unknownEventType(type)

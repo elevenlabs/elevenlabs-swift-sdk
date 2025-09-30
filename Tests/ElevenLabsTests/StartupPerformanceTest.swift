@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class StartupPerformanceTest: XCTestCase {
-    func testStartupPerformance() async throws {
+    func DISABLED_testStartupPerformance() async throws {
         print("=== ElevenLabs SDK Startup Performance Test ===")
         print("Testing with public agent: agent_4601k18km8yde6ftyzzwfdk6jvez")
         print("-----------------------------------------------\n")

@@ -76,7 +76,7 @@ final class ConversationIntegrationTests: XCTestCase {
         let conversation = Conversation(dependencies: mockDependencies)
 
         // Test initial mute state
-        XCTAssertFalse(conversation.isMuted)
+        XCTAssertTrue(conversation.isMuted)
 
         // Test mute operations when not connected
         let conv1 = conversation

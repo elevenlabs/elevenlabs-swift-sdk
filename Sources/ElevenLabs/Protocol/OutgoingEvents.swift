@@ -61,29 +61,31 @@ public struct FeedbackEvent: Sendable {
 /// Client tool execution result
 public struct ClientToolResultEvent: Sendable {
     public let toolCallId: String
-    public let resultData: Data // Store as JSON data to be Sendable
+    public let result: String
     public let isError: Bool
 
     public init(toolCallId: String, result: Any, isError: Bool = false) throws {
         self.toolCallId = toolCallId
-        // Handle different result types appropriately for JSON serialization
-        if JSONSerialization.isValidJSONObject(result) {
-            resultData = try JSONSerialization.data(withJSONObject: result)
-        } else {
-            // For strings, numbers, bools, wrap in an array to make valid JSON
-            resultData = try JSONSerialization.data(withJSONObject: [result])
-        }
         self.isError = isError
+
+        if let stringResult = result as? String {
+            self.result = stringResult
+        } else if JSONSerialization.isValidJSONObject(result) {
+            let jsonData = try JSONSerialization.data(withJSONObject: result)
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                throw NSError(domain: "ClientToolResultEvent", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"])
+            }
+            self.result = jsonString
+        } else {
+            self.result = String(describing: result)
+        }
     }
 
-    /// Get result as Any (not Sendable, use carefully)
-    public func getResult() throws -> Any {
-        let jsonObject = try JSONSerialization.jsonObject(with: resultData)
-        // If we wrapped a single value in an array, unwrap it
-        if let array = jsonObject as? [Any], array.count == 1 {
-            return array[0]
-        }
-        return jsonObject
+    public init(toolCallId: String, result: String, isError: Bool = false) {
+        self.toolCallId = toolCallId
+        self.result = result
+        self.isError = isError
     }
 }
 
@@ -98,9 +100,9 @@ public struct ContextualUpdateEvent: Sendable {
 
 /// User text message
 public struct UserMessageEvent: Sendable {
-    public let text: String
+    public let text: String?
 
-    public init(text: String) {
+    public init(text: String?) {
         self.text = text
     }
 }

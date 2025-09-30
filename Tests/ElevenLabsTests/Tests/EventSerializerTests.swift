@@ -24,7 +24,7 @@ final class EventSerializerTests: XCTestCase {
     }
 
     func testSerializeClientToolResult() throws {
-        let event = try OutgoingEvent.clientToolResult(
+        let event = OutgoingEvent.clientToolResult(
             ClientToolResultEvent(
                 toolCallId: "tool123",
                 result: "Sunny, 25°C",
@@ -38,6 +38,50 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "client_tool_result")
         XCTAssertEqual(json["tool_call_id"] as? String, "tool123")
         XCTAssertEqual(json["result"] as? String, "Sunny, 25°C")
+        XCTAssertEqual(json["is_error"] as? Bool, false)
+    }
+
+    func testSerializeClientToolResultWithJSON() throws {
+        // Test with dictionary result that will be converted to JSON string
+        let dictResult = ["temperature": "25°C", "condition": "Sunny"]
+        let event = try OutgoingEvent.clientToolResult(
+            ClientToolResultEvent(
+                toolCallId: "tool456",
+                result: dictResult,
+                isError: false
+            )
+        )
+
+        let data = try EventSerializer.serializeOutgoingEvent(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["type"] as? String, "client_tool_result")
+        XCTAssertEqual(json["tool_call_id"] as? String, "tool456")
+        let resultString = json["result"] as? String
+        XCTAssertNotNil(resultString)
+        if let resultString = resultString {
+            let parsedResult = try JSONSerialization.jsonObject(with: resultString.data(using: .utf8)!) as? [String: String]
+            XCTAssertEqual(parsedResult?["temperature"], "25°C")
+            XCTAssertEqual(parsedResult?["condition"], "Sunny")
+        }
+        XCTAssertEqual(json["is_error"] as? Bool, false)
+    }
+
+    func testSerializeClientToolResultWithNumber() throws {
+        let event = try OutgoingEvent.clientToolResult(
+            ClientToolResultEvent(
+                toolCallId: "tool789",
+                result: 42,
+                isError: false
+            )
+        )
+
+        let data = try EventSerializer.serializeOutgoingEvent(event)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["type"] as? String, "client_tool_result")
+        XCTAssertEqual(json["tool_call_id"] as? String, "tool789")
+        XCTAssertEqual(json["result"] as? String, "42")
         XCTAssertEqual(json["is_error"] as? Bool, false)
     }
 
