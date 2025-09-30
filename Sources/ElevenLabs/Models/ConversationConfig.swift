@@ -45,7 +45,7 @@ public struct AgentOverrides: Sendable {
     public init(
         prompt: String? = nil,
         firstMessage: String? = nil,
-        language: Language? = nil
+        language: Language? = nil,
     ) {
         self.prompt = prompt
         self.firstMessage = firstMessage
@@ -56,18 +56,34 @@ public struct AgentOverrides: Sendable {
 /// Text-to-speech configuration overrides
 public struct TTSOverrides: Sendable {
     public var voiceId: String?
+    public var stability: Double?
+    public var speed: Double?
+    public var similarityBoost: Double?
 
-    public init(voiceId: String? = nil) {
+    public init(
+        voiceId: String? = nil,
+        stability: Double? = nil,
+        speed: Double? = nil,
+        similarityBoost: Double? = nil
+    ) {
         self.voiceId = voiceId
+        self.stability = stability
+        self.speed = speed
+        self.similarityBoost = similarityBoost
     }
 }
 
 /// Conversation behavior overrides
 public struct ConversationOverrides: Sendable {
     public var textOnly: Bool
+    public var clientEvents: [String]?
 
-    public init(textOnly: Bool = false) {
+    public init(
+        textOnly: Bool = false,
+        clientEvents: [String]? = nil
+    ) {
         self.textOnly = textOnly
+        self.clientEvents = clientEvents
     }
 }
 

@@ -98,9 +98,9 @@ public struct ContextualUpdateEvent: Sendable {
 
 /// User text message
 public struct UserMessageEvent: Sendable {
-    public let text: String
+    public let text: String?
 
-    public init(text: String) {
+    public init(text: String?) {
         self.text = text
     }
 }

@@ -79,6 +79,15 @@ enum EventSerializer {
             if let voiceId = ttsOverrides.voiceId {
                 tts["voice_id"] = voiceId
             }
+            if let stability = ttsOverrides.stability {
+                tts["stability"] = stability
+            }
+            if let speed = ttsOverrides.speed {
+                tts["speed"] = speed
+            }
+            if let similarityBoost = ttsOverrides.similarityBoost {
+                tts["similarity_boost"] = similarityBoost
+            }
             if !tts.isEmpty {
                 configOverride["tts"] = tts
             }
@@ -89,6 +98,9 @@ enum EventSerializer {
             var conversation: [String: Any] = [:]
             if conversationOverrides.textOnly {
                 conversation["text_only"] = true
+            }
+            if let clientEvents = conversationOverrides.clientEvents {
+                conversation["client_events"] = clientEvents
             }
             if !conversation.isEmpty {
                 configOverride["conversation"] = conversation
