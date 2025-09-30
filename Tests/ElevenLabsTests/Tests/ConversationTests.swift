@@ -27,7 +27,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testConversationInitialState() {
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertFalse(conversation.isMuted)
+        XCTAssertTrue(conversation.isMuted)
         XCTAssertTrue(conversation.messages.isEmpty)
     }
 

@@ -121,6 +121,33 @@ class ConversationManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        // Monitor MCP (Model Context Protocol) tool calls
+        conversation.$mcpToolCalls
+            .sink { mcpCalls in
+                for call in mcpCalls {
+                    print("MCP tool: \(call.toolName) - \(call.state)")
+                    // Approve/reject if awaiting approval
+                    if call.state == .awaitingApproval {
+                        try? await conversation.sendMCPToolApproval(
+                            toolCallId: call.toolCallId,
+                            isApproved: true
+                        )
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        // Monitor MCP connection status
+        conversation.$mcpConnectionStatus
+            .sink { status in
+                if let status = status {
+                    for integration in status.integrations {
+                        print("MCP \(integration.integrationType): \(integration.isConnected ? "connected" : "disconnected")")
+                    }
+                }
+            }
+            .store(in: &cancellables)
         
         // Monitor conversation metadata (includes conversation ID)
         conversation.$conversationMetadata
