@@ -16,7 +16,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.13")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.14")
 ]
 ```
 
@@ -148,7 +148,7 @@ class ConversationManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        
+
         // Monitor conversation metadata (includes conversation ID)
         conversation.$conversationMetadata
             .compactMap { $0 }
@@ -363,7 +363,7 @@ conversation.$conversationMetadata
     .sink { metadata in
         // Store or use the conversation ID
         self.currentConversationId = metadata.conversationId
-        
+
         // Log conversation details
         print("Started conversation: \(metadata.conversationId)")
     }
