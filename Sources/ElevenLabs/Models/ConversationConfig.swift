@@ -45,7 +45,7 @@ public struct AgentOverrides: Sendable {
     public init(
         prompt: String? = nil,
         firstMessage: String? = nil,
-        language: Language? = nil,
+        language: Language? = nil
     ) {
         self.prompt = prompt
         self.firstMessage = firstMessage
