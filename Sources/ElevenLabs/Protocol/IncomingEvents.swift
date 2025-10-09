@@ -24,9 +24,9 @@ public enum IncomingEvent: Sendable {
 }
 
 public enum AgentChatResponsePartType: String, Sendable {
-    case start = "start"
-    case delta = "delta"
-    case stop = "stop"
+    case start
+    case delta
+    case stop
 }
 
 /// User's speech transcription
