@@ -205,6 +205,15 @@ enum EventParser {
                 return .asrInitiationMetadata(ASRInitiationMetadataEvent(metadataData: metadataData))
             }
 
+        case "agent_chat_response_part":
+            if let event = json["text_response_part"] as? [String: Any],
+               let text = event["text"] as? String
+            {
+                let partTypeStr = event["type"] as? String ?? "delta"
+                let partType = AgentChatResponsePartType(rawValue: partTypeStr) ?? .delta
+                return .agentChatResponsePart(AgentChatResponsePartEvent(text: text, type: partType))
+            }
+
         case "error":
             // Skip for now as requested
             break

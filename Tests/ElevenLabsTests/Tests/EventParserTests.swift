@@ -175,4 +175,91 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertThrowsError(try EventParser.parseIncomingEvent(from: json))
     }
+
+    func testParseAgentChatResponsePartStart() throws {
+        let json = """
+        {
+            "type": "agent_chat_response_part",
+            "text_response_part": {
+                "text": "",
+                "type": "start"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentChatResponsePart(part) = event else {
+            XCTFail("Expected agentChatResponsePart event")
+            return
+        }
+
+        XCTAssertEqual(part.text, "")
+        XCTAssertEqual(part.type, .start)
+    }
+
+    func testParseAgentChatResponsePartDelta() throws {
+        let json = """
+        {
+            "type": "agent_chat_response_part",
+            "text_response_part": {
+                "text": "Hello",
+                "type": "delta"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentChatResponsePart(part) = event else {
+            XCTFail("Expected agentChatResponsePart event")
+            return
+        }
+
+        XCTAssertEqual(part.text, "Hello")
+        XCTAssertEqual(part.type, .delta)
+    }
+
+    func testParseAgentChatResponsePartStop() throws {
+        let json = """
+        {
+            "type": "agent_chat_response_part",
+            "text_response_part": {
+                "text": "",
+                "type": "stop"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentChatResponsePart(part) = event else {
+            XCTFail("Expected agentChatResponsePart event")
+            return
+        }
+
+        XCTAssertEqual(part.text, "")
+        XCTAssertEqual(part.type, .stop)
+    }
+
+    func testParseAgentChatResponsePartDefaultsToDelta() throws {
+        let json = """
+        {
+            "type": "agent_chat_response_part",
+            "text_response_part": {
+                "text": "Test"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentChatResponsePart(part) = event else {
+            XCTFail("Expected agentChatResponsePart event")
+            return
+        }
+
+        XCTAssertEqual(part.text, "Test")
+        XCTAssertEqual(part.type, .delta)
+    }
 }

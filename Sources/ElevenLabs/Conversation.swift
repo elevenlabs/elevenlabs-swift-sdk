@@ -474,6 +474,13 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Handle agent response corrections
             break
 
+        case let .agentChatResponsePart(e):
+            if e.type == .stop {
+                agentState = .listening
+            } else {
+                agentState = .speaking
+            }
+
         case .audio:
             // Don't change agent state - let voice activity detection handle it
             break
