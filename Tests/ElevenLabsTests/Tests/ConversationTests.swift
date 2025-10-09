@@ -37,7 +37,7 @@ final class ConversationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
-                options: config.toConversationOptions()
+                options: config.toConversationOptions(),
             )
             // In a real test with dependency injection, we'd verify the connection was established
         } catch {

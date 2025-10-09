@@ -141,7 +141,7 @@ public struct MCPToolCallEvent: Sendable {
     }
 
     public func getResult() throws -> [[String: Any]]? {
-        guard let resultData = resultData else { return nil }
+        guard let resultData else { return nil }
         return try JSONSerialization.jsonObject(with: resultData) as? [[String: Any]]
     }
 }

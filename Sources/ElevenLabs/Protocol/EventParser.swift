@@ -40,7 +40,7 @@ enum EventParser {
                 return .agentResponseCorrection(AgentResponseCorrectionEvent(
                     originalAgentResponse: originalResponse,
                     correctedAgentResponse: correctedResponse,
-                    eventId: eventId
+                    eventId: eventId,
                 ))
             }
 
@@ -83,7 +83,7 @@ enum EventParser {
                     ConversationMetadataEvent(
                         conversationId: conversationId,
                         agentOutputAudioFormat: agentFormat,
-                        userInputAudioFormat: userFormat
+                        userInputAudioFormat: userFormat,
                     ))
             }
 
@@ -109,7 +109,7 @@ enum EventParser {
                             toolName: toolName,
                             toolCallId: toolCallId,
                             parametersData: parametersData,
-                            eventId: eventId
+                            eventId: eventId,
                         ))
                 }
             }
@@ -128,7 +128,7 @@ enum EventParser {
                         toolCallId: toolCallId,
                         toolType: toolType,
                         isError: isError,
-                        eventId: eventId
+                        eventId: eventId,
                     ))
             }
 
@@ -171,7 +171,7 @@ enum EventParser {
                         state: stateEnum,
                         approvalTimeoutSecs: approvalTimeoutSecs,
                         resultData: resultData,
-                        errorMessage: errorMessage
+                        errorMessage: errorMessage,
                     ))
                 }
             }
@@ -191,7 +191,7 @@ enum EventParser {
                         integrationId: integrationId,
                         integrationType: integrationType,
                         isConnected: isConnected,
-                        toolCount: toolCount
+                        toolCount: toolCount,
                     )
                 }
 

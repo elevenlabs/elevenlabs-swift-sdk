@@ -16,15 +16,15 @@ final class ConversationConfigTests: XCTestCase {
         config.agentOverrides = AgentOverrides(
             prompt: "Custom prompt",
             firstMessage: "Hello!",
-            language: Language.english
+            language: Language.english,
         )
 
         config.ttsOverrides = TTSOverrides(
-            voiceId: "voice123"
+            voiceId: "voice123",
         )
 
         config.conversationOverrides = ConversationOverrides(
-            textOnly: true
+            textOnly: true,
         )
 
         XCTAssertNotNil(config.agentOverrides)
@@ -36,7 +36,7 @@ final class ConversationConfigTests: XCTestCase {
         let overrides = AgentOverrides(
             prompt: "You are a helpful assistant",
             firstMessage: "How can I help?",
-            language: Language.spanish
+            language: Language.spanish,
         )
 
         XCTAssertEqual(overrides.prompt, "You are a helpful assistant")
@@ -46,7 +46,7 @@ final class ConversationConfigTests: XCTestCase {
 
     func testTTSOverrides() {
         let overrides = TTSOverrides(
-            voiceId: "voice123"
+            voiceId: "voice123",
         )
 
         XCTAssertEqual(overrides.voiceId, "voice123")
@@ -54,7 +54,7 @@ final class ConversationConfigTests: XCTestCase {
 
     func testConversationOverrides() {
         let overrides = ConversationOverrides(
-            textOnly: true
+            textOnly: true,
         )
 
         XCTAssertEqual(overrides.textOnly, true)
