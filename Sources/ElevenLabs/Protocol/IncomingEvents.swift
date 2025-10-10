@@ -8,6 +8,7 @@ public enum IncomingEvent: Sendable {
     case tentativeUserTranscript(TentativeUserTranscriptEvent)
     case agentResponse(AgentResponseEvent)
     case agentResponseCorrection(AgentResponseCorrectionEvent)
+    case agentChatResponsePart(AgentChatResponsePartEvent)
     case audio(AudioEvent)
     case interruption(InterruptionEvent)
     case vadScore(VadScoreEvent)
@@ -20,6 +21,12 @@ public enum IncomingEvent: Sendable {
     case mcpConnectionStatus(MCPConnectionStatusEvent)
     case asrInitiationMetadata(ASRInitiationMetadataEvent)
     case error(ErrorEvent)
+}
+
+public enum AgentChatResponsePartType: String, Sendable {
+    case start
+    case delta
+    case stop
 }
 
 /// User's speech transcription
@@ -45,6 +52,11 @@ public struct AgentResponseCorrectionEvent: Sendable {
     public let originalAgentResponse: String
     public let correctedAgentResponse: String
     public let eventId: Int
+}
+
+public struct AgentChatResponsePartEvent: Sendable {
+    public let text: String
+    public let type: AgentChatResponsePartType
 }
 
 /// Audio data from the agent
@@ -129,7 +141,7 @@ public struct MCPToolCallEvent: Sendable {
     }
 
     public func getResult() throws -> [[String: Any]]? {
-        guard let resultData = resultData else { return nil }
+        guard let resultData else { return nil }
         return try JSONSerialization.jsonObject(with: resultData) as? [[String: Any]]
     }
 }

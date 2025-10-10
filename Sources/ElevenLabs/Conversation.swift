@@ -54,7 +54,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     init(
         dependencies: Task<Dependencies, Never>,
-        options: ConversationOptions = .default
+        options: ConversationOptions = .default,
     ) {
         _depsTask = dependencies
         self.options = options
@@ -73,7 +73,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         with agentId: String,
-        options: ConversationOptions = .default
+        options: ConversationOptions = .default,
     ) async throws {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         try await startConversation(auth: authConfig, options: options)
@@ -85,7 +85,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         auth: ElevenLabsConfiguration,
-        options: ConversationOptions = .default
+        options: ConversationOptions = .default,
     ) async throws {
         guard state == .idle || state.isEnded else {
             throw ConversationError.alreadyActive
@@ -135,7 +135,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 }
 
                 print(
-                    "[ElevenLabs-Timing] Agent ready callback triggered at \(Date().timeIntervalSince(startTime))s from start"
+                    "[ElevenLabs-Timing] Agent ready callback triggered at \(Date().timeIntervalSince(startTime))s from start",
                 )
 
                 // Ensure room connection is fully complete before sending init
@@ -162,13 +162,13 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 let buffer = await self.determineOptimalBuffer()
                 if buffer > 0 {
                     print(
-                        "[ElevenLabs-Timing] Adding \(Int(buffer))ms buffer for agent conversation handler readiness..."
+                        "[ElevenLabs-Timing] Adding \(Int(buffer))ms buffer for agent conversation handler readiness...",
                     )
                     try? await Task.sleep(nanoseconds: UInt64(buffer * 1_000_000))
                     print("[ElevenLabs-Timing] Buffer complete, sending conversation init")
                 } else {
                     print(
-                        "[ElevenLabs-Timing] No buffer needed, sending conversation init immediately"
+                        "[ElevenLabs-Timing] No buffer needed, sending conversation init immediately",
                     )
                 }
 
@@ -184,7 +184,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 self.state = .active(.init(agentId: self.extractAgentId(from: auth)))
                 print("[ElevenLabs] State changed to active")
                 print(
-                    "[ElevenLabs-Timing] Total startup time: \(Date().timeIntervalSince(startTime))s"
+                    "[ElevenLabs-Timing] Total startup time: \(Date().timeIntervalSince(startTime))s",
                 )
 
                 // Call user's onAgentReady callback if provided
@@ -211,10 +211,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
         do {
             try await deps.connectionManager.connect(
                 details: connDetails,
-                enableMic: !options.conversationOverrides.textOnly
+                enableMic: !options.conversationOverrides.textOnly,
             )
             print(
-                "[ElevenLabs-Timing] Room connected in \(Date().timeIntervalSince(connectionStart))s"
+                "[ElevenLabs-Timing] Room connected in \(Date().timeIntervalSince(connectionStart))s",
             )
 
             // Immediately sync the mute state after connection
@@ -235,9 +235,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
     private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
         switch auth.authSource {
         case let .publicAgentId(id):
-            return id
+            id
         case .conversationToken, .customTokenProvider:
-            return "unknown" // We don't have access to the agent ID in these cases
+            "unknown" // We don't have access to the agent ID in these cases
         }
     }
 
@@ -304,7 +304,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     {
         guard state.isActive else { throw ConversationError.notConnected }
         let toolResult = try ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError
+            toolCallId: toolCallId, result: result, isError: isError,
         )
         let event = OutgoingEvent.clientToolResult(toolResult)
         try await publish(event)
@@ -474,6 +474,13 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Handle agent response corrections
             break
 
+        case let .agentChatResponsePart(e):
+            if e.type == .stop {
+                agentState = .listening
+            } else {
+                agentState = .speaking
+            }
+
         case .audio:
             // Don't change agent state - let voice activity detection handle it
             break
@@ -614,7 +621,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed > timeout {
                 print(
-                    "[ElevenLabs-Timing] System readiness timeout after \(String(format: "%.3f", elapsed))s"
+                    "[ElevenLabs-Timing] System readiness timeout after \(String(format: "%.3f", elapsed))s",
                 )
                 return false
             }
@@ -629,7 +636,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Check 1: Room connection state
             guard room.connectionState == .connected else {
                 print(
-                    "[ElevenLabs-Timing] Attempt \(attempt): Room not connected (\(room.connectionState))"
+                    "[ElevenLabs-Timing] Attempt \(attempt): Room not connected (\(room.connectionState))",
                 )
                 try? await Task.sleep(nanoseconds: pollInterval)
                 continue
@@ -662,7 +669,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // This is a reasonable assumption since LiveKit handles data channel setup automatically
 
             print(
-                "[ElevenLabs-Timing] ✅ System ready after \(String(format: "%.3f", elapsed))s (attempt \(attempt))"
+                "[ElevenLabs-Timing] ✅ System ready after \(String(format: "%.3f", elapsed))s (attempt \(attempt))",
             )
             print("[ElevenLabs-Timing]   - Room: connected")
             print("[ElevenLabs-Timing]   - Remote participants: \(room.remoteParticipants.count)")
@@ -673,7 +680,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         let elapsed = Date().timeIntervalSince(startTime)
         print(
-            "[ElevenLabs-Timing] System readiness check exhausted after \(String(format: "%.3f", elapsed))s"
+            "[ElevenLabs-Timing] System readiness check exhausted after \(String(format: "%.3f", elapsed))s",
         )
         return false
     }
@@ -712,8 +719,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .user,
                 content: text,
-                timestamp: Date()
-            )
+                timestamp: Date(),
+            ),
         )
     }
 
@@ -723,8 +730,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .agent,
                 content: text,
-                timestamp: Date()
-            )
+                timestamp: Date(),
+            ),
         )
     }
 
@@ -735,8 +742,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .user,
                 content: text,
-                timestamp: Date()
-            )
+                timestamp: Date(),
+            ),
         )
     }
 
@@ -746,8 +753,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .agent,
                 content: text,
-                timestamp: Date()
-            )
+                timestamp: Date(),
+            ),
         )
     }
 }
@@ -756,7 +763,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
 public extension Conversation {
     nonisolated func room(
-        _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
+        _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
     ) {
         if participant is RemoteParticipant {
             Task { @MainActor in
@@ -781,7 +788,7 @@ public extension Conversation {
 
 extension Conversation: ParticipantDelegate {
     public nonisolated func participant(
-        _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
+        _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
     ) {
         if participant is RemoteParticipant {
             Task { @MainActor in
@@ -808,7 +815,7 @@ private final class ConversationDataDelegate: RoomDelegate, @unchecked Sendable 
     }
 
     func room(
-        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String
+        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
     ) {
         onData(data)
     }
@@ -886,7 +893,7 @@ public struct ConversationOptions: Sendable {
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable () -> Void)? = nil,
     ) {
         self.conversationOverrides = conversationOverrides
         self.agentOverrides = agentOverrides
@@ -911,7 +918,7 @@ extension ConversationOptions {
             dynamicVariables: dynamicVariables,
             userId: userId,
             onAgentReady: onAgentReady,
-            onDisconnect: onDisconnect
+            onDisconnect: onDisconnect,
         )
     }
 }

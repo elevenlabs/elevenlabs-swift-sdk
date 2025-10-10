@@ -88,7 +88,7 @@ public struct TokenService: Sendable {
         public init(
             configuration: Configuration = .default,
             urlSession: URLSession = .shared,
-            debugApiKey: String? = nil
+            debugApiKey: String? = nil,
         ) {
             self.configuration = configuration
             self.urlSession = urlSession
@@ -97,7 +97,7 @@ public struct TokenService: Sendable {
     #else
         public init(
             configuration: Configuration = .default,
-            urlSession: URLSession = .shared
+            urlSession: URLSession = .shared,
         ) {
             self.configuration = configuration
             self.urlSession = urlSession
@@ -106,14 +106,13 @@ public struct TokenService: Sendable {
 
     /// Fetch connection details for ElevenLabs conversation
     public func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> ConnectionDetails {
-        let token: String
-        switch configuration.authSource {
+        let token: String = switch configuration.authSource {
         case let .publicAgentId(agentId):
-            token = try await fetchTokenFromAPI(agentId: agentId)
+            try await fetchTokenFromAPI(agentId: agentId)
         case let .conversationToken(conversationToken):
-            token = conversationToken
+            conversationToken
         case let .customTokenProvider(provider):
-            token = try await provider()
+            try await provider()
         }
 
         let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.wssUrl

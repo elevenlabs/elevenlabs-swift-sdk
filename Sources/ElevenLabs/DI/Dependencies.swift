@@ -22,7 +22,7 @@ final class Dependencies {
         let globalConfig = ElevenLabs.Global.shared.configuration
         let tokenServiceConfig = TokenService.Configuration(
             apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
-            websocketURL: globalConfig.websocketUrl
+            websocketURL: globalConfig.websocketUrl,
         )
         return TokenService(configuration: tokenServiceConfig)
     }()

@@ -15,7 +15,7 @@ let package = Package(
     products: [
         .library(
             name: "ElevenLabs",
-            targets: ["ElevenLabs"]
+            targets: ["ElevenLabs"],
         ),
     ],
     dependencies: [
@@ -33,18 +33,18 @@ let package = Package(
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy"),
-            ]
+            ],
         ),
         .testTarget(
             name: "ElevenLabsTests",
             dependencies: [
                 "ElevenLabs",
                 .product(name: "LiveKit", package: "client-sdk-swift"),
-            ]
+            ],
         ),
     ],
     swiftLanguageModes: [
         .v5,
         .v6,
-    ]
+    ],
 )

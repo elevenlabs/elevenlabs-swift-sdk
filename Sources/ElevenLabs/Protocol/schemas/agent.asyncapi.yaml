@@ -51,6 +51,7 @@ channels:
           - $ref: "#/components/messages/TentativeUserTranscript"
           - $ref: "#/components/messages/AgentResponse"
           - $ref: "#/components/messages/AgentResponseCorrection"
+          - $ref: "#/components/messages/AgentChatResponsePart"
           - $ref: "#/components/messages/Interruption"
           - $ref: "#/components/messages/ConversationMetadata"
           - $ref: "#/components/messages/ClientToolCallMessage"
@@ -195,6 +196,14 @@ components:
       payload:
         $ref: "#/components/schemas/AgentResponseCorrectionPayload"
 
+    AgentChatResponsePart:
+      name: AgentChatResponsePartClientEvent
+      title: Agent Chat Response Part
+      summary: Streaming text chunk from agent (text-only mode)
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/AgentChatResponsePartPayload"
+
     Interruption:
       name: InterruptionEvent
       title: Interruption
@@ -300,6 +309,7 @@ components:
         - audio
         - agent_response
         - agent_response_correction
+        - agent_chat_response_part
         - interruption
         - user_transcript
         - tentative_user_transcript
@@ -643,6 +653,16 @@ components:
         agent_response_correction_event:
           $ref: "#/components/schemas/AgentResponseCorrectionData"
 
+    AgentChatResponsePartPayload:
+      type: object
+      required: [text_response_part, type]
+      properties:
+        type:
+          type: string
+          const: agent_chat_response_part
+        text_response_part:
+          $ref: "#/components/schemas/AgentChatResponsePartData"
+
     InterruptionPayload:
       type: object
       required: [interruption_event, type]
@@ -778,6 +798,24 @@ components:
           type: string
         event_id:
           type: integer
+
+    AgentChatResponsePartType:
+      type: string
+      enum:
+        - start
+        - delta
+        - stop
+      description: Type of streaming response chunk
+
+    AgentChatResponsePartData:
+      type: object
+      required: [text, type]
+      properties:
+        text:
+          type: string
+          description: Text chunk (empty for start/stop events)
+        type:
+          $ref: "#/components/schemas/AgentChatResponsePartType"
 
     InterruptionData:
       type: object
