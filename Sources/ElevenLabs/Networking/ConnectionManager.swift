@@ -273,7 +273,13 @@ private final class DataChannelDelegate: RoomDelegate, @unchecked Sendable {
 
     // MARK: – Delegate
 
-    nonisolated func room(_: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String) {
+    nonisolated func room(
+        _: Room,
+        participant: RemoteParticipant?,
+        didReceiveData data: Data,
+        forTopic _: String,
+        encryptionType _: EncryptionType
+    ) {
         // Only process messages from the agent
         guard participant != nil else {
             print("[DataChannelReceiver] Received data but no participant, ignoring")
@@ -306,3 +312,4 @@ private final class DataChannelDelegate: RoomDelegate, @unchecked Sendable {
 extension ConversationError {
     static let notImplemented = ConversationError.authenticationFailed("Not implemented yet")
 }
+
