@@ -44,7 +44,7 @@ final class ConnectionManager {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
-        graceTimeout: TimeInterval = 0.5 // Reduced to 500ms based on test results showing consistent timeouts
+        graceTimeout: TimeInterval = 0.5, // Reduced to 500ms based on test results showing consistent timeouts
     ) async throws {
         let room = Room()
         self.room = room
@@ -56,7 +56,7 @@ final class ConnectionManager {
                 print("[ConnectionManager-Timing] Ready delegate fired onReady callback")
                 self?.onAgentReady?()
             },
-            onDisconnected: { [weak self] in self?.onAgentDisconnected?() }
+            onDisconnected: { [weak self] in self?.onAgentDisconnected?() },
         )
         readyDelegate = rd
         room.add(delegate: rd)
@@ -197,7 +197,7 @@ private extension ConnectionManager {
         }
 
         private func hasSubscribedAudioTrack(_ participant: RemoteParticipant) -> Bool {
-            return participant.audioTracks.contains { publication in
+            participant.audioTracks.contains { publication in
                 publication.isSubscribed && publication.track != nil
             }
         }

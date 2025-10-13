@@ -72,7 +72,7 @@ public enum ElevenLabs {
         agentId: String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable () -> Void)? = nil,
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         var updatedConfig = config
@@ -113,7 +113,7 @@ public enum ElevenLabs {
         conversationToken: String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable () -> Void)? = nil,
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.conversationToken(conversationToken)
         var updatedConfig = config
@@ -150,7 +150,7 @@ public enum ElevenLabs {
         tokenProvider: @escaping @Sendable () async throws -> String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable () -> Void)? = nil,
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
         var updatedConfig = config
@@ -171,11 +171,11 @@ public enum ElevenLabs {
     @MainActor
     public static func startConversation(
         auth: ElevenLabsConfiguration,
-        config: ConversationConfig = .init()
+        config: ConversationConfig = .init(),
     ) async throws -> Conversation {
         let conversation = createConversation()
         try await conversation.startConversation(
-            auth: auth, options: config.toConversationOptions()
+            auth: auth, options: config.toConversationOptions(),
         )
         return conversation
     }
@@ -228,7 +228,7 @@ public extension ElevenLabs {
             apiEndpoint: URL? = nil,
             websocketUrl: String? = nil,
             logLevel: LogLevel = .warning,
-            debugMode: Bool = false
+            debugMode: Bool = false,
         ) {
             self.apiEndpoint = apiEndpoint
             self.websocketUrl = websocketUrl

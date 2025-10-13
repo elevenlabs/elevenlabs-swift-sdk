@@ -40,7 +40,7 @@ enum EventParser {
                 return .agentResponseCorrection(AgentResponseCorrectionEvent(
                     originalAgentResponse: originalResponse,
                     correctedAgentResponse: correctedResponse,
-                    eventId: eventId
+                    eventId: eventId,
                 ))
             }
 
@@ -83,7 +83,7 @@ enum EventParser {
                     ConversationMetadataEvent(
                         conversationId: conversationId,
                         agentOutputAudioFormat: agentFormat,
-                        userInputAudioFormat: userFormat
+                        userInputAudioFormat: userFormat,
                     ))
             }
 
@@ -109,7 +109,7 @@ enum EventParser {
                             toolName: toolName,
                             toolCallId: toolCallId,
                             parametersData: parametersData,
-                            eventId: eventId
+                            eventId: eventId,
                         ))
                 }
             }
@@ -128,7 +128,7 @@ enum EventParser {
                         toolCallId: toolCallId,
                         toolType: toolType,
                         isError: isError,
-                        eventId: eventId
+                        eventId: eventId,
                     ))
             }
 
@@ -171,7 +171,7 @@ enum EventParser {
                         state: stateEnum,
                         approvalTimeoutSecs: approvalTimeoutSecs,
                         resultData: resultData,
-                        errorMessage: errorMessage
+                        errorMessage: errorMessage,
                     ))
                 }
             }
@@ -191,7 +191,7 @@ enum EventParser {
                         integrationId: integrationId,
                         integrationType: integrationType,
                         isConnected: isConnected,
-                        toolCount: toolCount
+                        toolCount: toolCount,
                     )
                 }
 
@@ -203,6 +203,15 @@ enum EventParser {
                let metadataData = try? JSONSerialization.data(withJSONObject: event)
             {
                 return .asrInitiationMetadata(ASRInitiationMetadataEvent(metadataData: metadataData))
+            }
+
+        case "agent_chat_response_part":
+            if let event = json["text_response_part"] as? [String: Any],
+               let text = event["text"] as? String
+            {
+                let partTypeStr = event["type"] as? String ?? "delta"
+                let partType = AgentChatResponsePartType(rawValue: partTypeStr) ?? .delta
+                return .agentChatResponsePart(AgentChatResponsePartEvent(text: text, type: partType))
             }
 
         case "error":

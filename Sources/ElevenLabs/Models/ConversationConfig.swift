@@ -23,7 +23,7 @@ public struct ConversationConfig: Sendable {
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable () -> Void)? = nil,
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -45,7 +45,7 @@ public struct AgentOverrides: Sendable {
     public init(
         prompt: String? = nil,
         firstMessage: String? = nil,
-        language: Language? = nil
+        language: Language? = nil,
     ) {
         self.prompt = prompt
         self.firstMessage = firstMessage
@@ -64,7 +64,7 @@ public struct TTSOverrides: Sendable {
         voiceId: String? = nil,
         stability: Double? = nil,
         speed: Double? = nil,
-        similarityBoost: Double? = nil
+        similarityBoost: Double? = nil,
     ) {
         self.voiceId = voiceId
         self.stability = stability
@@ -80,7 +80,7 @@ public struct ConversationOverrides: Sendable {
 
     public init(
         textOnly: Bool = false,
-        clientEvents: [String]? = nil
+        clientEvents: [String]? = nil,
     ) {
         self.textOnly = textOnly
         self.clientEvents = clientEvents
@@ -92,7 +92,7 @@ public struct ConversationOverrides: Sendable {
 extension ConversationConfig {
     /// Convert ConversationConfig to ConversationOptions for internal use
     func toConversationOptions() -> ConversationOptions {
-        return ConversationOptions(
+        ConversationOptions(
             conversationOverrides: conversationOverrides ?? ConversationOverrides(),
             agentOverrides: agentOverrides,
             ttsOverrides: ttsOverrides,
@@ -100,7 +100,7 @@ extension ConversationConfig {
             dynamicVariables: dynamicVariables,
             userId: userId,
             onAgentReady: onAgentReady,
-            onDisconnect: onDisconnect
+            onDisconnect: onDisconnect,
         )
     }
 }

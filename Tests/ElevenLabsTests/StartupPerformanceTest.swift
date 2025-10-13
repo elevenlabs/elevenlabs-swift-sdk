@@ -53,7 +53,7 @@ final class StartupPerformanceTest: XCTestCase {
         // Start the conversation using the static API
         print("  [\(String(format: "%.3f", 0.0))s] Starting conversation...")
         conversation = try await ElevenLabs.startConversation(
-            agentId: "agent_4601k18km8yde6ftyzzwfdk6jvez"
+            agentId: "agent_4601k18km8yde6ftyzzwfdk6jvez",
         )
 
         // Since the static API already handles the startup, just monitor the result
@@ -98,7 +98,7 @@ final class StartupPerformanceTest: XCTestCase {
         }
 
         // Wait a bit for first message
-        if hasConnected && !hasReceivedFirstMessage {
+        if hasConnected, !hasReceivedFirstMessage {
             print("  ⏳ Waiting for first message...")
             try await Task.sleep(nanoseconds: 3_000_000_000) // 3s
         }
