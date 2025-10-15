@@ -182,7 +182,29 @@ private extension ConnectionManager {
             onDisconnected()
         }
 
-        func room(_: Room, didUpdateConnectionState _: ConnectionState, from _: ConnectionState) { /* unused */ }
+        func room(
+            _ room: Room,
+            didUpdateConnectionState newState: ConnectionState,
+            from oldState: ConnectionState
+        ) {
+            print("[ReadyDelegate-Timing] Connection changed from \(oldState) → \(newState)")
+
+            switch newState {
+            case .connected:
+                print("[ReadyDelegate-Timing] Room connected or reconnected")
+
+            case .reconnecting:
+                print("[ReadyDelegate-Timing] Room lost connection — attempting to reconnect")
+
+            case .disconnected:
+                print("[ReadyDelegate-Timing] Room disconnected permanently")
+                reset()
+                onDisconnected()
+
+            default:
+                break
+            }
+        }
 
         // MARK: – Private helpers
 
