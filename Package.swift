@@ -19,7 +19,8 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.6.1"),
+        // Pin LiveKit due to frequent breaking API changes in minor releases
+        .package(url: "https://github.com/livekit/client-sdk-swift.git", exact: "2.8.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
         .package(url: "https://github.com/apple/swift-async-algorithms.git", from: "1.0.3"),
     ],

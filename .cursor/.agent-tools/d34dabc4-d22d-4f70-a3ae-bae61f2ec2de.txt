@@ -1,0 +1,922 @@
+[
+  {
+    "name": "client-sdk-swift@2.5.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/client-sdk-swift@2.5.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/client-sdk-swift@2.5.0",
+    "commit": {
+      "sha": "4f9db591da71bfd7c556589e43963e1d777cf337",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/4f9db591da71bfd7c556589e43963e1d777cf337"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy9jbGllbnQtc2RrLXN3aWZ0QDIuNS4w"
+  },
+  {
+    "name": "2.8.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.8.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.8.1",
+    "commit": {
+      "sha": "57448c954a87ed827803914e9fee5e45ef359ba2",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/57448c954a87ed827803914e9fee5e45ef359ba2"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjguMQ=="
+  },
+  {
+    "name": "2.8.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.8.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.8.0",
+    "commit": {
+      "sha": "05e12c1111dfe0c8c03ea8ada537f1589290e90d",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/05e12c1111dfe0c8c03ea8ada537f1589290e90d"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjguMA=="
+  },
+  {
+    "name": "2.7.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.7.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.7.2",
+    "commit": {
+      "sha": "d4c1370922f7f13df1d889ad408bb2298afa638b",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/d4c1370922f7f13df1d889ad408bb2298afa638b"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjcuMg=="
+  },
+  {
+    "name": "2.7.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.7.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.7.1",
+    "commit": {
+      "sha": "77b00169920283acd795e46c659ceefc9e4a666e",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/77b00169920283acd795e46c659ceefc9e4a666e"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjcuMQ=="
+  },
+  {
+    "name": "2.7.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.7.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.7.0",
+    "commit": {
+      "sha": "9b0d5a0c69083396a2afd330abb490bb266a5254",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/9b0d5a0c69083396a2afd330abb490bb266a5254"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjcuMA=="
+  },
+  {
+    "name": "2.6.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.6.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.6.1",
+    "commit": {
+      "sha": "d0294781fe01ff47842e152a984533384e753a9d",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/d0294781fe01ff47842e152a984533384e753a9d"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjYuMQ=="
+  },
+  {
+    "name": "2.6.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.6.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.6.0",
+    "commit": {
+      "sha": "d8995b7758cf2174488a4b143b0a2ef08e315719",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/d8995b7758cf2174488a4b143b0a2ef08e315719"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjYuMA=="
+  },
+  {
+    "name": "2.5.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.5.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.5.1",
+    "commit": {
+      "sha": "9a1eaf94754b051f4ace6fd0c7b0a5aaf3f54218",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/9a1eaf94754b051f4ace6fd0c7b0a5aaf3f54218"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjUuMQ=="
+  },
+  {
+    "name": "2.5.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.5.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.5.0",
+    "commit": {
+      "sha": "5ae2de21aae6ebd61072e8d640a80d88321d5c78",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/5ae2de21aae6ebd61072e8d640a80d88321d5c78"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjUuMA=="
+  },
+  {
+    "name": "2.4.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.4.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.4.0",
+    "commit": {
+      "sha": "79db42373cc537f72d4ff098d49ddeadc26224dc",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/79db42373cc537f72d4ff098d49ddeadc26224dc"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjQuMA=="
+  },
+  {
+    "name": "2.3.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.3.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.3.1",
+    "commit": {
+      "sha": "4fba03e8934ec538e226c362275dd78692991424",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/4fba03e8934ec538e226c362275dd78692991424"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjMuMQ=="
+  },
+  {
+    "name": "2.3.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.3.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.3.0",
+    "commit": {
+      "sha": "8f911e9c147dbe36e2a533e58cfc49b3de657948",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/8f911e9c147dbe36e2a533e58cfc49b3de657948"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjMuMA=="
+  },
+  {
+    "name": "2.2.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.2.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.2.1",
+    "commit": {
+      "sha": "bd7dba05653a482a0d3e27081aea0c81bf3fb45f",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/bd7dba05653a482a0d3e27081aea0c81bf3fb45f"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjIuMQ=="
+  },
+  {
+    "name": "2.2.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.2.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.2.0",
+    "commit": {
+      "sha": "453daf6889820c3408f48a5e84de58a73565e161",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/453daf6889820c3408f48a5e84de58a73565e161"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjIuMA=="
+  },
+  {
+    "name": "2.1.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.1.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.1.0",
+    "commit": {
+      "sha": "f5a595895565feaabe2ca6eada8abcbfc9442e5d",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/f5a595895565feaabe2ca6eada8abcbfc9442e5d"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjEuMA=="
+  },
+  {
+    "name": "2.0.19",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.19",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.19",
+    "commit": {
+      "sha": "9c5242f0217f59f5f30fd122e7ac509dcf446201",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/9c5242f0217f59f5f30fd122e7ac509dcf446201"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTk="
+  },
+  {
+    "name": "2.0.18",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.18",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.18",
+    "commit": {
+      "sha": "eab7650e050657638d48e87b62ca94b65c088bb3",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/eab7650e050657638d48e87b62ca94b65c088bb3"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTg="
+  },
+  {
+    "name": "2.0.17",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.17",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.17",
+    "commit": {
+      "sha": "2e05b21bd1265dd88bcef6030cbb6e3755653c58",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/2e05b21bd1265dd88bcef6030cbb6e3755653c58"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTc="
+  },
+  {
+    "name": "2.0.16",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.16",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.16",
+    "commit": {
+      "sha": "471a1b3d97d59de80027f44c975cd40bb72e67e0",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/471a1b3d97d59de80027f44c975cd40bb72e67e0"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTY="
+  },
+  {
+    "name": "2.0.15",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.15",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.15",
+    "commit": {
+      "sha": "df0629ae6c7a9279e94545124bcbb3c44b550268",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/df0629ae6c7a9279e94545124bcbb3c44b550268"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTU="
+  },
+  {
+    "name": "2.0.14",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.14",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.14",
+    "commit": {
+      "sha": "0c6b9686235a56ea1961746ac750c524836be5ee",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/0c6b9686235a56ea1961746ac750c524836be5ee"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTQ="
+  },
+  {
+    "name": "2.0.13",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.13",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.13",
+    "commit": {
+      "sha": "478c2813daaf5fb910933b0fde857eae29ba7a35",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/478c2813daaf5fb910933b0fde857eae29ba7a35"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTM="
+  },
+  {
+    "name": "2.0.12",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.12",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.12",
+    "commit": {
+      "sha": "2ef58ab19eb653d631286c35fa1f1ef3bef34c78",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/2ef58ab19eb653d631286c35fa1f1ef3bef34c78"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTI="
+  },
+  {
+    "name": "2.0.11",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.11",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.11",
+    "commit": {
+      "sha": "367d95fc9a16bab88c3ec73e019726f4608b2c18",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/367d95fc9a16bab88c3ec73e019726f4608b2c18"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTE="
+  },
+  {
+    "name": "2.0.10",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.10",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.10",
+    "commit": {
+      "sha": "a765e6a8a7ec56fbab502b4e9fe439bd059ad5d6",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/a765e6a8a7ec56fbab502b4e9fe439bd059ad5d6"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMTA="
+  },
+  {
+    "name": "2.0.9",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.9",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.9",
+    "commit": {
+      "sha": "c7358137775ed6f6ac583d13c79f39f6244005d8",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/c7358137775ed6f6ac583d13c79f39f6244005d8"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuOQ=="
+  },
+  {
+    "name": "2.0.8",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.8",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.8",
+    "commit": {
+      "sha": "482146688a44446a499e3d4093a06144378ed2f4",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/482146688a44446a499e3d4093a06144378ed2f4"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuOA=="
+  },
+  {
+    "name": "2.0.7",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.7",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.7",
+    "commit": {
+      "sha": "5917d0c02261c44b66d12fb08a974db8ef9833ce",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/5917d0c02261c44b66d12fb08a974db8ef9833ce"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuNw=="
+  },
+  {
+    "name": "2.0.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.6",
+    "commit": {
+      "sha": "2f6cdd722b43098b637418272c9aaaf5d3c2ed1e",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/2f6cdd722b43098b637418272c9aaaf5d3c2ed1e"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuNg=="
+  },
+  {
+    "name": "2.0.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.5",
+    "commit": {
+      "sha": "fceb4566aac45b8e0107c43c740a9e8149850d3b",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/fceb4566aac45b8e0107c43c740a9e8149850d3b"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuNQ=="
+  },
+  {
+    "name": "2.0.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.4",
+    "commit": {
+      "sha": "cb7b520c3846e8e61f70898317df330e8ca644c4",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/cb7b520c3846e8e61f70898317df330e8ca644c4"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuNA=="
+  },
+  {
+    "name": "2.0.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.3",
+    "commit": {
+      "sha": "08c9f31791149ca4dce66120775eb19b1f54f9a8",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/08c9f31791149ca4dce66120775eb19b1f54f9a8"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMw=="
+  },
+  {
+    "name": "2.0.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.2",
+    "commit": {
+      "sha": "ed1b89c6bf9a64c3a673f7bb1faefc77a8d57662",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/ed1b89c6bf9a64c3a673f7bb1faefc77a8d57662"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMg=="
+  },
+  {
+    "name": "2.0.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.1",
+    "commit": {
+      "sha": "b708b87a9bc63dc138e6a0b2d173b1f0d9b0b9f9",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/b708b87a9bc63dc138e6a0b2d173b1f0d9b0b9f9"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMQ=="
+  },
+  {
+    "name": "2.0.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/2.0.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/2.0.0",
+    "commit": {
+      "sha": "be45083bc0bae3430c2e9e0bf97ca788985b64dd",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/be45083bc0bae3430c2e9e0bf97ca788985b64dd"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8yLjAuMA=="
+  },
+  {
+    "name": "1.1.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.6",
+    "commit": {
+      "sha": "8cde9e66ce9b470c3a743f5c72784f57c5a6d0c3",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/8cde9e66ce9b470c3a743f5c72784f57c5a6d0c3"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuNg=="
+  },
+  {
+    "name": "1.1.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.5",
+    "commit": {
+      "sha": "154443dd54c12382c5b87094f996330d3c056507",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/154443dd54c12382c5b87094f996330d3c056507"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuNQ=="
+  },
+  {
+    "name": "1.1.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.4",
+    "commit": {
+      "sha": "8b9cefed8d1669ec8fce41376b56dce3036a5f50",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/8b9cefed8d1669ec8fce41376b56dce3036a5f50"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuNA=="
+  },
+  {
+    "name": "1.1.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.3",
+    "commit": {
+      "sha": "ec36cc36f0509256119483b084bc107c8af7c224",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/ec36cc36f0509256119483b084bc107c8af7c224"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuMw=="
+  },
+  {
+    "name": "1.1.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.2",
+    "commit": {
+      "sha": "b2353db06eefa15468c4b2e0f546c5022f8bd266",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/b2353db06eefa15468c4b2e0f546c5022f8bd266"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuMg=="
+  },
+  {
+    "name": "1.1.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.1",
+    "commit": {
+      "sha": "5a3998ee5e90d17e8d3b94f3c3fbaee378130aa2",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/5a3998ee5e90d17e8d3b94f3c3fbaee378130aa2"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuMQ=="
+  },
+  {
+    "name": "1.1.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.1.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.1.0",
+    "commit": {
+      "sha": "d1d79853d69cf7fce2ffcab92cc97619658bc6c3",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/d1d79853d69cf7fce2ffcab92cc97619658bc6c3"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjEuMA=="
+  },
+  {
+    "name": "1.0.14",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.14",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.14",
+    "commit": {
+      "sha": "2f18def0ba3053158cf42bfa130e6eac5b6a58cd",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/2f18def0ba3053158cf42bfa130e6eac5b6a58cd"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMTQ="
+  },
+  {
+    "name": "1.0.13",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.13",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.13",
+    "commit": {
+      "sha": "6c70b18fc0f3819e0f5186de95e7ca8a759f30ee",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/6c70b18fc0f3819e0f5186de95e7ca8a759f30ee"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMTM="
+  },
+  {
+    "name": "1.0.12",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.12",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.12",
+    "commit": {
+      "sha": "7331b813a5ab8a95cfb81fb2b4ed10519428b9ff",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/7331b813a5ab8a95cfb81fb2b4ed10519428b9ff"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMTI="
+  },
+  {
+    "name": "1.0.11",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.11",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.11",
+    "commit": {
+      "sha": "73ed5b82068b8fb71198bed7e1293a9a5732836d",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/73ed5b82068b8fb71198bed7e1293a9a5732836d"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMTE="
+  },
+  {
+    "name": "1.0.10",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.10",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.10",
+    "commit": {
+      "sha": "7ba0e0bfa6eb7d95fbd508ad73c81ce4009f1eba",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/7ba0e0bfa6eb7d95fbd508ad73c81ce4009f1eba"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMTA="
+  },
+  {
+    "name": "1.0.9",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.9",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.9",
+    "commit": {
+      "sha": "3b1cefbc198509e935806050f5f9dde0c5d561c7",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/3b1cefbc198509e935806050f5f9dde0c5d561c7"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuOQ=="
+  },
+  {
+    "name": "1.0.8",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.8",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.8",
+    "commit": {
+      "sha": "606ee3b65a0b0e1fa9286c54ac39c97b458d9142",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/606ee3b65a0b0e1fa9286c54ac39c97b458d9142"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuOA=="
+  },
+  {
+    "name": "1.0.7",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.7",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.7",
+    "commit": {
+      "sha": "1b09d6b9bb015e30e620d93e7a6214005dd261ad",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/1b09d6b9bb015e30e620d93e7a6214005dd261ad"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuNw=="
+  },
+  {
+    "name": "1.0.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.6",
+    "commit": {
+      "sha": "f6ca534eb334e99acb8e82cc99b491717df28d8a",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/f6ca534eb334e99acb8e82cc99b491717df28d8a"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuNg=="
+  },
+  {
+    "name": "1.0.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.5",
+    "commit": {
+      "sha": "5cc3c001779ab147199ce3ea0dce465b846368b4",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/5cc3c001779ab147199ce3ea0dce465b846368b4"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuNQ=="
+  },
+  {
+    "name": "1.0.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.4",
+    "commit": {
+      "sha": "7e7decf3a09de4a169dfc0445a14d9fd2d8db58d",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/7e7decf3a09de4a169dfc0445a14d9fd2d8db58d"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuNA=="
+  },
+  {
+    "name": "1.0.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.3",
+    "commit": {
+      "sha": "c0a27ea1d183b56bfeb76cea4c230594e17b3377",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/c0a27ea1d183b56bfeb76cea4c230594e17b3377"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMw=="
+  },
+  {
+    "name": "1.0.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.2",
+    "commit": {
+      "sha": "d7a68b34af8ab2c5e6312458f75f0795ae9bd862",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/d7a68b34af8ab2c5e6312458f75f0795ae9bd862"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMg=="
+  },
+  {
+    "name": "1.0.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.1",
+    "commit": {
+      "sha": "853c12f090e79d7c8b9625d1363eb77c828dbadd",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/853c12f090e79d7c8b9625d1363eb77c828dbadd"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMQ=="
+  },
+  {
+    "name": "1.0.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/1.0.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/1.0.0",
+    "commit": {
+      "sha": "07b2e3dfeaf4ff89f15cd7c14c1daaf9f0b011af",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/07b2e3dfeaf4ff89f15cd7c14c1daaf9f0b011af"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8xLjAuMA=="
+  },
+  {
+    "name": "0.9.15",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.15",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.15",
+    "commit": {
+      "sha": "df30b1d2c91b666dbbe7e2f14a52b6707702e1a5",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/df30b1d2c91b666dbbe7e2f14a52b6707702e1a5"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMTU="
+  },
+  {
+    "name": "0.9.14",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.14",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.14",
+    "commit": {
+      "sha": "a60425b7c73e8c69bb0945038e5db576770b7337",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/a60425b7c73e8c69bb0945038e5db576770b7337"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMTQ="
+  },
+  {
+    "name": "0.9.13",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.13",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.13",
+    "commit": {
+      "sha": "1e69a412abcaa3ae64bb42353e3343602a58ce41",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/1e69a412abcaa3ae64bb42353e3343602a58ce41"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMTM="
+  },
+  {
+    "name": "0.9.12",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.12",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.12",
+    "commit": {
+      "sha": "9aa6436023a6f8be8351c401f215f414d923eec3",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/9aa6436023a6f8be8351c401f215f414d923eec3"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMTI="
+  },
+  {
+    "name": "0.9.10",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.10",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.10",
+    "commit": {
+      "sha": "24d2e8ed574b9a0612ad3c98c55b1bbabcab91ec",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/24d2e8ed574b9a0612ad3c98c55b1bbabcab91ec"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMTA="
+  },
+  {
+    "name": "0.9.9",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.9",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.9",
+    "commit": {
+      "sha": "dd8dc57bc53487ec4437d8b6bed3117c3495adb5",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/dd8dc57bc53487ec4437d8b6bed3117c3495adb5"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuOQ=="
+  },
+  {
+    "name": "0.9.8",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.8",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.8",
+    "commit": {
+      "sha": "600994caf57ebe0052e339462a3c0786bdf3f981",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/600994caf57ebe0052e339462a3c0786bdf3f981"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuOA=="
+  },
+  {
+    "name": "0.9.7",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.7",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.7",
+    "commit": {
+      "sha": "3bb9469ddc88f7355ff4a56b04a8a7bb27f81140",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/3bb9469ddc88f7355ff4a56b04a8a7bb27f81140"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuNw=="
+  },
+  {
+    "name": "0.9.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.6",
+    "commit": {
+      "sha": "6ed0edade6a4bdacc0b7d378d814360e79548281",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/6ed0edade6a4bdacc0b7d378d814360e79548281"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuNg=="
+  },
+  {
+    "name": "0.9.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.5",
+    "commit": {
+      "sha": "bb07c5ced350874296a2f3126f9f2e1d2b6fdda7",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/bb07c5ced350874296a2f3126f9f2e1d2b6fdda7"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuNQ=="
+  },
+  {
+    "name": "0.9.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.4",
+    "commit": {
+      "sha": "e682b33d4f3c3047a50d233127d5fa362d7aff76",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/e682b33d4f3c3047a50d233127d5fa362d7aff76"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuNA=="
+  },
+  {
+    "name": "0.9.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.3",
+    "commit": {
+      "sha": "615e10c4f3104fe5fd572498d9aa2e3194ec7322",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/615e10c4f3104fe5fd572498d9aa2e3194ec7322"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMw=="
+  },
+  {
+    "name": "0.9.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.2",
+    "commit": {
+      "sha": "ff511ead3aaab3a8210bd6a2bf12f5b261690b4f",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/ff511ead3aaab3a8210bd6a2bf12f5b261690b4f"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMg=="
+  },
+  {
+    "name": "0.9.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.1",
+    "commit": {
+      "sha": "0a59e8c84d2a0f25d54d3beb1d48e399557ebddf",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/0a59e8c84d2a0f25d54d3beb1d48e399557ebddf"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMQ=="
+  },
+  {
+    "name": "0.9.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.9.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.9.0",
+    "commit": {
+      "sha": "326f3e5ad53d6c9f39478c599050e78a1c168793",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/326f3e5ad53d6c9f39478c599050e78a1c168793"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjkuMA=="
+  },
+  {
+    "name": "0.8.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.8.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.8.2",
+    "commit": {
+      "sha": "bc5bc3c48278fff5034d184081d715dceaa7a05c",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/bc5bc3c48278fff5034d184081d715dceaa7a05c"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjguMg=="
+  },
+  {
+    "name": "0.8.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.8.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.8.1",
+    "commit": {
+      "sha": "51d961175347c0ba7d6bf11f92fd0e1351325367",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/51d961175347c0ba7d6bf11f92fd0e1351325367"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjguMQ=="
+  },
+  {
+    "name": "0.8.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.8.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.8.0",
+    "commit": {
+      "sha": "fb144acf514dd312fa2eb76b7903556d91ffd867",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/fb144acf514dd312fa2eb76b7903556d91ffd867"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjguMA=="
+  },
+  {
+    "name": "0.7.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.6",
+    "commit": {
+      "sha": "eaa1391122de81f1c2d410490079469f5669a0d8",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/eaa1391122de81f1c2d410490079469f5669a0d8"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuNg=="
+  },
+  {
+    "name": "0.7.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.5",
+    "commit": {
+      "sha": "78dc9eb0cb21a1b3fdcc1bc72e6530de4b3d8e2e",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/78dc9eb0cb21a1b3fdcc1bc72e6530de4b3d8e2e"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuNQ=="
+  },
+  {
+    "name": "0.7.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.4",
+    "commit": {
+      "sha": "41308e6f18384fb0907523d3f9d94e449ca7f715",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/41308e6f18384fb0907523d3f9d94e449ca7f715"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuNA=="
+  },
+  {
+    "name": "0.7.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.3",
+    "commit": {
+      "sha": "093d4215e45b944272456938a8fb2ebb3b30b0a7",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/093d4215e45b944272456938a8fb2ebb3b30b0a7"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuMw=="
+  },
+  {
+    "name": "0.7.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.2",
+    "commit": {
+      "sha": "fc63501651092c25d3f698672bc8e8c7ce52e353",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/fc63501651092c25d3f698672bc8e8c7ce52e353"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuMg=="
+  },
+  {
+    "name": "0.7.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.1",
+    "commit": {
+      "sha": "c13ee9dfeeddbfe7ee7eed5a5efed3e6c3b6f893",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/c13ee9dfeeddbfe7ee7eed5a5efed3e6c3b6f893"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuMQ=="
+  },
+  {
+    "name": "0.7.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.7.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.7.0",
+    "commit": {
+      "sha": "dba481870bcb05a062c88be94847fd01af2fcaa9",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/dba481870bcb05a062c88be94847fd01af2fcaa9"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjcuMA=="
+  },
+  {
+    "name": "0.6.7",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.7",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.7",
+    "commit": {
+      "sha": "8893a38ea49a5172082e8ea11b360823adcac7a1",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/8893a38ea49a5172082e8ea11b360823adcac7a1"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuNw=="
+  },
+  {
+    "name": "0.6.6",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.6",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.6",
+    "commit": {
+      "sha": "c72bc2836a33ddc72133187d77ec236348028ae6",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/c72bc2836a33ddc72133187d77ec236348028ae6"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuNg=="
+  },
+  {
+    "name": "0.6.5",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.5",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.5",
+    "commit": {
+      "sha": "7888565e63bfd65853edcbd3fd98cb1fbafeae64",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/7888565e63bfd65853edcbd3fd98cb1fbafeae64"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuNQ=="
+  },
+  {
+    "name": "0.6.4",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.4",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.4",
+    "commit": {
+      "sha": "86f5f0c0bcef733959b8f36e84b98586a966b9ae",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/86f5f0c0bcef733959b8f36e84b98586a966b9ae"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuNA=="
+  },
+  {
+    "name": "0.6.3",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.3",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.3",
+    "commit": {
+      "sha": "82f670d19fc3640a50f0cfda0434a17993de6c06",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/82f670d19fc3640a50f0cfda0434a17993de6c06"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuMw=="
+  },
+  {
+    "name": "0.6.2",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.2",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.2",
+    "commit": {
+      "sha": "4f866657c4be630b07d746fd6c18cb25f91485b6",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/4f866657c4be630b07d746fd6c18cb25f91485b6"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuMg=="
+  },
+  {
+    "name": "0.6.1",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.1",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.1",
+    "commit": {
+      "sha": "2b49a5715fa37e9ac6d4d4d54067901b60fc82aa",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/2b49a5715fa37e9ac6d4d4d54067901b60fc82aa"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuMQ=="
+  },
+  {
+    "name": "0.6.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.6.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.6.0",
+    "commit": {
+      "sha": "dd994f4d29a834512a3f8f4ce12fa264ab8dcfba",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/dd994f4d29a834512a3f8f4ce12fa264ab8dcfba"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjYuMA=="
+  },
+  {
+    "name": "0.5.0",
+    "zipball_url": "https://api.github.com/repos/livekit/client-sdk-swift/zipball/refs/tags/0.5.0",
+    "tarball_url": "https://api.github.com/repos/livekit/client-sdk-swift/tarball/refs/tags/0.5.0",
+    "commit": {
+      "sha": "427884f064142d4d145836c48c1b60c9b4c622b7",
+      "url": "https://api.github.com/repos/livekit/client-sdk-swift/commits/427884f064142d4d145836c48c1b60c9b4c622b7"
+    },
+    "node_id": "MDM6UmVmMzExNDUzMTAyOnJlZnMvdGFncy8wLjUuMA=="
+  }
+]
