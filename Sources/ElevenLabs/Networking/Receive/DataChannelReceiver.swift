@@ -66,7 +66,7 @@ actor DataChannelReceiver: MessageReceiver {
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(
-        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType,
     ) {
         // Only process messages from the agent
         guard participant != nil else {
