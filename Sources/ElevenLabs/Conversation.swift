@@ -815,7 +815,7 @@ private final class ConversationDataDelegate: RoomDelegate, @unchecked Sendable 
     }
 
     func room(
-        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
+        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType,
     ) {
         onData(data)
     }
