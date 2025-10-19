@@ -66,7 +66,7 @@ actor DataChannelReceiver: MessageReceiver {
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(
-        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType,
     ) {
         // Only process messages from the agent
         guard participant != nil else {
@@ -131,6 +131,10 @@ extension DataChannelReceiver: RoomDelegate {
 
             case let .asrInitiationMetadata(asrMetadataEvent):
                 handleASRInitiationMetadata(asrMetadataEvent)
+
+            case .agentChatResponsePart:
+                // Handle agent chat response part (partial response during streaming)
+                logger.debug("Received agent chat response part")
 
             case .error:
                 // Error handling - placeholder for now
