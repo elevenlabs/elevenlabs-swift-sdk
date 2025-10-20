@@ -92,6 +92,9 @@ extension DataChannelReceiver: RoomDelegate {
             case let .agentResponseCorrection(correctionEvent):
                 handleAgentResponseCorrection(correctionEvent)
 
+            case let .agentChatResponsePart(chatResponsePartEvent):
+                handleAgentChatResponsePart(chatResponsePartEvent)
+
             case let .userTranscript(transcriptEvent):
                 handleUserTranscript(transcriptEvent)
 
@@ -257,5 +260,9 @@ extension DataChannelReceiver: RoomDelegate {
     private func handleASRInitiationMetadata(_: ASRInitiationMetadataEvent) {
         logger.debug("ASR initiation metadata received")
         // ASR metadata is available in the event stream
+    }
+
+    private func handleAgentChatResponsePart(_ event: AgentChatResponsePartEvent) {
+        logger.debug("Agent chat response part (\(event.type.rawValue)): \(event.text)")
     }
 }
