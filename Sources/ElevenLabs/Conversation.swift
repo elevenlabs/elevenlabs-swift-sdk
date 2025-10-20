@@ -37,6 +37,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
     @Published public private(set) var selectedAudioDeviceID: String = AudioManager.shared
         .inputDevice.deviceId
 
+    /// Track the current streaming message for chat response parts
+    private var currentStreamingMessage: Message?
+
     // Audio tracks for advanced use cases
     public var inputTrack: LocalAudioTrack? {
         guard let deps, let room = deps.connectionManager.room else { return nil }
@@ -361,6 +364,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         mcpToolCalls.removeAll()
         mcpConnectionStatus = nil
         conversationMetadata = nil
+        currentStreamingMessage = nil
 
         // Reset agent state
         agentState = .listening
@@ -475,11 +479,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             break
 
         case let .agentChatResponsePart(e):
-            if e.type == .stop {
-                agentState = .listening
-            } else {
-                agentState = .speaking
-            }
+            handleAgentChatResponsePart(e)
 
         case .audio:
             // Don't change agent state - let voice activity detection handle it
@@ -756,6 +756,53 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 timestamp: Date(),
             ),
         )
+    }
+
+    private func handleAgentChatResponsePart(_ event: AgentChatResponsePartEvent) {
+        switch event.type {
+        case .start:
+            let newMessage = Message(
+                id: UUID().uuidString,
+                role: .agent,
+                content: event.text,
+                timestamp: Date(),
+            )
+            currentStreamingMessage = newMessage
+            messages.append(newMessage)
+
+        case .delta:
+            guard let streamingMessage = currentStreamingMessage else {
+                handleAgentChatResponsePart(AgentChatResponsePartEvent(text: event.text, type: .start))
+                return
+            }
+
+            messages.removeAll { $0.id == streamingMessage.id }
+            let updatedContent = streamingMessage.content + event.text
+            let updatedMessage = Message(
+                id: streamingMessage.id,
+                role: .agent,
+                content: updatedContent,
+                timestamp: streamingMessage.timestamp,
+            )
+            currentStreamingMessage = updatedMessage
+            messages.append(updatedMessage)
+
+        case .stop:
+            if let streamingMessage = currentStreamingMessage {
+                if !event.text.isEmpty {
+                    messages.removeAll { $0.id == streamingMessage.id }
+                    let finalContent = streamingMessage.content + event.text
+                    let finalMessage = Message(
+                        id: streamingMessage.id,
+                        role: .agent,
+                        content: finalContent,
+                        timestamp: streamingMessage.timestamp,
+                    )
+                    messages.append(finalMessage)
+                }
+            }
+            currentStreamingMessage = nil
+        }
     }
 }
 
