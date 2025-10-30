@@ -507,10 +507,15 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // VAD scores are available in the event stream
             break
 
-        case .agentToolResponse:
+        case let .agentToolResponse(toolResponse):
             // Agent tool response is available in the event stream
             // This can be used to track tool executions by the agent
-            break
+
+            if toolResponse.toolName == "end_call" {
+                Task {
+                    await endConversation()
+                }
+            }
 
         case .tentativeUserTranscript:
             // Tentative user transcript (in-progress transcription)
