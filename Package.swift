@@ -1,5 +1,5 @@
-// swift-tools-version:6.0
-// (Xcode16.0+)
+// swift-tools-version:6.2
+// (Xcode16.4+)
 
 import PackageDescription
 
@@ -21,7 +21,6 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/livekit/client-sdk-swift.git", exact: "2.6.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
-        .package(url: "https://github.com/apple/swift-async-algorithms.git", from: "1.0.3"),
     ],
     targets: [
         .target(
@@ -29,7 +28,6 @@ let package = Package(
             dependencies: [
                 .product(name: "LiveKit", package: "client-sdk-swift"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy"),
