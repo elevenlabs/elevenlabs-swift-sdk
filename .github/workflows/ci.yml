@@ -1,85 +1,84 @@
 name: build
 
 on:
-    push:
-        branches:
-            - main
-    pull_request:
-        branches:
-            - main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
-    contents: read
-    pull-requests: write
-    issues: write
+  contents: read
+  pull-requests: write
+  issues: write
 
 concurrency:
-    group: build-${{ github.head_ref || github.run_id }}
-    cancel-in-progress: true
+  group: build-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-    build:
-        runs-on: macos-15
-        timeout-minutes: 30
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-            - name: Set up Xcode 16.4
-              run: sudo xcode-select -s /Applications/Xcode_16.4.0.app
+      - name: Set up Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.0.app
 
-            - name: Cache SwiftPM dependencies
-              uses: actions/cache@v4
-              with:
-                  path: .build
-                  key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
-                  restore-keys: |
-                      ${{ runner.os }}-spm-
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
-            - name: Resolve dependencies
-              run: swift package resolve
+      - name: Resolve dependencies
+        run: swift package resolve
 
-            - name: Build (debug)
-              run: swift build
+      - name: Build (debug)
+        run: swift build
 
-            - name: Test (debug)
-              run: swift test
+      - name: Test (debug)
+        run: swift test
 
-            - name: Build (release)
-              run: swift build --configuration release
+      - name: Build (release)
+        run: swift build --configuration release
 
-            - name: Test (release)
-              run: swift test --configuration release
+      - name: Test (release)
+        run: swift test --configuration release
 
-    swift6-strict:
-        runs-on: macos-15
-        timeout-minutes: 30
-        needs: build
-        continue-on-error: true
-        env:
-            SWIFT_STRICT_FLAGS: "-Xswiftc -swift-version -Xswiftc 6"
+  swift6-strict:
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: build
+    env:
+      SWIFT_STRICT_FLAGS: "-Xswiftc -swift-version -Xswiftc 6"
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-            - name: Set up Xcode 16.4
-              run: sudo xcode-select -s /Applications/Xcode_16.4.0.app
+      - name: Set up Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.0.app
 
-            - name: Cache SwiftPM dependencies (Swift 6 strict)
-              uses: actions/cache@v4
-              with:
-                  path: .build
-                  key: ${{ runner.os }}-spm-strict-${{ hashFiles('Package.resolved') }}
-                  restore-keys: |
-                      ${{ runner.os }}-spm-
+      - name: Cache SwiftPM dependencies (Swift 6 strict)
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-strict-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
-            - name: Resolve dependencies
-              run: swift package resolve
+      - name: Resolve dependencies
+        run: swift package resolve
 
-            - name: Build (Swift 6 strict)
-              run: swift build $SWIFT_STRICT_FLAGS
+      - name: Build (Swift 6 strict)
+        run: swift build $SWIFT_STRICT_FLAGS
 
-            - name: Test (Swift 6 strict)
-              run: swift test $SWIFT_STRICT_FLAGS
+      - name: Test (Swift 6 strict)
+        run: swift test $SWIFT_STRICT_FLAGS
