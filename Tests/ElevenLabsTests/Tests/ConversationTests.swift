@@ -7,21 +7,26 @@ final class ConversationTests: XCTestCase {
     private var conversation: Conversation!
     private var mockConnectionManager: MockConnectionManager!
     private var mockTokenService: MockTokenService!
+    private var dependencyProvider: TestDependencyProvider!
+    private var capturedErrors: [ConversationError] = []
 
     override func setUp() async throws {
         mockConnectionManager = MockConnectionManager()
+        mockConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
         mockTokenService = MockTokenService()
-
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        conversation = Conversation(dependencies: mockDependencies)
+        dependencyProvider = TestDependencyProvider(
+            tokenService: mockTokenService,
+            connectionManager: mockConnectionManager,
+        )
+        conversation = Conversation(dependencyProvider: dependencyProvider)
     }
 
     override func tearDown() async throws {
         conversation = nil
         mockConnectionManager = nil
         mockTokenService = nil
+        dependencyProvider = nil
+        capturedErrors = []
     }
 
     @MainActor
@@ -31,19 +36,42 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.messages.isEmpty)
     }
 
-    func testStartConversationWithAgentId() async throws {
-        let config = ConversationConfig()
+    func testStartConversationSuccessUpdatesStartupState() async throws {
+        let stateExpectation = expectation(description: "startup becomes active")
 
-        do {
-            try await conversation.startConversation(
+        let options = makeOptions(
+            onStartupStateChange: { state in
+                if case .active = state {
+                    stateExpectation.fulfill()
+                }
+            },
+        )
+
+        let startTask = Task {
+            try await self.conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
-                options: config.toConversationOptions(),
+                options: options,
             )
-            // In a real test with dependency injection, we'd verify the connection was established
-        } catch {
-            // Expected to fail without proper mocking infrastructure
-            XCTAssertTrue(error is ConversationError)
         }
+
+        await Task.yield()
+        mockConnectionManager.succeedAgentReady()
+
+        await fulfillment(of: [stateExpectation], timeout: 1.0)
+        try await startTask.value
+
+        XCTAssertEqual(mockConnectionManager.connectCallCount, 1)
+        XCTAssertFalse(mockConnectionManager.publishedPayloads.isEmpty)
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        guard case let .active(callInfo, metrics) = conversation.startupState else {
+            return XCTFail("Expected active startup state")
+        }
+        XCTAssertEqual(callInfo.agentId, "test-agent-id")
+        XCTAssertEqual(metrics.conversationInitAttempts, 1)
+        XCTAssertFalse(metrics.agentReadyTimedOut)
+        XCTAssertFalse(metrics.agentReadyViaGraceTimeout)
+        XCTAssertEqual(conversation.startupMetrics?.total, metrics.total)
+        XCTAssertTrue(capturedErrors.isEmpty)
     }
 
     @MainActor
@@ -119,6 +147,208 @@ final class ConversationTests: XCTestCase {
         }
     }
 
+    func testStartConversationTokenFailure() async {
+        mockTokenService.scenario = .authenticationFailed("Mock authentication failed")
+
+        let options = makeOptions()
+
+        await XCTAssertThrowsErrorAsync(
+            try conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                options: options,
+            ),
+        ) { error in
+            XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
+        }
+
+        guard case let .failed(.token(conversationError), metrics) = conversation.startupState else {
+            return XCTFail("Expected startup failure due to token")
+        }
+
+        XCTAssertEqual(conversationError, .authenticationFailed("Mock authentication failed"))
+        XCTAssertEqual(conversation.state, .idle)
+        XCTAssertEqual(conversation.startupMetrics?.tokenFetch, metrics.tokenFetch)
+        XCTAssertEqual(capturedErrors, [.authenticationFailed("Mock authentication failed")])
+    }
+
+    func testStartConversationConnectionFailure() async {
+        mockConnectionManager.shouldFailConnection = true
+
+        let options = makeOptions()
+
+        await XCTAssertThrowsErrorAsync(
+            try conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                options: options,
+            ),
+        ) { error in
+            XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
+        }
+
+        guard case let .failed(.room(conversationError), metrics) = conversation.startupState else {
+            return XCTFail("Expected startup failure due to room connect")
+        }
+
+        XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
+        XCTAssertEqual(conversation.state, .idle)
+        XCTAssertEqual(conversation.startupMetrics?.roomConnect, metrics.roomConnect)
+        XCTAssertEqual(capturedErrors, [.connectionFailed("Mock connection failed")])
+    }
+
+    func testStartConversationAgentTimeoutFailure() async {
+        let config = ConversationStartupConfiguration(
+            agentReadyTimeout: 0.05,
+            initRetryDelays: [0],
+            failIfAgentNotReady: true,
+        )
+
+        let options = makeOptions(startupConfiguration: config)
+
+        let startTask = Task {
+            try await self.conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                options: options,
+            )
+        }
+
+        await Task.yield()
+        mockConnectionManager.timeoutAgentReady()
+
+        await XCTAssertThrowsErrorAsync(try startTask.value) { error in
+            XCTAssertEqual(error as? ConversationError, .agentTimeout)
+        }
+
+        guard case let .failed(.agentTimeout, metrics) = conversation.startupState else {
+            return XCTFail("Expected agent timeout failure state")
+        }
+        XCTAssertTrue(metrics.agentReadyTimedOut)
+        XCTAssertEqual(conversation.state, .idle)
+        XCTAssertEqual(capturedErrors, [.agentTimeout])
+    }
+
+    func testStartConversationAgentTimeoutAllowedToProceed() async throws {
+        let options = makeOptions()
+
+        let startTask = Task {
+            try await self.conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                options: options,
+            )
+        }
+
+        await Task.yield()
+        mockConnectionManager.timeoutAgentReady(elapsed: 0.2)
+
+        await Task.yield()
+        mockConnectionManager.succeedAgentReady(elapsed: 0.25, viaGraceTimeout: true)
+
+        try await startTask.value
+
+        guard case let .active(_, metrics) = conversation.startupState else {
+            return XCTFail("Expected active startup state")
+        }
+
+        XCTAssertTrue(metrics.agentReadyTimedOut)
+        XCTAssertTrue(metrics.agentReadyViaGraceTimeout)
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent")))
+        XCTAssertTrue(capturedErrors.isEmpty)
+    }
+
+    func testStartConversationConversationInitFailure() async {
+        mockConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
+
+        let options = makeOptions()
+
+        await XCTAssertThrowsErrorAsync(
+            try conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                options: options,
+            ),
+        ) { error in
+            XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
+        }
+
+        guard case let .failed(.conversationInit(conversationError), _) = conversation.startupState else {
+            return XCTFail("Expected conversation init failure state")
+        }
+
+        XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
+        XCTAssertEqual(capturedErrors, [.connectionFailed("Publish failed")])
+    }
+
+    func testAgentResponseCallbackTogglesFeedbackAvailability() async throws {
+        var receivedResponses: [(String, Int)] = []
+        var feedbackStates: [Bool] = []
+
+        let options = makeOptions { opts in
+            opts.onAgentResponse = { text, eventId in
+                receivedResponses.append((text, eventId))
+            }
+            opts.onCanSendFeedbackChange = { canSend in
+                feedbackStates.append(canSend)
+            }
+        }
+
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+
+        await conversation._testing_handleIncomingEvent(
+            .agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)),
+        )
+
+        XCTAssertEqual(receivedResponses, [("Hello", 42)])
+        XCTAssertEqual(feedbackStates.last, true)
+
+        conversation._testing_setState(.active(.init(agentId: "test")))
+        try await conversation.sendFeedback(.like, eventId: 42)
+        XCTAssertEqual(feedbackStates.last, false)
+    }
+
+    func testVadScoreCallbackReceivesScores() async {
+        var vadScores: [Double] = []
+        let options = makeOptions { opts in
+            opts.onVadScore = { score in
+                vadScores.append(score)
+            }
+        }
+
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        await conversation._testing_handleIncomingEvent(.vadScore(VadScoreEvent(vadScore: 0.87)))
+
+        XCTAssertEqual(vadScores, [0.87])
+    }
+
+    func testAgentToolResponseCallbackReceivesEvent() async {
+        var capturedToolNames: [String] = []
+        let options = makeOptions { opts in
+            opts.onAgentToolResponse = { event in
+                capturedToolNames.append(event.toolName)
+            }
+        }
+
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        let toolEvent = AgentToolResponseEvent(toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 10)
+
+        await conversation._testing_handleIncomingEvent(.agentToolResponse(toolEvent))
+
+        XCTAssertEqual(capturedToolNames, ["end_call"])
+    }
+
+    func testInterruptionCallbackDisablesFeedback() async {
+        var interruptionIds: [Int] = []
+        var feedbackStates: [Bool] = []
+
+        let options = makeOptions { opts in
+            opts.onInterruption = { interruptionIds.append($0) }
+            opts.onCanSendFeedbackChange = { feedbackStates.append($0) }
+        }
+
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        await conversation._testing_handleIncomingEvent(.interruption(InterruptionEvent(eventId: 7)))
+
+        XCTAssertEqual(interruptionIds, [7])
+        XCTAssertEqual(feedbackStates.last, false)
+    }
+
     @MainActor
     func testSendToolResultWhenNotConnected() async {
         do {
@@ -163,5 +393,39 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(FeedbackEvent.Score.like.rawValue, "like")
         XCTAssertEqual(FeedbackEvent.Score.dislike.rawValue, "dislike")
         XCTAssertNotEqual(FeedbackEvent.Score.like, FeedbackEvent.Score.dislike)
+    }
+}
+
+@MainActor
+private extension XCTestCase {
+    func XCTAssertThrowsErrorAsync(
+        _ expression: @autoclosure () async throws -> some Any,
+        _ message: @autoclosure () -> String = "",
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ errorHandler: (Error) -> Void = { _ in },
+    ) async {
+        do {
+            _ = try await expression()
+            XCTFail(message(), file: file, line: line)
+        } catch {
+            errorHandler(error)
+        }
+    }
+}
+
+private extension ConversationTests {
+    func makeOptions(
+        startupConfiguration: ConversationStartupConfiguration = .default,
+        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        configure: ((inout ConversationOptions) -> Void)? = nil,
+    ) -> ConversationOptions {
+        var options = ConversationOptions(
+            onStartupStateChange: onStartupStateChange,
+            startupConfiguration: startupConfiguration,
+            onError: { [weak self] error in self?.capturedErrors.append(error) },
+        )
+        configure?(&options)
+        return options
     }
 }

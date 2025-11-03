@@ -49,7 +49,24 @@ enum EventParser {
                let audioBase64 = event["audio_base_64"] as? String,
                let eventId = event["event_id"] as? Int
             {
-                return .audio(AudioEvent(audioBase64: audioBase64, eventId: eventId))
+                var alignment: AudioAlignment? = nil
+                if let alignmentDict = event["alignment"] as? [String: Any],
+                   let chars = alignmentDict["chars"] as? [String],
+                   let charStartTimesMs = alignmentDict["char_start_times_ms"] as? [Int],
+                   let charDurationsMs = alignmentDict["char_durations_ms"] as? [Int]
+                {
+                    alignment = AudioAlignment(
+                        chars: chars,
+                        charStartTimesMs: charStartTimesMs,
+                        charDurationsMs: charDurationsMs,
+                    )
+                }
+
+                return .audio(AudioEvent(
+                    audioBase64: audioBase64,
+                    eventId: eventId,
+                    alignment: alignment,
+                ))
             }
 
         case "interruption":

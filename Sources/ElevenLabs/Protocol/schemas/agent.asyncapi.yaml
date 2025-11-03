@@ -751,6 +751,27 @@ components:
 
     # ===== NAMED SCHEMAS FOR EVENT DATA =====
 
+    AudioAlignment:
+      type: object
+      required: [chars, char_start_times_ms, char_durations_ms]
+      description: Character-level timing information for audio synthesis
+      properties:
+        chars:
+          type: array
+          items:
+            type: string
+          description: Array of individual characters that were spoken
+        char_start_times_ms:
+          type: array
+          items:
+            type: integer
+          description: Start time in milliseconds for each character
+        char_durations_ms:
+          type: array
+          items:
+            type: integer
+          description: Duration in milliseconds for each character
+
     AudioEventData:
       type: object
       required: [audio_base_64, event_id]
@@ -760,6 +781,10 @@ components:
           format: base64
         event_id:
           type: integer
+        alignment:
+          $ref: "#/components/schemas/AudioAlignment"
+          nullable: true
+          description: Optional alignment data showing character timing information
 
     UserTranscriptionData:
       type: object

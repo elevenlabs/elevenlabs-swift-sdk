@@ -1,4 +1,36 @@
+import Foundation
 import LiveKit
+
+protocol TokenServicing: Sendable {
+    func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> TokenService.ConnectionDetails
+}
+
+@MainActor
+protocol ConnectionManaging: AnyObject {
+    var onAgentReady: (() -> Void)? { get set }
+    var onAgentDisconnected: (() -> Void)? { get set }
+    var room: Room? { get }
+    var shouldObserveRoomConnection: Bool { get }
+    var errorHandler: (Error?) -> Void { get set }
+
+    func connect(
+        details: TokenService.ConnectionDetails,
+        enableMic: Bool,
+        graceTimeout: TimeInterval,
+    ) async throws
+
+    func disconnect() async
+    func dataEventsStream() -> AsyncStream<Data>
+    func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult
+    func publish(data: Data, options: DataPublishOptions) async throws
+}
+
+@MainActor
+protocol ConversationDependencyProvider: AnyObject {
+    var tokenService: any TokenServicing { get }
+    var connectionManager: any ConnectionManaging { get }
+    var errorHandler: (Error?) -> Void { get }
+}
 
 /// A minimalistic dependency injection container.
 /// It allows sharing common dependencies e.g. `Room` between view models and services.
@@ -7,7 +39,7 @@ import LiveKit
 ///   - [swift-dependencies](https://github.com/pointfreeco/swift-dependencies)
 ///   - [Needle](https://github.com/uber/needle)
 @MainActor
-final class Dependencies {
+final class Dependencies: ConversationDependencyProvider {
     static let shared = Dependencies()
 
     private init() {}
@@ -18,7 +50,7 @@ final class Dependencies {
 
     // MARK: Services
 
-    lazy var tokenService: TokenService = {
+    lazy var tokenService: any TokenServicing = {
         let globalConfig = ElevenLabs.Global.shared.configuration
         let tokenServiceConfig = TokenService.Configuration(
             apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
@@ -27,7 +59,7 @@ final class Dependencies {
         return TokenService(configuration: tokenServiceConfig)
     }()
 
-    lazy var connectionManager = ConnectionManager()
+    lazy var connectionManager: any ConnectionManaging = ConnectionManager()
 
     private lazy var localMessageSender = LocalMessageSender(room: room)
 

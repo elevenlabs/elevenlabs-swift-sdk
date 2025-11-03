@@ -204,3 +204,5 @@ enum TokenError: LocalizedError, Sendable {
         }
     }
 }
+
+extension TokenService: TokenServicing {}

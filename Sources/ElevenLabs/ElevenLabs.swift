@@ -194,6 +194,8 @@ public enum ElevenLabs {
     // Protocol event types are already public from their respective files
     // Re-export AgentState from LiveKit for SDK users
     public typealias AgentState = LiveKit.AgentState
+    public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
+    public typealias MicrophoneMuteMode = LiveKit.MicrophoneMuteMode
 
     // Re-export audio track types for advanced audio handling
     public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
