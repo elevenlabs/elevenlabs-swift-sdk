@@ -47,7 +47,6 @@ let package = Package(
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
-                .define("TESTING"),
             ],
         ),
     ],

@@ -716,7 +716,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     // MARK: - Testing Hooks
 
-    #if DEBUG || TESTING
     @MainActor
     func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
         await handleIncomingEvent(event)
@@ -725,7 +724,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
     func _testing_setState(_ newState: ConversationState) {
         state = newState
     }
-    #endif
 
     private func handleIncomingData(_ data: Data) async {
         guard dependencyProvider != nil else { return }

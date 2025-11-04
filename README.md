@@ -709,39 +709,6 @@ let config = ConversationConfig(
 )
 ```
 
-### Network Configuration
-
-Control how LiveKit establishes peer connections:
-
-```swift
-// Default: automatic ICE candidate gathering
-// - Fastest connection
-// - May prompt for local network permission on iOS
-let autoConfig = LiveKitNetworkConfiguration(strategy: .automatic)
-
-// TURN relay only: no local network permission prompt
-// - Slightly slower
-// - All traffic goes through TURN servers
-// - No peer-to-peer connection
-let relayConfig = LiveKitNetworkConfiguration(strategy: .relayOnly)
-
-// Custom ICE servers
-let customConfig = LiveKitNetworkConfiguration(
-    strategy: .automatic,
-    customIceServers: [
-        IceServer(
-            urls: ["turn:your-turn-server.com"],
-            username: "username",
-            credential: "password"
-        )
-    ]
-)
-
-let config = ConversationConfig(
-    networkConfiguration: relayConfig
-)
-```
-
 ### Startup Configuration
 
 Fine-tune the connection handshake behavior:
