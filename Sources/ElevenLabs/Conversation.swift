@@ -717,14 +717,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
     // MARK: - Testing Hooks
 
     #if DEBUG
-        @MainActor
-        func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
-            await handleIncomingEvent(event)
-        }
+    @MainActor
+    func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
+        await handleIncomingEvent(event)
+    }
 
-        func _testing_setState(_ newState: ConversationState) {
-            state = newState
-        }
+    func _testing_setState(_ newState: ConversationState) {
+        state = newState
+    }
     #endif
 
     private func handleIncomingData(_ data: Data) async {
@@ -1008,8 +1008,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
 // MARK: - RoomDelegate
 
-public extension Conversation {
-    nonisolated func room(
+extension Conversation {
+    public nonisolated func room(
         _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
     ) {
         if participant is RemoteParticipant {
@@ -1026,7 +1026,7 @@ public extension Conversation {
         }
     }
 
-    nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
+    public nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
         participant.add(delegate: self)
     }
 }
