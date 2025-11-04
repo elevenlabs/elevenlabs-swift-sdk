@@ -1,0 +1,18 @@
+# SwiftFormat Configuration
+
+# CRITICAL: Do not remove 'self' in closures
+# Swift 6 strict concurrency requires explicit 'self.' to make capture semantics clear
+--self insert
+
+# Preserve existing formatting for these
+--ifdef no-indent
+--indentcase false
+--extensionacl on-declarations
+
+# Standard formatting
+--indent 4
+--maxwidth 140
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+
