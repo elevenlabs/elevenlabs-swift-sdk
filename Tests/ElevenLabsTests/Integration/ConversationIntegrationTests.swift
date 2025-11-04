@@ -209,6 +209,8 @@ final class ConversationIntegrationTests: XCTestCase {
         // Force garbage collection
         autoreleasepool {}
 
+        XCTAssertNil(weakConversation, "Conversation should be deallocated after scope exit")
+
         // Note: This test might not be reliable without proper test infrastructure
         // In a real integration test, we'd use memory profiling tools
     }

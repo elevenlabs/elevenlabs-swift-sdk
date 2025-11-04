@@ -716,7 +716,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     // MARK: - Testing Hooks
 
-    #if DEBUG
+    #if DEBUG || TESTING
     @MainActor
     func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
         await handleIncomingEvent(event)
