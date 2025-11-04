@@ -274,11 +274,20 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         guard let conversation = self.conversation else { return }
-        await XCTAssertThrowsErrorAsync {
+        
+        let startTask = Task {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
+        }
+        
+        // Wait for agent ready, THEN publish will fail
+        await Task.yield()
+        mockConnectionManager.succeedAgentReady()
+        
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
         }
