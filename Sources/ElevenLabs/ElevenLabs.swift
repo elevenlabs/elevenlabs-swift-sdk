@@ -20,7 +20,7 @@ import LiveKit
 public enum ElevenLabs {
     // MARK: - Version
 
-    public static let version = "2.0.16"
+    public static let version = "2.1.0-alpha.1"
 
     // MARK: - Configuration
 
@@ -192,8 +192,10 @@ public enum ElevenLabs {
     // MARK: - Re-exports
 
     // Protocol event types are already public from their respective files
-    // Re-export AgentState from LiveKit for SDK users
-    public typealias AgentState = LiveKit.AgentState
+    public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
+    public typealias MicrophoneMuteMode = LiveKit.MicrophoneMuteMode
+    public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
+    public typealias IceServer = LiveKit.IceServer
 
     // Re-export audio track types for advanced audio handling
     public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
@@ -216,9 +218,9 @@ public enum ElevenLabs {
 
 // MARK: - ElevenLabs.Configuration
 
-public extension ElevenLabs {
+extension ElevenLabs {
     /// Global SDK configuration.
-    struct Configuration: Sendable {
+    public struct Configuration: Sendable {
         public var apiEndpoint: URL?
         public var websocketUrl: String?
         public var logLevel: LogLevel
@@ -240,16 +242,24 @@ public extension ElevenLabs {
     }
 
     /// Minimal, per-conversation bootstrap options.
-    struct ConversationBootstrapOptions: Sendable {
+    public struct ConversationBootstrapOptions: Sendable {
         public init() {}
     }
 
     /// Simple log levels.
-    enum LogLevel: Int, Sendable {
+    public enum LogLevel: Int, Sendable {
         case error
         case warning
         case info
         case debug
         case trace
+    }
+
+    /// Agent state indicating what the agent is currently doing.
+    public enum AgentState: Sendable, Equatable {
+        /// Agent is listening to the user
+        case listening
+        /// Agent is speaking
+        case speaking
     }
 }

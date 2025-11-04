@@ -15,6 +15,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
     // MARK: - Public State
 
     @Published public private(set) var state: ConversationState = .idle
+    @Published public private(set) var startupState: ConversationStartupState = .idle
+    @Published public private(set) var startupMetrics: ConversationStartupMetrics?
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var agentState: AgentState = .listening
     @Published public private(set) var isMuted: Bool = true // Start as true, will be updated based on actual state
@@ -31,6 +33,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Current MCP connection status for all integrations
     @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
 
+    /// Latest audio alignment payload emitted by the agent.
+    @Published public private(set) var latestAudioAlignment: AudioAlignment?
+
+    /// Latest audio event emitted by the agent.
+    @Published public private(set) var latestAudioEvent: AudioEvent?
+
     // Device lists (optional to expose; keep `internal` if you don't want them public)
     @Published public private(set) var audioDevices: [AudioDevice] = AudioManager.shared
         .inputDevices
@@ -39,15 +47,21 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// Track the current streaming message for chat response parts
     private var currentStreamingMessage: Message?
+    private var lastAgentEventId: Int?
+    private var lastFeedbackSubmittedEventId: Int?
+    private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
+    private var audioSpeechHandlerInstalled = false
 
     // Audio tracks for advanced use cases
     public var inputTrack: LocalAudioTrack? {
-        guard let deps, let room = deps.connectionManager.room else { return nil }
+        guard let connectionManager = resolvedConnectionManager(),
+              let room = connectionManager.room else { return nil }
         return room.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
     }
 
     public var agentAudioTrack: RemoteAudioTrack? {
-        guard let deps, let room = deps.connectionManager.room else { return nil }
+        guard let connectionManager = resolvedConnectionManager(),
+              let room = connectionManager.room else { return nil }
         // Find the first remote participant (agent) with audio track
         return room.remoteParticipants.values.first?.firstAudioPublication?.track
             as? RemoteAudioTrack
@@ -59,7 +73,18 @@ public final class Conversation: ObservableObject, RoomDelegate {
         dependencies: Task<Dependencies, Never>,
         options: ConversationOptions = .default,
     ) {
-        _depsTask = dependencies
+        dependenciesTask = dependencies
+        dependencyProvider = nil
+        self.options = options
+        observeDeviceChanges()
+    }
+
+    init(
+        dependencyProvider: any ConversationDependencyProvider,
+        options: ConversationOptions = .default,
+    ) {
+        self.dependencyProvider = dependencyProvider
+        dependenciesTask = nil
         self.options = options
         observeDeviceChanges()
     }
@@ -95,114 +120,68 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
 
         let startTime = Date()
-        print("[ElevenLabs-Timing] Starting conversation at \(startTime)")
+        var metrics = ConversationStartupMetrics()
 
-        // Resolve deps early to ensure we can clean up properly
-        let deps = await _depsTask.value
-        self.deps = deps
+        // Resolve dependencies early to ensure we can clean up properly
+        let provider = await resolveDependencyProvider()
+        let connectionManager = provider.connectionManager
+        let tokenService = provider.tokenService
 
         // Ensure any existing room is disconnected and cleaned up before creating a new one
-        // This guarantees a fresh Room object for each conversation
-        await deps.connectionManager.disconnect()
-
-        // Clean up any existing state from previous conversations
+        await connectionManager.disconnect()
         cleanupPreviousConversation()
 
         state = .connecting
         self.options = options
+        updateStartupState(.resolvingToken)
+
+        applyAudioPipelineConfiguration()
+        options.onCanSendFeedbackChange?(false)
+
+        connectionManager.errorHandler = provider.errorHandler
 
         // Acquire token / connection details
         let tokenFetchStart = Date()
         print("[ElevenLabs-Timing] Fetching token...")
         let connDetails: TokenService.ConnectionDetails
         do {
-            connDetails = try await deps.tokenService.fetchConnectionDetails(configuration: auth)
+            connDetails = try await tokenService.fetchConnectionDetails(configuration: auth)
+            metrics.tokenFetch = Date().timeIntervalSince(tokenFetchStart)
         } catch let error as TokenError {
-            // Convert TokenError to ConversationError
-            switch error {
+            metrics.tokenFetch = Date().timeIntervalSince(tokenFetchStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            let conversationError: ConversationError = switch error {
             case .authenticationFailed:
-                throw ConversationError.authenticationFailed(error.localizedDescription)
+                .authenticationFailed(error.localizedDescription)
             case let .httpError(statusCode):
-                throw ConversationError.authenticationFailed("HTTP error: \(statusCode)")
+                .authenticationFailed("HTTP error: \(statusCode)")
             case .invalidURL, .invalidResponse, .invalidTokenResponse:
-                throw ConversationError.authenticationFailed(error.localizedDescription)
+                .authenticationFailed(error.localizedDescription)
             }
+            startupMetrics = metrics
+            state = .idle
+            updateStartupState(.failed(.token(conversationError), metrics))
+            options.onError?(conversationError)
+            throw conversationError
+        } catch {
+            metrics.tokenFetch = Date().timeIntervalSince(tokenFetchStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            let conversationError = normalizeConversationError(error) { ConversationError.connectionFailed($0) }
+            startupMetrics = metrics
+            state = .idle
+            updateStartupState(.failed(.token(conversationError), metrics))
+            options.onError?(conversationError)
+            throw conversationError
         }
 
-        print("[ElevenLabs-Timing] Token fetched in \(Date().timeIntervalSince(tokenFetchStart))s")
+        updateStartupState(.connectingRoom)
 
-        deps.connectionManager.onAgentReady = { [weak self, auth, options] in
-            Task { @MainActor in
-                guard let self else {
-                    return
-                }
-
-                print(
-                    "[ElevenLabs-Timing] Agent ready callback triggered at \(Date().timeIntervalSince(startTime))s from start",
-                )
-
-                // Ensure room connection is fully complete before sending init
-                // This prevents race condition where agent is ready but we can't publish data yet
-                if let room = deps.connectionManager.room, room.connectionState == .connected {
-                    // Room is ready, proceed immediately
-                    print("[ElevenLabs-Timing] Room fully connected, proceeding...")
-                } else {
-                    print("[ElevenLabs-Timing] Room not fully connected yet, waiting...")
-                    // Small delay to allow room connection to complete
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                    if let room = deps.connectionManager.room, room.connectionState == .connected {
-                        print("[ElevenLabs-Timing] Room connected after wait")
-                    } else {
-                        print(
-                            "[ElevenLabs-Timing] ⚠️ Room still not connected, proceeding anyway...")
-                    }
-                }
-
-                print("[ElevenLabs-Timing] Sending conversation init...")
-
-                print("[ElevenLabs-Timing] System confirmed ready for conversation init")
-                // Add buffer based on whether agent was already there (fast path) or just joined
-                let buffer = await self.determineOptimalBuffer()
-                if buffer > 0 {
-                    print(
-                        "[ElevenLabs-Timing] Adding \(Int(buffer))ms buffer for agent conversation handler readiness...",
-                    )
-                    try? await Task.sleep(nanoseconds: UInt64(buffer * 1_000_000))
-                    print("[ElevenLabs-Timing] Buffer complete, sending conversation init")
-                } else {
-                    print(
-                        "[ElevenLabs-Timing] No buffer needed, sending conversation init immediately",
-                    )
-                }
-
-                // Cancel any existing init attempt
-                self.conversationInitTask?.cancel()
-                self.conversationInitTask = Task {
-                    await self.sendConversationInitWithRetry(config: options.toConversationConfig())
-                }
-                await self.conversationInitTask?.value
-                print("[ElevenLabs] Conversation init completed")
-
-                // flip to .active once conversation init is sent
-                self.state = .active(.init(agentId: self.extractAgentId(from: auth)))
-                print("[ElevenLabs] State changed to active")
-                print(
-                    "[ElevenLabs-Timing] Total startup time: \(Date().timeIntervalSince(startTime))s",
-                )
-
-                // Call user's onAgentReady callback if provided
-                options.onAgentReady?()
-            }
-        }
-
-        deps.connectionManager.onAgentDisconnected = { [weak self] in
+        connectionManager.onAgentDisconnected = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 if self.state.isActive {
                     self.state = .ended(reason: .remoteDisconnected)
                     self.cleanupPreviousConversation()
-
-                    // Call user's onDisconnect callback if provided
                     self.options.onDisconnect?()
                 }
             }
@@ -212,22 +191,96 @@ public final class Conversation: ObservableObject, RoomDelegate {
         let connectionStart = Date()
         print("[ElevenLabs-Timing] Starting room connection...")
         do {
-            try await deps.connectionManager.connect(
+            try await connectionManager.connect(
                 details: connDetails,
                 enableMic: !options.conversationOverrides.textOnly,
+                networkConfiguration: options.networkConfiguration,
+                graceTimeout: options.startupConfiguration.agentReadyTimeout,
             )
-            print(
-                "[ElevenLabs-Timing] Room connected in \(Date().timeIntervalSince(connectionStart))s",
-            )
+            metrics.roomConnect = Date().timeIntervalSince(connectionStart)
 
-            // Immediately sync the mute state after connection
-            if let room = deps.connectionManager.room {
+            if let room = connectionManager.room {
                 updateFromRoom(room)
             }
         } catch {
-            // Convert connection errors to ConversationError
-            throw ConversationError.connectionFailed(error)
+            metrics.roomConnect = Date().timeIntervalSince(connectionStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            let conversationError = normalizeConversationError(error) { ConversationError.connectionFailed($0) }
+            startupMetrics = metrics
+            state = .idle
+            updateStartupState(.failed(.room(conversationError), metrics))
+            options.onError?(conversationError)
+            if LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
+                options.onError?(ConversationError.localNetworkPermissionRequired)
+            }
+            throw conversationError
         }
+
+        updateStartupState(.waitingForAgent(timeout: options.startupConfiguration.agentReadyTimeout))
+
+        let agentOutcome = await connectionManager.waitForAgentReady(
+            timeout: options.startupConfiguration.agentReadyTimeout,
+        )
+
+        let agentReport: ConversationAgentReadyReport
+        switch agentOutcome {
+        case let .success(detail):
+            metrics.agentReady = detail.elapsed
+            metrics.agentReadyViaGraceTimeout = detail.viaGraceTimeout
+            agentReport = ConversationAgentReadyReport(
+                elapsed: detail.elapsed,
+                viaGraceTimeout: detail.viaGraceTimeout,
+                timedOut: false,
+            )
+        case let .timedOut(elapsed):
+            metrics.agentReady = elapsed
+            metrics.agentReadyTimedOut = true
+            agentReport = ConversationAgentReadyReport(
+                elapsed: elapsed,
+                viaGraceTimeout: false,
+                timedOut: true,
+            )
+            if options.startupConfiguration.failIfAgentNotReady {
+                metrics.total = Date().timeIntervalSince(startTime)
+                startupMetrics = metrics
+                state = .idle
+                updateStartupState(.failed(.agentTimeout, metrics))
+                options.onError?(.agentTimeout)
+                throw ConversationError.agentTimeout
+            }
+        }
+
+        updateStartupState(.agentReady(agentReport))
+
+        let bufferMilliseconds = await determineOptimalBuffer()
+        if bufferMilliseconds > 0 {
+            metrics.agentReadyBuffer = bufferMilliseconds / 1000
+            print(
+                "[ElevenLabs-Timing] Adding \(Int(bufferMilliseconds))ms buffer for agent conversation handler readiness...",
+            )
+            try? await Task.sleep(nanoseconds: UInt64(bufferMilliseconds * 1_000_000))
+        }
+
+        do {
+            try await sendConversationInitWithRetry(
+                config: options.toConversationConfig(),
+                metrics: &metrics,
+            )
+        } catch {
+            metrics.total = Date().timeIntervalSince(startTime)
+            startupMetrics = metrics
+            state = .idle
+            let conversationError = normalizeConversationError(error) { ConversationError.connectionFailed($0) }
+            updateStartupState(.failed(.conversationInit(conversationError), metrics))
+            options.onError?(conversationError)
+            throw conversationError
+        }
+
+        state = .active(.init(agentId: extractAgentId(from: auth)))
+        metrics.total = Date().timeIntervalSince(startTime)
+        startupMetrics = metrics
+        updateStartupState(.active(CallInfo(agentId: extractAgentId(from: auth)), metrics))
+        options.onAgentReady?()
 
         // Wire up streams
         startRoomObservers()
@@ -247,12 +300,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// End and clean up.
     public func endConversation() async {
         guard state.isActive else { return }
-        await deps?.connectionManager.disconnect()
+        guard let connectionManager = resolvedConnectionManager() else { return }
+        await connectionManager.disconnect()
         state = .ended(reason: .userEnded)
         cleanupPreviousConversation()
 
         // Call user's onDisconnect callback if provided
         options.onDisconnect?()
+        options.onCanSendFeedbackChange?(false)
     }
 
     /// Send a text message to the agent.
@@ -272,7 +327,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     public func setMuted(_ muted: Bool) async throws {
         guard state.isActive else { throw ConversationError.notConnected }
-        guard let room = deps?.connectionManager.room else { throw ConversationError.notConnected }
+        guard let room = resolvedConnectionManager()?.room else { throw ConversationError.notConnected }
         do {
             try await room.localParticipant.setMicrophone(enabled: !muted)
             isMuted = muted
@@ -297,8 +352,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// Send feedback (like/dislike) for an event/message id.
     public func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
+        guard state.isActive else {
+            throw ConversationError.notConnected
+        }
+
         let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
         try await publish(event)
+        lastFeedbackSubmittedEventId = eventId
+        options.onCanSendFeedbackChange?(false)
     }
 
     /// Send the result of a client tool call back to the agent.
@@ -323,14 +384,96 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     // MARK: - Private
 
-    private var deps: Dependencies?
-    private let _depsTask: Task<Dependencies, Never>
+    private var dependencyProvider: (any ConversationDependencyProvider)?
+    private let dependenciesTask: Task<Dependencies, Never>?
     private var options: ConversationOptions
 
     private var speakingTimer: Task<Void, Never>?
     private var roomChangesTask: Task<Void, Never>?
     private var protocolEventsTask: Task<Void, Never>?
-    private var conversationInitTask: Task<Void, Never>?
+
+    private func resolvedConnectionManager() -> (any ConnectionManaging)? {
+        dependencyProvider?.connectionManager
+    }
+
+    private func resolveDependencyProvider() async -> any ConversationDependencyProvider {
+        if let provider = dependencyProvider {
+            return provider
+        }
+
+        if let dependenciesTask {
+            let deps = await dependenciesTask.value
+            dependencyProvider = deps
+            deps.connectionManager.errorHandler = deps.errorHandler
+            return deps
+        }
+
+        guard let dependencyProvider else {
+            fatalError("Conversation dependency provider not configured")
+        }
+        return dependencyProvider
+    }
+
+    private func applyAudioPipelineConfiguration() {
+        let audioManager = AudioManager.shared
+
+        let config = options.audioConfiguration
+
+        if let mode = config?.microphoneMuteMode {
+            try? audioManager.set(microphoneMuteMode: mode)
+        }
+
+        if let prepared = config?.recordingAlwaysPrepared {
+            try? audioManager.setRecordingAlwaysPreparedMode(prepared)
+        }
+
+        if let bypass = config?.voiceProcessingBypassed {
+            audioManager.isVoiceProcessingBypassed = bypass
+        }
+
+        if let agc = config?.voiceProcessingAGCEnabled {
+            audioManager.isVoiceProcessingAGCEnabled = agc
+        }
+
+        let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
+
+        if needsSpeechHandler {
+            if !audioSpeechHandlerInstalled {
+                previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
+                audioSpeechHandlerInstalled = true
+            }
+            audioManager.onMutedSpeechActivity = { [weak self] _, event in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let handler = self.options.audioConfiguration?.onSpeechActivity {
+                        handler(event)
+                    }
+                    if let handler = self.options.onSpeechActivity {
+                        handler(event)
+                    }
+                }
+            }
+        } else if audioSpeechHandlerInstalled {
+            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+            previousSpeechActivityHandler = nil
+            audioSpeechHandlerInstalled = false
+        }
+    }
+
+    private func normalizeConversationError(
+        _ error: Error,
+        default defaultError: (Error) -> ConversationError,
+    ) -> ConversationError {
+        if let conversationError = error as? ConversationError {
+            return conversationError
+        }
+        return defaultError(error)
+    }
+
+    private func updateStartupState(_ newState: ConversationStartupState) {
+        startupState = newState
+        options.onStartupStateChange?(newState)
+    }
 
     private func resetFlags() {
         // Don't reset isMuted - it should reflect actual room state
@@ -339,7 +482,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         mcpToolCalls.removeAll()
         mcpConnectionStatus = nil
         conversationMetadata = nil
-        conversationInitTask?.cancel()
+        startupMetrics = nil
+        latestAudioAlignment = nil
+        latestAudioEvent = nil
     }
 
     /// Clean up state from any previous conversation to ensure a fresh start.
@@ -349,13 +494,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Cancel any ongoing tasks
         roomChangesTask?.cancel()
         protocolEventsTask?.cancel()
-        conversationInitTask?.cancel()
         speakingTimer?.cancel()
 
         // Reset task references
         roomChangesTask = nil
         protocolEventsTask = nil
-        conversationInitTask = nil
         speakingTimer = nil
 
         // Clear conversation state
@@ -370,6 +513,19 @@ public final class Conversation: ObservableObject, RoomDelegate {
         agentState = .listening
         isMuted = true // Start muted, will be updated based on actual room state
 
+        startupState = .idle
+        startupMetrics = nil
+
+        lastAgentEventId = nil
+        lastFeedbackSubmittedEventId = nil
+        if audioSpeechHandlerInstalled {
+            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
+            previousSpeechActivityHandler = nil
+            audioSpeechHandlerInstalled = false
+        }
+        options.onCanSendFeedbackChange?(false)
+        latestAudioEvent = nil
+
         print("[ElevenLabs] Previous conversation state cleaned up for fresh Room")
     }
 
@@ -382,7 +538,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         Task {
             do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+                try AudioManager.shared.setRecordingAlwaysPreparedMode(true)
             } catch {
                 // ignore: we have no error handler public API yet
             }
@@ -397,7 +553,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func startRoomObservers() {
-        guard let deps, let room = deps.connectionManager.room else { return }
+        guard let connectionManager = resolvedConnectionManager(),
+              connectionManager.shouldObserveRoomConnection,
+              let room = connectionManager.room else { return }
         roomChangesTask?.cancel()
         roomChangesTask = Task { [weak self] in
             guard let self else { return }
@@ -435,7 +593,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func startProtocolEventLoop() {
-        guard let deps else {
+        guard let connectionManager = resolvedConnectionManager() else {
             return
         }
         protocolEventsTask?.cancel()
@@ -444,7 +602,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 return
             }
 
-            let room = deps.connectionManager.room
+            let room = connectionManager.room
 
             // Set up our own delegate to listen for data
             let delegate = ConversationDataDelegate { [weak self] data in
@@ -465,34 +623,45 @@ public final class Conversation: ObservableObject, RoomDelegate {
         case let .userTranscript(e):
             // Don't change agent state - let voice activity detection handle it
             appendUserTranscript(e.transcript)
+            options.onUserTranscript?(e.transcript, e.eventId)
 
         case .tentativeAgentResponse:
             // Don't change agent state - let voice activity detection handle it
             break
 
         case let .agentResponse(e):
-            // Don't change agent state - let voice activity detection handle it
             appendAgentMessage(e.response)
+            lastAgentEventId = e.eventId
+            options.onAgentResponse?(e.response, e.eventId)
+            if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
+                options.onCanSendFeedbackChange?(true)
+            }
 
-        case .agentResponseCorrection:
+        case let .agentResponseCorrection(correction):
             // Handle agent response corrections
-            break
+            options.onAgentResponseCorrection?(correction.originalAgentResponse, correction.correctedAgentResponse, correction.eventId)
 
         case let .agentChatResponsePart(e):
             handleAgentChatResponsePart(e)
 
-        case .audio:
-            // Don't change agent state - let voice activity detection handle it
-            break
+        case let .audio(audioEvent):
+            latestAudioEvent = audioEvent
+            latestAudioAlignment = audioEvent.alignment
+            if let alignment = audioEvent.alignment {
+                options.onAudioAlignment?(alignment)
+            }
 
-        case .interruption:
+        case let .interruption(interruptionEvent):
             // Only interruption should force listening state - immediately, no timeout
             speakingTimer?.cancel()
             agentState = .listening
+            options.onInterruption?(interruptionEvent.eventId)
+            options.onCanSendFeedbackChange?(false)
 
         case let .conversationMetadata(metadata):
             // Store the conversation metadata for public access
             conversationMetadata = metadata
+            options.onConversationMetadata?(metadata)
 
         case let .ping(p):
             // Respond to ping with pong
@@ -501,11 +670,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         case let .clientToolCall(toolCall):
             // Add to pending tool calls for the app to handle
+            options.onUnhandledClientToolCall?(toolCall)
             pendingToolCalls.append(toolCall)
 
-        case .vadScore:
+        case let .vadScore(vad):
             // VAD scores are available in the event stream
-            break
+            options.onVadScore?(vad.vadScore)
 
         case let .agentToolResponse(toolResponse):
             // Agent tool response is available in the event stream
@@ -516,6 +686,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                     await endConversation()
                 }
             }
+            options.onAgentToolResponse?(toolResponse)
 
         case .tentativeUserTranscript:
             // Tentative user transcript (in-progress transcription)
@@ -543,8 +714,19 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
     }
 
+    // MARK: - Testing Hooks
+
+    @MainActor
+    func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
+        await handleIncomingEvent(event)
+    }
+
+    func _testing_setState(_ newState: ConversationState) {
+        state = newState
+    }
+
     private func handleIncomingData(_ data: Data) async {
-        guard deps != nil else { return }
+        guard dependencyProvider != nil else { return }
         do {
             if let event = try EventParser.parseIncomingEvent(from: data) {
                 await handleIncomingEvent(event)
@@ -570,7 +752,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func publish(_ event: OutgoingEvent) async throws {
-        guard let deps, let room = deps.connectionManager.room else {
+        guard let connectionManager = resolvedConnectionManager(), connectionManager.room != nil else {
             throw ConversationError.notConnected
         }
 
@@ -578,7 +760,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         do {
             let options = DataPublishOptions(reliable: true)
-            try await room.localParticipant.publish(data: data, options: options)
+            try await connectionManager.publish(data: data, options: options)
+        } catch ConnectionManagerError.roomUnavailable {
+            throw ConversationError.notConnected
         } catch {
             throw error
         }
@@ -595,7 +779,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Determine optimal buffer time based on agent readiness pattern
     /// Different agents need different buffer times for conversation processing readiness
     private func determineOptimalBuffer() async -> TimeInterval {
-        guard let room = deps?.connectionManager.room else { return 150.0 } // Default buffer if no room
+        guard let room = resolvedConnectionManager()?.room else { return 150.0 } // Default buffer if no room
 
         // Check if we have any remote participants
         guard !room.remoteParticipants.isEmpty else {
@@ -632,7 +816,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             }
 
             // Get room reference
-            guard let room = deps?.connectionManager.room else {
+            guard let room = resolvedConnectionManager()?.room else {
                 print("[ElevenLabs-Timing] Attempt \(attempt): No room available")
                 try? await Task.sleep(nanoseconds: pollInterval)
                 continue
@@ -690,27 +874,36 @@ public final class Conversation: ObservableObject, RoomDelegate {
         return false
     }
 
-    private func sendConversationInitWithRetry(config: ConversationConfig, maxAttempts: Int = 3)
-        async
-    {
-        for attempt in 1 ... maxAttempts {
-            // More aggressive exponential backoff: 0, 100ms, 300ms
-            if attempt > 1 {
-                let delay = Double(attempt - 1) * 0.1 + Double(attempt - 2) * 0.2 // 0.1s, 0.3s
-                print("[Retry] Attempt \(attempt) of \(maxAttempts), backoff delay: \(delay)s")
+    private func sendConversationInitWithRetry(
+        config: ConversationConfig,
+        metrics: inout ConversationStartupMetrics,
+    ) async throws {
+        let delays = options.startupConfiguration.initRetryDelays.isEmpty
+            ? [0]
+            : options.startupConfiguration.initRetryDelays
+
+        for (index, delay) in delays.enumerated() {
+            let attemptNumber = index + 1
+            metrics.conversationInitAttempts = attemptNumber
+            updateStartupState(.sendingConversationInit(attempt: attemptNumber))
+
+            if delay > 0 {
+                print("[Retry] Attempt \(attemptNumber) delay: \(delay)s")
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            } else {
-                print("[Retry] Attempt \(attempt) of \(maxAttempts), no delay")
             }
 
+            let attemptStart = Date()
             do {
                 try await sendConversationInit(config: config)
-                print("[Retry] ✅ Conversation init succeeded on attempt \(attempt)")
+                metrics.conversationInit = Date().timeIntervalSince(attemptStart)
+                print("[Retry] ✅ Conversation init succeeded on attempt \(attemptNumber)")
                 return
             } catch {
-                print("[Retry] ❌ Attempt \(attempt) failed: \(error.localizedDescription)")
-                if attempt == maxAttempts {
+                metrics.conversationInit = Date().timeIntervalSince(attemptStart)
+                print("[Retry] ❌ Attempt \(attemptNumber) failed: \(error.localizedDescription)")
+                if attemptNumber == delays.count {
                     print("[Retry] ❌ All attempts exhausted, conversation init failed")
+                    throw error
                 }
             }
         }
@@ -813,8 +1006,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
 // MARK: - RoomDelegate
 
-public extension Conversation {
-    nonisolated func room(
+extension Conversation {
+    public nonisolated func room(
         _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
     ) {
         if participant is RemoteParticipant {
@@ -831,7 +1024,7 @@ public extension Conversation {
         }
     }
 
-    nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
+    public nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
         participant.add(delegate: self)
     }
 }
@@ -921,6 +1114,90 @@ public struct Message: Identifiable, Sendable {
     }
 }
 
+// MARK: - Startup Diagnostics
+
+public struct ConversationStartupMetrics: Sendable, Equatable {
+    public var total: TimeInterval?
+    public var tokenFetch: TimeInterval?
+    public var roomConnect: TimeInterval?
+    public var agentReady: TimeInterval?
+    public var agentReadyViaGraceTimeout: Bool
+    public var agentReadyTimedOut: Bool
+    public var agentReadyBuffer: TimeInterval?
+    public var conversationInit: TimeInterval?
+    public var conversationInitAttempts: Int
+
+    public init(
+        total: TimeInterval? = nil,
+        tokenFetch: TimeInterval? = nil,
+        roomConnect: TimeInterval? = nil,
+        agentReady: TimeInterval? = nil,
+        agentReadyViaGraceTimeout: Bool = false,
+        agentReadyTimedOut: Bool = false,
+        agentReadyBuffer: TimeInterval? = nil,
+        conversationInit: TimeInterval? = nil,
+        conversationInitAttempts: Int = 0,
+    ) {
+        self.total = total
+        self.tokenFetch = tokenFetch
+        self.roomConnect = roomConnect
+        self.agentReady = agentReady
+        self.agentReadyViaGraceTimeout = agentReadyViaGraceTimeout
+        self.agentReadyTimedOut = agentReadyTimedOut
+        self.agentReadyBuffer = agentReadyBuffer
+        self.conversationInit = conversationInit
+        self.conversationInitAttempts = conversationInitAttempts
+    }
+}
+
+public struct ConversationAgentReadyReport: Sendable, Equatable {
+    public let elapsed: TimeInterval
+    public let viaGraceTimeout: Bool
+    public let timedOut: Bool
+
+    public init(elapsed: TimeInterval, viaGraceTimeout: Bool, timedOut: Bool) {
+        self.elapsed = elapsed
+        self.viaGraceTimeout = viaGraceTimeout
+        self.timedOut = timedOut
+    }
+}
+
+public enum ConversationStartupFailure: Sendable, Equatable {
+    case token(ConversationError)
+    case room(ConversationError)
+    case agentTimeout
+    case conversationInit(ConversationError)
+}
+
+public enum ConversationStartupState: Sendable, Equatable {
+    case idle
+    case resolvingToken
+    case connectingRoom
+    case waitingForAgent(timeout: TimeInterval)
+    case agentReady(ConversationAgentReadyReport)
+    case sendingConversationInit(attempt: Int)
+    case active(CallInfo, ConversationStartupMetrics)
+    case failed(ConversationStartupFailure, ConversationStartupMetrics)
+}
+
+public struct ConversationStartupConfiguration: Sendable, Equatable {
+    public var agentReadyTimeout: TimeInterval
+    public var initRetryDelays: [TimeInterval]
+    public var failIfAgentNotReady: Bool
+
+    public init(
+        agentReadyTimeout: TimeInterval = 3.0,
+        initRetryDelays: [TimeInterval] = [0, 0.2, 0.5],
+        failIfAgentNotReady: Bool = false,
+    ) {
+        self.agentReadyTimeout = agentReadyTimeout
+        self.initRetryDelays = initRetryDelays
+        self.failIfAgentNotReady = failIfAgentNotReady
+    }
+
+    public static let `default` = ConversationStartupConfiguration()
+}
+
 // MARK: - Options & Errors
 
 public struct ConversationOptions: Sendable {
@@ -937,6 +1214,54 @@ public struct ConversationOptions: Sendable {
     /// Called when the agent disconnects or the conversation ends
     public var onDisconnect: (@Sendable () -> Void)?
 
+    /// Called whenever the startup state transitions
+    public var onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)?
+
+    /// Controls timings and retry behavior for the initialization handshake
+    public var startupConfiguration: ConversationStartupConfiguration
+
+    /// Controls microphone pipeline behaviour and VAD callbacks.
+    public var audioConfiguration: AudioPipelineConfiguration?
+
+    /// Controls LiveKit peer connection behaviour, including ICE policies.
+    public var networkConfiguration: LiveKitNetworkConfiguration
+
+    /// Called when a startup-related error occurs
+    public var onError: (@Sendable (ConversationError) -> Void)?
+
+    /// Called when LiveKit detects speech activity while muted.
+    public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
+
+    /// Called for each agent response (finalized transcript) with its event identifier.
+    public var onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
+
+    /// Called when an agent response is corrected.
+    public var onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)?
+
+    /// Called for each user transcript event emitted by the server.
+    public var onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
+
+    /// Called whenever conversation metadata is received.
+    public var onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)?
+
+    /// Called when the agent issues a tool response.
+    public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
+
+    /// Called when the agent detects an interruption.
+    public var onInterruption: (@Sendable (_ eventId: Int) -> Void)?
+
+    /// Called whenever the server emits a VAD score.
+    public var onVadScore: (@Sendable (_ score: Double) -> Void)?
+
+    /// Called when the agent emits audio alignment metadata for spoken words.
+    public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
+
+    /// Called when the client should enable/disable feedback UI.
+    public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
+
+    /// Called when an unhandled client tool call is received.
+    public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
+
     public init(
         conversationOverrides: ConversationOverrides = .init(),
         agentOverrides: AgentOverrides? = nil,
@@ -946,6 +1271,22 @@ public struct ConversationOptions: Sendable {
         userId: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable () -> Void)? = nil,
+        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        startupConfiguration: ConversationStartupConfiguration = .default,
+        audioConfiguration: AudioPipelineConfiguration? = nil,
+        networkConfiguration: LiveKitNetworkConfiguration = .default,
+        onError: (@Sendable (ConversationError) -> Void)? = nil,
+        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
+        onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
+        onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
+        onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
+        onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
+        onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
+        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
     ) {
         self.conversationOverrides = conversationOverrides
         self.agentOverrides = agentOverrides
@@ -955,6 +1296,22 @@ public struct ConversationOptions: Sendable {
         self.userId = userId
         self.onAgentReady = onAgentReady
         self.onDisconnect = onDisconnect
+        self.onStartupStateChange = onStartupStateChange
+        self.startupConfiguration = startupConfiguration
+        self.audioConfiguration = audioConfiguration
+        self.networkConfiguration = networkConfiguration
+        self.onError = onError
+        self.onSpeechActivity = onSpeechActivity
+        self.onAgentResponse = onAgentResponse
+        self.onAgentResponseCorrection = onAgentResponseCorrection
+        self.onUserTranscript = onUserTranscript
+        self.onConversationMetadata = onConversationMetadata
+        self.onAgentToolResponse = onAgentToolResponse
+        self.onInterruption = onInterruption
+        self.onVadScore = onVadScore
+        self.onAudioAlignment = onAudioAlignment
+        self.onCanSendFeedbackChange = onCanSendFeedbackChange
+        self.onUnhandledClientToolCall = onUnhandledClientToolCall
     }
 
     public static let `default` = ConversationOptions()
@@ -971,6 +1328,12 @@ extension ConversationOptions {
             userId: userId,
             onAgentReady: onAgentReady,
             onDisconnect: onDisconnect,
+            onStartupStateChange: onStartupStateChange,
+            startupConfiguration: startupConfiguration,
+            audioConfiguration: audioConfiguration,
+            networkConfiguration: networkConfiguration,
+            onError: onError,
+            onSpeechActivity: onSpeechActivity,
         )
     }
 }
@@ -982,6 +1345,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case authenticationFailed(String)
     case agentTimeout
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
+    case localNetworkPermissionRequired
 
     // Helper methods to create errors with Error types
     public static func connectionFailed(_ error: Error) -> ConversationError {
@@ -1000,6 +1364,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
         case let .authenticationFailed(msg): "Authentication failed: \(msg)"
         case .agentTimeout: "Agent did not join in time."
         case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
+        case .localNetworkPermissionRequired: "Local Network permission is required."
         }
     }
 }

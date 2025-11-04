@@ -1,10 +1,17 @@
 @testable import ElevenLabs
 import Foundation
 
+@MainActor
 final class MockTokenService {
-    var shouldSucceed = true
+    enum Scenario {
+        case success
+        case authenticationFailed(String)
+        case httpError(Int)
+        case arbitrary(Error)
+    }
+
+    var scenario: Scenario = .success
     var mockConnectionDetails: TokenService.ConnectionDetails?
-    var mockError: Error?
 
     static func makeSuccessResponse() -> TokenService.ConnectionDetails {
         TokenService.ConnectionDetails(
@@ -14,18 +21,19 @@ final class MockTokenService {
             participantToken: "mock-token",
         )
     }
-
-    static func makeFailureError() -> ConversationError {
-        .authenticationFailed("Mock authentication failed")
-    }
 }
 
-extension MockTokenService {
+extension MockTokenService: TokenServicing {
     func fetchConnectionDetails(configuration _: ElevenLabsConfiguration) async throws -> TokenService.ConnectionDetails {
-        if !shouldSucceed {
-            throw mockError ?? MockTokenService.makeFailureError()
+        switch scenario {
+        case .success:
+            return mockConnectionDetails ?? MockTokenService.makeSuccessResponse()
+        case let .authenticationFailed(message):
+            throw ConversationError.authenticationFailed(message)
+        case let .httpError(code):
+            throw ConversationError.connectionFailed("HTTP error: \(code)")
+        case let .arbitrary(error):
+            throw error
         }
-
-        return mockConnectionDetails ?? MockTokenService.makeSuccessResponse()
     }
 }

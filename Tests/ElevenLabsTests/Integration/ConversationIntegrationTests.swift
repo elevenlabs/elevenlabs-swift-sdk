@@ -9,9 +9,11 @@ final class ConversationIntegrationTests: XCTestCase {
         // For now, we'll test the basic flow structure
 
         let config = ConversationConfig(
-            agentOverrides: AgentOverrides(prompt: "You are a test assistant",
-                                           firstMessage: "Hello! How can I help you today?",
-                                           language: Language.english),
+            agentOverrides: AgentOverrides(
+                prompt: "You are a test assistant",
+                firstMessage: "Hello! How can I help you today?",
+                language: Language.english,
+            ),
         )
 
         // In a real integration test environment:
@@ -208,6 +210,8 @@ final class ConversationIntegrationTests: XCTestCase {
 
         // Force garbage collection
         autoreleasepool {}
+
+        XCTAssertNil(weakConversation, "Conversation should be deallocated after scope exit")
 
         // Note: This test might not be reliable without proper test infrastructure
         // In a real integration test, we'd use memory profiling tools

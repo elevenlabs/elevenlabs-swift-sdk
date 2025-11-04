@@ -73,8 +73,11 @@ public struct ClientToolResultEvent: Sendable {
         } else if JSONSerialization.isValidJSONObject(result) {
             let jsonData = try JSONSerialization.data(withJSONObject: result)
             guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                throw NSError(domain: "ClientToolResultEvent", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"])
+                throw NSError(
+                    domain: "ClientToolResultEvent",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"],
+                )
             }
             self.result = jsonString
         } else {

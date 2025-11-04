@@ -16,7 +16,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.16")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.17")
 ]
 ```
 
@@ -543,4 +543,269 @@ class ConversationViewModel: ObservableObject {
             .assign(to: &$isMuted)
     }
 }
+```
+
+## Configuration & Callbacks
+
+### Error Handling
+
+The SDK provides comprehensive error handling through the `onError` callback:
+
+```swift
+let config = ConversationConfig(
+    onError: { error in
+        print("SDK Error: \(error.localizedDescription)")
+        // Handle different error types
+        switch error {
+        case .notConnected:
+            // Show "not connected" message
+            break
+        case .connectionFailed(let reason):
+            // Handle connection failure
+            print("Connection failed: \(reason)")
+        case .authenticationFailed(let reason):
+            // Handle auth error
+            print("Auth failed: \(reason)")
+        case .agentTimeout:
+            // Agent took too long to respond
+            break
+        case .localNetworkPermissionRequired:
+            // User needs to grant local network permission
+            break
+        }
+    }
+)
+```
+
+### Startup State Monitoring
+
+Monitor the conversation startup progress with detailed state transitions:
+
+```swift
+let config = ConversationConfig(
+    onStartupStateChange: { state in
+        switch state {
+        case .idle:
+            print("Not started")
+        case .resolvingToken:
+            print("Fetching authentication token...")
+        case .connectingToRoom:
+            print("Connecting to LiveKit room...")
+        case .waitingForAgent(let timeout):
+            print("Waiting for agent (timeout: \(timeout)s)...")
+        case .agentReady(let report):
+            print("Agent ready in \(report.elapsed)s")
+            if report.viaGraceTimeout {
+                print("  (via grace timeout)")
+            }
+        case .sendingConversationInit:
+            print("Sending conversation initialization...")
+        case .active(let callInfo, let metrics):
+            print("✅ Connected to agent: \(callInfo.agentId)")
+            print("   Total startup time: \(metrics.total)s")
+            print("   - Token fetch: \(metrics.tokenFetch ?? 0)s")
+            print("   - Room connect: \(metrics.roomConnect ?? 0)s")
+            print("   - Agent ready: \(metrics.agentReady ?? 0)s")
+            print("   - Init: \(metrics.conversationInit ?? 0)s")
+            print("   - Attempts: \(metrics.conversationInitAttempts)")
+        case .failed(let stage, let metrics):
+            print("❌ Failed at \(stage)")
+            print("   Total time: \(metrics.total)s")
+        }
+    }
+)
+```
+
+### Conversation Event Callbacks
+
+Listen to fine-grained conversation events:
+
+```swift
+let config = ConversationConfig(
+    // Agent response events
+    onAgentResponse: { text, eventId in
+        print("Agent said: \(text) [event: \(eventId)]")
+    },
+    
+    // Agent response corrections (when agent self-corrects)
+    onAgentResponseCorrection: { original, corrected, eventId in
+        print("Agent corrected: '\(original)' → '\(corrected)'")
+    },
+    
+    // User transcript events
+    onUserTranscript: { text, eventId in
+        print("You said: \(text) [event: \(eventId)]")
+    },
+    
+    // Interruption detection
+    onInterruption: { eventId in
+        print("User interrupted agent [event: \(eventId)]")
+    },
+    
+    // Feedback availability tracking
+    onCanSendFeedbackChange: { canSend in
+        // Enable/disable feedback UI based on whether feedback can be sent
+        self.showFeedbackButton = canSend
+    }
+)
+```
+
+### Audio Alignment & Word Highlighting
+
+Get word-level timing information to highlight text as the agent speaks:
+
+```swift
+let config = ConversationConfig(
+    onAudioAlignment: { alignment in
+        // alignment.chars: ["H", "e", "l", "l", "o"]
+        // alignment.charStartTimesMs: [0, 100, 150, 200, 250]
+        // alignment.charDurationsMs: [100, 50, 50, 50, 100]
+        
+        // Example: Highlight text character by character
+        for (index, char) in alignment.chars.enumerated() {
+            let startMs = alignment.charStartTimesMs[index]
+            let durationMs = alignment.charDurationsMs[index]
+            
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(startMs * 1_000_000))
+                await highlightCharacter(at: index, duration: durationMs)
+            }
+        }
+    }
+)
+```
+
+### Audio Pipeline Configuration
+
+Control microphone behavior and voice processing:
+
+```swift
+let audioConfig = AudioPipelineConfiguration(
+    // Microphone mute strategy
+    // - .voiceProcessing: Mute by stopping voice processing
+    // - .restart: Mute by restarting the audio session
+    // - .inputMixer: Mute at the input mixer level (default)
+    microphoneMuteMode: .inputMixer,
+    
+    // Keep mic warm to avoid first-word latency (default: true)
+    recordingAlwaysPrepared: true,
+    
+    // Bypass WebRTC voice processing (AEC/NS/VAD)
+    // Set to true if you want raw audio without processing
+    voiceProcessingBypassed: false,
+    
+    // Enable Auto Gain Control for consistent volume
+    voiceProcessingAGCEnabled: true,
+    
+    // Detect speech while muted (useful for "tap to speak" UX)
+    onSpeechActivity: { event in
+        print("Speech detected while muted!")
+        // Show visual indicator that user is trying to speak
+    }
+)
+
+let config = ConversationConfig(
+    audioConfiguration: audioConfig
+)
+```
+
+### Startup Configuration
+
+Fine-tune the connection handshake behavior:
+
+```swift
+let startupConfig = ConversationStartupConfiguration(
+    // How long to wait for agent to be ready (default: 3.0s)
+    agentReadyTimeout: 5.0,
+    
+    // Retry delays for conversation init in seconds (default: [0, 0.5, 1.0])
+    // First attempt: immediate, 2nd: wait 0.5s, 3rd: wait 1.0s, etc.
+    initRetryDelays: [0, 0.5, 1.0, 2.0],
+    
+    // Whether to fail if agent isn't ready in time (default: false)
+    // false = continue with grace period, true = throw error immediately
+    failIfAgentNotReady: false
+)
+
+let config = ConversationConfig(
+    startupConfiguration: startupConfig
+)
+```
+
+### Voice Activity Detection (VAD)
+
+Monitor real-time voice activity scores:
+
+```swift
+let config = ConversationConfig(
+    onVadScore: { score in
+        // score: 0.0 to 1.0 (higher = more speech detected)
+        updateVoiceActivityIndicator(score)
+    }
+)
+```
+
+### Complete Configuration Example
+
+```swift
+let config = ConversationConfig(
+    // Core callbacks
+    onAgentReady: {
+        print("✅ Agent is ready!")
+    },
+    onDisconnect: {
+        print("🔌 Disconnected")
+    },
+    onError: { error in
+        print("❌ Error: \(error.localizedDescription)")
+    },
+    
+    // Startup monitoring
+    onStartupStateChange: { state in
+        print("Startup: \(state)")
+    },
+    
+    // Event callbacks
+    onAgentResponse: { text, eventId in
+        print("Agent: \(text)")
+    },
+    onUserTranscript: { text, eventId in
+        print("User: \(text)")
+    },
+    onInterruption: { eventId in
+        print("Interrupted!")
+    },
+    
+    // Advanced features
+    onAudioAlignment: { alignment in
+        // Highlight words as agent speaks
+    },
+    onCanSendFeedbackChange: { canSend in
+        // Enable/disable feedback button
+    },
+    
+    // Audio pipeline
+    audioConfiguration: AudioPipelineConfiguration(
+        microphoneMuteMode: .inputMixer,
+        recordingAlwaysPrepared: true,
+        voiceProcessingBypassed: false,
+        voiceProcessingAGCEnabled: true
+    ),
+    
+    // Network configuration
+    networkConfiguration: LiveKitNetworkConfiguration(
+        strategy: .automatic
+    ),
+    
+    // Startup tuning
+    startupConfiguration: ConversationStartupConfiguration(
+        agentReadyTimeout: 5.0,
+        initRetryDelays: [0, 0.5, 1.0, 2.0]
+    )
+)
+
+let conversation = try await ElevenLabs.startConversation(
+    agentId: "your-agent-id",
+    config: config
+)
 ```

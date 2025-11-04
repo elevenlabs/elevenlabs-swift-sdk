@@ -47,6 +47,21 @@ final class EventParserTests: XCTestCase {
         XCTAssertEqual(audio.eventId, 26)
     }
 
+    func testParseAudioEventWithTimestamps() throws {
+        let json = """
+        {"audio_event":{"audio_base_64":"AAADAAIAAQABAP///v/+/////f/9//3///8BAAAAAQAB","event_id":1,"alignment":{"chars":["H","e","l","l","o","!"," ","H","o","w"," ","c","a","n"," ","I"," ","h","e","l","p"," ","y","o","u"," ","t","o","d","a","y","?"," "],"char_start_times_ms":[0,93,151,186,244,337,372,395,430,464,499,546,569,615,639,685,720,755,789,813,848,882,917,940,964,998,1033,1057,1091,1149,1184,1277,1312],"char_durations_ms":[93,58,35,58,93,35,23,35,34,35,47,23,46,24,46,35,35,34,24,35,34,35,23,24,34,35,24,34,58,35,93,35,174]}},"type":"audio"}
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .audio(audio) = event else {
+            XCTFail("Expected audio event")
+            return
+        }
+
+        XCTAssertEqual(audio.eventId, 1)
+    }
+
     func testParseInterruptionEvent() throws {
         let json = """
         {

@@ -45,7 +45,10 @@ public struct ElevenLabsConfiguration: Sendable {
     }
 
     /// Initialize with a custom token provider
-    public static func customTokenProvider(_ provider: @escaping @Sendable () async throws -> String, participantName: String = "user") -> Self {
+    public static func customTokenProvider(
+        _ provider: @escaping @Sendable () async throws -> String,
+        participantName: String = "user",
+    ) -> Self {
         .init(authSource: .customTokenProvider(provider), participantName: participantName)
     }
 }
@@ -83,25 +86,25 @@ public struct TokenService: Sendable {
     /// Development-only API key for testing private agents
     /// This should only be set in debug builds for local testing
     #if DEBUG
-        public let debugApiKey: String?
+    public let debugApiKey: String?
 
-        public init(
-            configuration: Configuration = .default,
-            urlSession: URLSession = .shared,
-            debugApiKey: String? = nil,
-        ) {
-            self.configuration = configuration
-            self.urlSession = urlSession
-            self.debugApiKey = debugApiKey
-        }
+    public init(
+        configuration: Configuration = .default,
+        urlSession: URLSession = .shared,
+        debugApiKey: String? = nil,
+    ) {
+        self.configuration = configuration
+        self.urlSession = urlSession
+        self.debugApiKey = debugApiKey
+    }
     #else
-        public init(
-            configuration: Configuration = .default,
-            urlSession: URLSession = .shared,
-        ) {
-            self.configuration = configuration
-            self.urlSession = urlSession
-        }
+    public init(
+        configuration: Configuration = .default,
+        urlSession: URLSession = .shared,
+    ) {
+        self.configuration = configuration
+        self.urlSession = urlSession
+    }
     #endif
 
     /// Fetch connection details for ElevenLabs conversation
@@ -148,11 +151,11 @@ public struct TokenService: Sendable {
         // ⚠️ DEVELOPMENT ONLY: Check for API key
         // This is ONLY for local development/testing. NEVER ship an app with an API key!
         #if DEBUG
-            if let apiKey = debugApiKey {
-                print("⚠️ WARNING: Using API key in client - DEVELOPMENT ONLY!")
-                print("⚠️ For production, implement a backend service to generate tokens")
-                request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-            }
+        if let apiKey = debugApiKey {
+            print("⚠️ WARNING: Using API key in client - DEVELOPMENT ONLY!")
+            print("⚠️ For production, implement a backend service to generate tokens")
+            request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+        }
         #endif
 
         let (data, response) = try await urlSession.data(for: request)
@@ -204,3 +207,5 @@ enum TokenError: LocalizedError, Sendable {
         }
     }
 }
+
+extension TokenService: TokenServicing {}

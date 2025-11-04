@@ -1,6 +1,20 @@
 import Foundation
 import LiveKit
 
+struct AgentReadyDetail: Equatable, Sendable {
+    let elapsed: TimeInterval
+    let viaGraceTimeout: Bool
+}
+
+enum AgentReadyWaitResult: Equatable, Sendable {
+    case success(AgentReadyDetail)
+    case timedOut(elapsed: TimeInterval)
+}
+
+enum ConnectionManagerError: Error {
+    case roomUnavailable
+}
+
 /// **ConnectionManager**
 ///
 /// A small façade around `LiveKit.Room` that emits **exactly one**
@@ -15,7 +29,7 @@ import LiveKit
 /// After the ready event fires you can safely send client‑initiation
 /// metadata—​the remote side will be present and able to receive it.
 @MainActor
-final class ConnectionManager {
+final class ConnectionManager: ConnectionManaging {
     // MARK: – Public callbacks
 
     /// Fired **once** when the remote agent is considered ready.
@@ -28,11 +42,101 @@ final class ConnectionManager {
 
     private(set) var room: Room?
 
+    var shouldObserveRoomConnection: Bool { true }
+
     // MARK: – Private
 
     private var readyDelegate: ReadyDelegate?
+    private var readyStartTime: Date?
+    private var lastReadyDetail: AgentReadyDetail?
+    var errorHandler: (Swift.Error?) -> Void = { _ in }
+
+    private struct ReadyAwaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<AgentReadyWaitResult, Never>
+        let timeoutTask: Task<Void, Never>
+    }
+
+    private var readyAwaiters: [ReadyAwaiter] = []
 
     // MARK: – Lifecycle
+
+    private func resolveReadyAwaiters(with result: AgentReadyWaitResult) {
+        guard !readyAwaiters.isEmpty else { return }
+        let awaiters = readyAwaiters
+        readyAwaiters.removeAll()
+        for awaiter in awaiters {
+            awaiter.timeoutTask.cancel()
+            awaiter.continuation.resume(returning: result)
+        }
+    }
+
+    private func resolveReadyAwaitersOnTimeout() {
+        guard lastReadyDetail == nil else { return }
+        let elapsed = Date().timeIntervalSince(readyStartTime ?? Date())
+        resolveReadyAwaiters(with: .timedOut(elapsed: elapsed))
+    }
+
+    private func handleAgentReady(source: ReadyDelegate.ReadySource) {
+        let elapsed = Date().timeIntervalSince(readyStartTime ?? Date())
+        let detail = AgentReadyDetail(
+            elapsed: elapsed,
+            viaGraceTimeout: source == .graceTimeout,
+        )
+
+        // cache for future waiters
+        if lastReadyDetail == nil {
+            lastReadyDetail = detail
+        }
+
+        resolveReadyAwaiters(with: .success(detail))
+        readyStartTime = nil
+        onAgentReady?()
+    }
+
+    func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
+        if let detail = lastReadyDetail {
+            return .success(detail)
+        }
+
+        let start = readyStartTime ?? Date()
+        if timeout <= 0 {
+            return .timedOut(elapsed: Date().timeIntervalSince(start))
+        }
+
+        return await withCheckedContinuation { continuation in
+            let id = UUID()
+            let timeoutTask = Task { [weak self] in
+                guard timeout > 0 else { return }
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await MainActor.run {
+                    guard let self else { return }
+                    guard self.lastReadyDetail == nil,
+                          let index = self.readyAwaiters.firstIndex(where: { $0.id == id })
+                    else { return }
+
+                    let elapsed = Date().timeIntervalSince(start)
+                    let awaiter = self.readyAwaiters.remove(at: index)
+                    awaiter.timeoutTask.cancel()
+                    awaiter.continuation.resume(returning: .timedOut(elapsed: elapsed))
+                }
+            }
+
+            readyAwaiters.append(ReadyAwaiter(id: id, continuation: continuation, timeoutTask: timeoutTask))
+        }
+    }
+
+    func publish(data: Data, options: DataPublishOptions) async throws {
+        guard let room else {
+            throw ConnectionManagerError.roomUnavailable
+        }
+        do {
+            try await room.localParticipant.publish(data: data, options: options)
+        } catch {
+            errorHandler(error)
+            throw error
+        }
+    }
 
     /// Establish a LiveKit connection.
     ///
@@ -44,17 +148,24 @@ final class ConnectionManager {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
+        networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval = 0.5, // Reduced to 500ms based on test results showing consistent timeouts
     ) async throws {
+        resolveReadyAwaiters(with: .timedOut(elapsed: 0))
+        readyStartTime = Date()
+        lastReadyDetail = nil
+
         let room = Room()
         self.room = room
+
+        let connectOptions = networkConfiguration.makeConnectOptions()
 
         // Delegate encapsulates all readiness logic.
         let rd = ReadyDelegate(
             graceTimeout: graceTimeout,
-            onReady: { [weak self] in
-                print("[ConnectionManager-Timing] Ready delegate fired onReady callback")
-                self?.onAgentReady?()
+            onReady: { [weak self] source in
+                print("[ConnectionManager-Timing] Ready delegate fired onReady callback (source: \(source))")
+                self?.handleAgentReady(source: source)
             },
             onDisconnected: { [weak self] in self?.onAgentDisconnected?() },
         )
@@ -62,9 +173,21 @@ final class ConnectionManager {
         room.add(delegate: rd)
 
         let connectStart = Date()
-        try await room.connect(url: details.serverUrl,
-                               token: details.participantToken)
-        print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
+        do {
+            try await room.connect(
+                url: details.serverUrl,
+                token: details.participantToken,
+                connectOptions: connectOptions,
+            )
+            print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
+        } catch {
+            print("[ConnectionManager-Timing] LiveKit room.connect failed with error: \(error)")
+            errorHandler(error)
+            if LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
+                errorHandler(ConversationError.localNetworkPermissionRequired)
+            }
+            throw error
+        }
 
         if enableMic {
             // Await microphone enabling to ensure it's ready before proceeding
@@ -73,6 +196,7 @@ final class ConnectionManager {
                 print("[ConnectionManager] Microphone enabled successfully")
             } catch {
                 print("[ConnectionManager] Failed to enable microphone: \(error)")
+                errorHandler(error)
                 // Don't throw - microphone issues shouldn't prevent connection
             }
         }
@@ -83,6 +207,9 @@ final class ConnectionManager {
         await room?.disconnect()
         room = nil
         readyDelegate = nil
+        resolveReadyAwaitersOnTimeout()
+        readyStartTime = nil
+        lastReadyDetail = nil
     }
 
     /// Convenience helper returning a typed `AsyncStream` for incoming
@@ -99,13 +226,25 @@ final class ConnectionManager {
 
 // MARK: – Ready‑detection delegate
 
-private extension ConnectionManager {
+extension ConnectionManager {
     /// Internal delegate that guards the *agent‑ready* handshake.
-    final class ReadyDelegate: RoomDelegate, @unchecked Sendable {
+    fileprivate final class ReadyDelegate: RoomDelegate, @unchecked Sendable {
         // MARK: – FSM
 
         private enum Stage { case idle, waitingForSubscription, ready }
         private var stage: Stage = .idle
+
+        enum ReadySource: CustomStringConvertible {
+            case trackSubscribed
+            case graceTimeout
+
+            var description: String {
+                switch self {
+                case .trackSubscribed: "trackSubscribed"
+                case .graceTimeout: "graceTimeout"
+                }
+            }
+        }
 
         // MARK: – Timing
 
@@ -115,15 +254,16 @@ private extension ConnectionManager {
 
         // MARK: – Callbacks
 
-        private let onReady: () -> Void
+        private let onReady: (ReadySource) -> Void
         private let onDisconnected: () -> Void
 
         // MARK: – Init
 
-        init(graceTimeout: TimeInterval,
-             onReady: @escaping () -> Void,
-             onDisconnected: @escaping () -> Void)
-        {
+        init(
+            graceTimeout: TimeInterval,
+            onReady: @escaping (ReadySource) -> Void,
+            onDisconnected: @escaping () -> Void,
+        ) {
             self.graceTimeout = graceTimeout
             self.onReady = onReady
             self.onDisconnected = onDisconnected
@@ -139,7 +279,7 @@ private extension ConnectionManager {
                 var foundReadyAgent = false
                 for participant in room.remoteParticipants.values {
                     if hasSubscribedAudioTrack(participant) {
-                        markReady()
+                        markReady(source: .trackSubscribed)
                         foundReadyAgent = true
                         break
                     }
@@ -163,20 +303,22 @@ private extension ConnectionManager {
             startAudioTrackSubscriptionPolling(room: room)
         }
 
-        func room(_: Room,
-                  participant _: RemoteParticipant,
-                  didSubscribeTrack publication: RemoteTrackPublication)
-        {
+        func room(
+            _: Room,
+            participant _: RemoteParticipant,
+            didSubscribeTrack publication: RemoteTrackPublication,
+        ) {
             guard stage == .waitingForSubscription else { return }
             if publication.kind == .audio {
                 print("[ReadyDelegate-Timing] Audio track subscribed - marking ready!")
-                markReady()
+                markReady(source: .trackSubscribed)
             }
         }
 
-        func room(_ room: Room,
-                  participantDidDisconnect _: RemoteParticipant)
-        {
+        func room(
+            _ room: Room,
+            participantDidDisconnect _: RemoteParticipant,
+        ) {
             guard room.remoteParticipants.isEmpty else { return }
             reset()
             onDisconnected()
@@ -190,7 +332,7 @@ private extension ConnectionManager {
             for participant in room.remoteParticipants.values {
                 // Check for subscribed tracks instead of published ones
                 if hasSubscribedAudioTrack(participant) {
-                    markReady(); return
+                    markReady(source: .trackSubscribed); return
                 }
             }
             print("[ReadyDelegate-Timing] No subscribed audio tracks found yet, waiting...")
@@ -202,13 +344,13 @@ private extension ConnectionManager {
             }
         }
 
-        private func markReady() {
+        private func markReady(source: ReadySource) {
             print("[ReadyDelegate-Timing] Marking ready!")
             guard stage != .ready else { return }
             stage = .ready
             cancelTimeout()
             cancelPolling() // Stop polling when ready
-            onReady()
+            onReady(source)
         }
 
         private func startTimeout() {
@@ -217,7 +359,7 @@ private extension ConnectionManager {
                 try? await Task.sleep(nanoseconds: UInt64(graceTimeout * 1_000_000_000))
                 if !Task.isCancelled, stage == .waitingForSubscription {
                     print("[ReadyDelegate-Timing] Grace timeout reached! Marking ready anyway.")
-                    markReady() // proceed after grace period
+                    markReady(source: .graceTimeout) // proceed after grace period
                 }
             }
         }
@@ -238,7 +380,7 @@ private extension ConnectionManager {
                     for participant in room.remoteParticipants.values {
                         if hasSubscribedAudioTrack(participant) {
                             print("[ReadyDelegate-Timing] Polling detected subscribed audio track on attempt \(attempt)!")
-                            markReady()
+                            markReady(source: .trackSubscribed)
                             return
                         }
                     }

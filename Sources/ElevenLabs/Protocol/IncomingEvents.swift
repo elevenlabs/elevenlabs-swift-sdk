@@ -59,10 +59,18 @@ public struct AgentChatResponsePartEvent: Sendable {
     public let type: AgentChatResponsePartType
 }
 
+/// Audio alignment data showing character-level timing information
+public struct AudioAlignment: Sendable {
+    public let chars: [String]
+    public let charStartTimesMs: [Int]
+    public let charDurationsMs: [Int]
+}
+
 /// Audio data from the agent
 public struct AudioEvent: Sendable {
     public let audioBase64: String
     public let eventId: Int
+    public let alignment: AudioAlignment?
 }
 
 /// Interruption detected
