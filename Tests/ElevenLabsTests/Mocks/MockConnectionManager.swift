@@ -14,7 +14,7 @@ final class MockConnectionManager: ConnectionManaging {
 
     var room: Room?
     var shouldObserveRoomConnection: Bool { false }
-    var errorHandler: (Error?) -> Void = { _ in }
+    var errorHandler: (Swift.Error?) -> Void = { _ in }
 
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
@@ -24,6 +24,7 @@ final class MockConnectionManager: ConnectionManaging {
     private(set) var disconnectCallCount = 0
     private(set) var lastConnectionDetails: TokenService.ConnectionDetails?
     private(set) var lastGraceTimeout: TimeInterval = 0
+    private(set) var lastNetworkConfiguration: LiveKitNetworkConfiguration = .default
     private(set) var publishedPayloads: [Data] = []
 
     private var waitContinuation: CheckedContinuation<AgentReadyWaitResult, Never>?
@@ -32,11 +33,13 @@ final class MockConnectionManager: ConnectionManaging {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic _: Bool,
+        networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval,
     ) async throws {
         connectCallCount += 1
         lastConnectionDetails = details
         lastGraceTimeout = graceTimeout
+        lastNetworkConfiguration = networkConfiguration
 
         if shouldFailConnection {
             errorHandler(connectionError)

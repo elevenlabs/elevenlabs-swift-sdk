@@ -16,7 +16,7 @@ Add to your project using Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.16")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "2.0.17")
 ]
 ```
 
@@ -369,6 +369,38 @@ conversation.$conversationMetadata
     }
     .store(in: &cancellables)
 ```
+
+### Network Configuration & iOS Local Network Prompt
+
+Starting in **v2.0.17**, the SDK enforces TURN-only connectivity by default to prevent iOS from asking for *“Local Network Access”* the first time a conversation starts. You can customise this behaviour via `LiveKitNetworkConfiguration`:
+
+```swift
+// Default: relay-only, no local network prompt
+let config = ConversationConfig(
+    networkConfiguration: .init()
+)
+
+// Opt back into LiveKit's automatic ICE policy (may re-trigger the system prompt)
+let localNetworkConfig = ConversationConfig(
+    networkConfiguration: .init(strategy: .automatic)
+)
+
+// Provide your own transport policy and TURN servers
+let customNetworkConfig = ConversationConfig(
+    networkConfiguration: .init(
+        strategy: .custom(.relay),
+        customIceServers: [
+            ElevenLabs.IceServer(
+                urls: ["turns:turn.your-domain.com:5349"],
+                username: "user",
+                credential: "pass"
+            )
+        ]
+    )
+)
+```
+
+If you re-enable local/host candidates (`.automatic` or `.custom(.all)`), be sure to include `NSLocalNetworkUsageDescription` in your app’s `Info.plist` so the system prompt explains why the permission is needed.
 
 ## Architecture
 

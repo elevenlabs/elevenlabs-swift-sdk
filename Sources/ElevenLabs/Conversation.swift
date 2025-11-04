@@ -194,6 +194,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             try await connectionManager.connect(
                 details: connDetails,
                 enableMic: !options.conversationOverrides.textOnly,
+                networkConfiguration: options.networkConfiguration,
                 graceTimeout: options.startupConfiguration.agentReadyTimeout,
             )
             metrics.roomConnect = Date().timeIntervalSince(connectionStart)
@@ -209,6 +210,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             state = .idle
             updateStartupState(.failed(.room(conversationError), metrics))
             options.onError?(conversationError)
+            if LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
+                options.onError?(ConversationError.localNetworkPermissionRequired)
+            }
             throw conversationError
         }
 
@@ -441,10 +445,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
             audioManager.onMutedSpeechActivity = { [weak self] _, event in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    if let handler = options.audioConfiguration?.onSpeechActivity {
+                    if let handler = self.options.audioConfiguration?.onSpeechActivity {
                         handler(event)
                     }
-                    if let handler = options.onSpeechActivity {
+                    if let handler = self.options.onSpeechActivity {
                         handler(event)
                     }
                 }
@@ -626,12 +630,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
             break
 
         case let .agentResponse(e):
-            // Don't change agent state - let voice activity detection handle it
-            if messages.last?.role == .agent,
-               messages.last?.content == e.response
-            {
-                messages.removeLast()
-            }
             appendAgentMessage(e.response)
             lastAgentEventId = e.eventId
             options.onAgentResponse?(e.response, e.eventId)
@@ -1227,6 +1225,9 @@ public struct ConversationOptions: Sendable {
     /// Controls microphone pipeline behaviour and VAD callbacks.
     public var audioConfiguration: AudioPipelineConfiguration?
 
+    /// Controls LiveKit peer connection behaviour, including ICE policies.
+    public var networkConfiguration: LiveKitNetworkConfiguration
+
     /// Called when a startup-related error occurs
     public var onError: (@Sendable (ConversationError) -> Void)?
 
@@ -1275,6 +1276,7 @@ public struct ConversationOptions: Sendable {
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
+        networkConfiguration: LiveKitNetworkConfiguration = .default,
         onError: (@Sendable (ConversationError) -> Void)? = nil,
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
@@ -1299,6 +1301,7 @@ public struct ConversationOptions: Sendable {
         self.onStartupStateChange = onStartupStateChange
         self.startupConfiguration = startupConfiguration
         self.audioConfiguration = audioConfiguration
+        self.networkConfiguration = networkConfiguration
         self.onError = onError
         self.onSpeechActivity = onSpeechActivity
         self.onAgentResponse = onAgentResponse
@@ -1330,6 +1333,7 @@ extension ConversationOptions {
             onStartupStateChange: onStartupStateChange,
             startupConfiguration: startupConfiguration,
             audioConfiguration: audioConfiguration,
+            networkConfiguration: networkConfiguration,
             onError: onError,
             onSpeechActivity: onSpeechActivity,
         )
@@ -1343,6 +1347,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case authenticationFailed(String)
     case agentTimeout
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
+    case localNetworkPermissionRequired
 
     // Helper methods to create errors with Error types
     public static func connectionFailed(_ error: Error) -> ConversationError {
@@ -1361,6 +1366,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
         case let .authenticationFailed(msg): "Authentication failed: \(msg)"
         case .agentTimeout: "Agent did not join in time."
         case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
+        case .localNetworkPermissionRequired: "Local Network permission is required."
         }
     }
 }

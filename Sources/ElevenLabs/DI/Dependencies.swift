@@ -11,11 +11,12 @@ protocol ConnectionManaging: AnyObject {
     var onAgentDisconnected: (() -> Void)? { get set }
     var room: Room? { get }
     var shouldObserveRoomConnection: Bool { get }
-    var errorHandler: (Error?) -> Void { get set }
+    var errorHandler: (Swift.Error?) -> Void { get set }
 
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
+        networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval,
     ) async throws
 
@@ -29,7 +30,7 @@ protocol ConnectionManaging: AnyObject {
 protocol ConversationDependencyProvider: AnyObject {
     var tokenService: any TokenServicing { get }
     var connectionManager: any ConnectionManaging { get }
-    var errorHandler: (Error?) -> Void { get }
+    var errorHandler: (Swift.Error?) -> Void { get }
 }
 
 /// A minimalistic dependency injection container.
@@ -73,7 +74,7 @@ final class Dependencies: ConversationDependencyProvider {
 
     // MARK: Error
 
-    lazy var errorHandler: (Error?) -> Void = { _ in }
+    lazy var errorHandler: (Swift.Error?) -> Void = { _ in }
 }
 
 /// A property wrapper that injects a dependency from the ``Dependencies`` container.

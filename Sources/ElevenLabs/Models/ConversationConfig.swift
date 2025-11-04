@@ -25,6 +25,9 @@ public struct ConversationConfig: Sendable {
     /// Controls microphone pipeline behaviour and VAD callbacks.
     public var audioConfiguration: AudioPipelineConfiguration?
 
+    /// Controls LiveKit peer connection behaviour, including ICE policies.
+    public var networkConfiguration: LiveKitNetworkConfiguration
+
     /// Called when a startup-related error occurs
     public var onError: (@Sendable (ConversationError) -> Void)?
 
@@ -73,6 +76,7 @@ public struct ConversationConfig: Sendable {
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
+        networkConfiguration: LiveKitNetworkConfiguration = .default,
         onError: (@Sendable (ConversationError) -> Void)? = nil,
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
@@ -97,6 +101,7 @@ public struct ConversationConfig: Sendable {
         self.onStartupStateChange = onStartupStateChange
         self.startupConfiguration = startupConfiguration
         self.audioConfiguration = audioConfiguration
+        self.networkConfiguration = networkConfiguration
         self.onError = onError
         self.onSpeechActivity = onSpeechActivity
         self.onAgentResponse = onAgentResponse
@@ -180,6 +185,7 @@ extension ConversationConfig {
             onStartupStateChange: onStartupStateChange,
             startupConfiguration: startupConfiguration,
             audioConfiguration: audioConfiguration,
+            networkConfiguration: networkConfiguration,
             onError: onError,
             onSpeechActivity: onSpeechActivity,
             onAgentResponse: onAgentResponse,

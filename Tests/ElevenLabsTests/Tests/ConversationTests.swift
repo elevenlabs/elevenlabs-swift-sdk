@@ -8,7 +8,7 @@ final class ConversationTests: XCTestCase {
     private var mockConnectionManager: MockConnectionManager!
     private var mockTokenService: MockTokenService!
     private var dependencyProvider: TestDependencyProvider!
-    private var capturedErrors: [ConversationError] = []
+    private let capturedErrors = ValueRecorder<ConversationError>()
 
     override func setUp() async throws {
         mockConnectionManager = MockConnectionManager()
@@ -19,6 +19,7 @@ final class ConversationTests: XCTestCase {
             connectionManager: mockConnectionManager,
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
+        await capturedErrors.reset()
     }
 
     override func tearDown() async throws {
@@ -26,7 +27,7 @@ final class ConversationTests: XCTestCase {
         mockConnectionManager = nil
         mockTokenService = nil
         dependencyProvider = nil
-        capturedErrors = []
+        await capturedErrors.reset()
     }
 
     @MainActor
@@ -71,7 +72,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertFalse(metrics.agentReadyTimedOut)
         XCTAssertFalse(metrics.agentReadyViaGraceTimeout)
         XCTAssertEqual(conversation.startupMetrics?.total, metrics.total)
-        XCTAssertTrue(capturedErrors.isEmpty)
+        let errorsAfterSuccess = await capturedErrors.values()
+        XCTAssertTrue(errorsAfterSuccess.isEmpty)
     }
 
     @MainActor
@@ -153,7 +155,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -168,7 +170,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .authenticationFailed("Mock authentication failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.tokenFetch, metrics.tokenFetch)
-        XCTAssertEqual(capturedErrors, [.authenticationFailed("Mock authentication failed")])
+        let errorsAfterTokenFailure = await capturedErrors.values()
+        XCTAssertEqual(errorsAfterTokenFailure, [.authenticationFailed("Mock authentication failed")])
     }
 
     func testStartConversationConnectionFailure() async {
@@ -177,7 +180,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -192,7 +195,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.roomConnect, metrics.roomConnect)
-        XCTAssertEqual(capturedErrors, [.connectionFailed("Mock connection failed")])
+        let errorsAfterConnectionFailure = await capturedErrors.values()
+        XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed("Mock connection failed")])
     }
 
     func testStartConversationAgentTimeoutFailure() async {
@@ -214,7 +218,7 @@ final class ConversationTests: XCTestCase {
         await Task.yield()
         mockConnectionManager.timeoutAgentReady()
 
-        await XCTAssertThrowsErrorAsync(try startTask.value) { error in
+        await XCTAssertThrowsErrorAsync(try await startTask.value) { error in
             XCTAssertEqual(error as? ConversationError, .agentTimeout)
         }
 
@@ -223,7 +227,8 @@ final class ConversationTests: XCTestCase {
         }
         XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertEqual(capturedErrors, [.agentTimeout])
+        let errorsAfterAgentTimeout = await capturedErrors.values()
+        XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
 
     func testStartConversationAgentTimeoutAllowedToProceed() async throws {
@@ -251,7 +256,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertTrue(metrics.agentReadyViaGraceTimeout)
         XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent")))
-        XCTAssertTrue(capturedErrors.isEmpty)
+        let errorsAfterGraceTimeout = await capturedErrors.values()
+        XCTAssertTrue(errorsAfterGraceTimeout.isEmpty)
     }
 
     func testStartConversationConversationInitFailure() async {
@@ -260,7 +266,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -273,80 +279,104 @@ final class ConversationTests: XCTestCase {
         }
 
         XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
-        XCTAssertEqual(capturedErrors, [.connectionFailed("Publish failed")])
+        let errorsAfterInitFailure = await capturedErrors.values()
+        XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
 
     func testAgentResponseCallbackTogglesFeedbackAvailability() async throws {
-        var receivedResponses: [(String, Int)] = []
-        var feedbackStates: [Bool] = []
+        let receivedResponses = ValueRecorder<(String, Int)>()
+        let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeOptions { opts in
+        let options = makeOptions(configure: { opts in
             opts.onAgentResponse = { text, eventId in
-                receivedResponses.append((text, eventId))
+                Task { await receivedResponses.append((text, eventId)) }
             }
             opts.onCanSendFeedbackChange = { canSend in
-                feedbackStates.append(canSend)
+                Task { await feedbackStates.append(canSend) }
             }
-        }
+        })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
 
         await conversation._testing_handleIncomingEvent(
-            .agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)),
+            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42))
         )
 
-        XCTAssertEqual(receivedResponses, [("Hello", 42)])
-        XCTAssertEqual(feedbackStates.last, true)
+        // Allow async callbacks to complete
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
-        conversation._testing_setState(.active(.init(agentId: "test")))
-        try await conversation.sendFeedback(.like, eventId: 42)
-        XCTAssertEqual(feedbackStates.last, false)
+        let responsesSnapshot = await receivedResponses.values()
+        XCTAssertEqual(responsesSnapshot.count, 1)
+        XCTAssertEqual(responsesSnapshot.first?.0, "Hello")
+        XCTAssertEqual(responsesSnapshot.first?.1, 42)
+        let initialFeedbackState = await feedbackStates.last()
+        XCTAssertEqual(initialFeedbackState, true)
+
+        conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
+        try await conversation.sendFeedback(FeedbackEvent.Score.like, eventId: 42)
+        
+        // Allow async callbacks to complete
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        
+        let updatedFeedbackState = await feedbackStates.last()
+        XCTAssertEqual(updatedFeedbackState, false)
     }
 
     func testVadScoreCallbackReceivesScores() async {
-        var vadScores: [Double] = []
-        let options = makeOptions { opts in
+        let vadScores = ValueRecorder<Double>()
+        let options = makeOptions(configure: { opts in
             opts.onVadScore = { score in
-                vadScores.append(score)
+                Task { await vadScores.append(score) }
             }
-        }
+        })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
-        await conversation._testing_handleIncomingEvent(.vadScore(VadScoreEvent(vadScore: 0.87)))
+        await conversation._testing_handleIncomingEvent(IncomingEvent.vadScore(VadScoreEvent(vadScore: 0.87)))
 
-        XCTAssertEqual(vadScores, [0.87])
+        let vadSnapshot = await vadScores.values()
+        XCTAssertEqual(vadSnapshot, [0.87])
     }
 
     func testAgentToolResponseCallbackReceivesEvent() async {
-        var capturedToolNames: [String] = []
-        let options = makeOptions { opts in
-            opts.onAgentToolResponse = { event in
-                capturedToolNames.append(event.toolName)
+        let capturedToolNames = ValueRecorder<String>()
+        let options = makeOptions(configure: { opts in
+            opts.onAgentToolResponse = { (event: AgentToolResponseEvent) in
+                Task { await capturedToolNames.append(event.toolName) }
             }
-        }
+        })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
         let toolEvent = AgentToolResponseEvent(toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 10)
 
-        await conversation._testing_handleIncomingEvent(.agentToolResponse(toolEvent))
+        await conversation._testing_handleIncomingEvent(IncomingEvent.agentToolResponse(toolEvent))
 
-        XCTAssertEqual(capturedToolNames, ["end_call"])
+        // Allow async callbacks to complete
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        let toolNames = await capturedToolNames.values()
+        XCTAssertEqual(toolNames, ["end_call"])
     }
 
     func testInterruptionCallbackDisablesFeedback() async {
-        var interruptionIds: [Int] = []
-        var feedbackStates: [Bool] = []
+        let interruptionIds = ValueRecorder<Int>()
+        let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeOptions { opts in
-            opts.onInterruption = { interruptionIds.append($0) }
-            opts.onCanSendFeedbackChange = { feedbackStates.append($0) }
-        }
+        let options = makeOptions(configure: { opts in
+            opts.onInterruption = { id in
+                Task { await interruptionIds.append(id) }
+            }
+            opts.onCanSendFeedbackChange = { canSend in
+                Task { await feedbackStates.append(canSend) }
+            }
+        })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
-        await conversation._testing_handleIncomingEvent(.interruption(InterruptionEvent(eventId: 7)))
+        await conversation._testing_handleIncomingEvent(IncomingEvent.interruption(InterruptionEvent(eventId: 7)))
 
-        XCTAssertEqual(interruptionIds, [7])
-        XCTAssertEqual(feedbackStates.last, false)
+        let interruptionSnapshot = await interruptionIds.values()
+        XCTAssertEqual(interruptionSnapshot, [7])
+        let interruptionFeedbackState = await feedbackStates.last()
+        XCTAssertEqual(interruptionFeedbackState, false)
     }
 
     @MainActor
@@ -414,6 +444,26 @@ private extension XCTestCase {
     }
 }
 
+actor ValueRecorder<Value> {
+    private var storage: [Value] = []
+
+    func append(_ value: Value) {
+        storage.append(value)
+    }
+
+    func reset() {
+        storage.removeAll()
+    }
+
+    func values() -> [Value] {
+        storage
+    }
+
+    func last() -> Value? {
+        storage.last
+    }
+}
+
 private extension ConversationTests {
     func makeOptions(
         startupConfiguration: ConversationStartupConfiguration = .default,
@@ -422,9 +472,13 @@ private extension ConversationTests {
     ) -> ConversationOptions {
         var options = ConversationOptions(
             onStartupStateChange: onStartupStateChange,
-            startupConfiguration: startupConfiguration,
-            onError: { [weak self] error in self?.capturedErrors.append(error) },
+            startupConfiguration: startupConfiguration
         )
+
+        options.onError = { [capturedErrors] error in
+            Task { await capturedErrors.append(error) }
+        }
+
         configure?(&options)
         return options
     }

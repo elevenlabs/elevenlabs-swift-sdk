@@ -49,7 +49,7 @@ final class ConnectionManager: ConnectionManaging {
     private var readyDelegate: ReadyDelegate?
     private var readyStartTime: Date?
     private var lastReadyDetail: AgentReadyDetail?
-    var errorHandler: (Error?) -> Void = { _ in }
+    var errorHandler: (Swift.Error?) -> Void = { _ in }
 
     private struct ReadyAwaiter {
         let id: UUID
@@ -148,6 +148,7 @@ final class ConnectionManager: ConnectionManaging {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
+        networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval = 0.5, // Reduced to 500ms based on test results showing consistent timeouts
     ) async throws {
         resolveReadyAwaiters(with: .timedOut(elapsed: 0))
@@ -156,6 +157,8 @@ final class ConnectionManager: ConnectionManaging {
 
         let room = Room()
         self.room = room
+
+        let connectOptions = networkConfiguration.makeConnectOptions()
 
         // Delegate encapsulates all readiness logic.
         let rd = ReadyDelegate(
@@ -172,11 +175,15 @@ final class ConnectionManager: ConnectionManaging {
         let connectStart = Date()
         do {
             try await room.connect(url: details.serverUrl,
-                                   token: details.participantToken)
+                                   token: details.participantToken,
+                                   connectOptions: connectOptions)
             print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
         } catch {
             print("[ConnectionManager-Timing] LiveKit room.connect failed with error: \(error)")
             errorHandler(error)
+            if LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
+                errorHandler(ConversationError.localNetworkPermissionRequired)
+            }
             throw error
         }
 

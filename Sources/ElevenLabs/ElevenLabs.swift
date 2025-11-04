@@ -20,7 +20,7 @@ import LiveKit
 public enum ElevenLabs {
     // MARK: - Version
 
-    public static let version = "2.0.16"
+    public static let version = "2.0.17"
 
     // MARK: - Configuration
 
@@ -196,6 +196,8 @@ public enum ElevenLabs {
     public typealias AgentState = LiveKit.AgentState
     public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
     public typealias MicrophoneMuteMode = LiveKit.MicrophoneMuteMode
+    public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
+    public typealias IceServer = LiveKit.IceServer
 
     // Re-export audio track types for advanced audio handling
     public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
