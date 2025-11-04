@@ -256,7 +256,7 @@ public extension ElevenLabs {
     }
 
     /// Agent state indicating what the agent is currently doing.
-    public enum AgentState: Sendable, Equatable {
+    enum AgentState: Sendable, Equatable {
         /// Agent is listening to the user
         case listening
         /// Agent is speaking
