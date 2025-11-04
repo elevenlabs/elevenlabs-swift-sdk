@@ -435,7 +435,7 @@ private extension XCTestCase {
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
         line: UInt = #line,
-        errorHandler: (Error) -> Void = { _ in }
+        errorHandler: (Error) -> Void = { _ in },
     ) async {
         do {
             _ = try await expression()
