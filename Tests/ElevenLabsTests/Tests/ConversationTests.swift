@@ -155,7 +155,7 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        guard let conversation = self.conversation else { return }
+        guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
@@ -181,7 +181,7 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        guard let conversation = self.conversation else { return }
+        guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
@@ -244,7 +244,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: options,
             )
         }
 
@@ -272,19 +272,19 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        guard let conversation = self.conversation else { return }
-        
+        guard let conversation else { return }
+
         let startTask = Task {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: options,
             )
         }
-        
+
         // Wait for agent ready, THEN publish will fail
         await Task.yield()
         mockConnectionManager.succeedAgentReady()
-        
+
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
         } errorHandler: { error in
@@ -314,7 +314,7 @@ final class ConversationTests: XCTestCase {
         })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
-        
+
         // Set up mock connection manager with a room so sendFeedback can publish
         mockConnectionManager.room = Room()
 
@@ -454,12 +454,12 @@ final class ConversationTests: XCTestCase {
 
 @MainActor
 private extension XCTestCase {
-    func XCTAssertThrowsErrorAsync<T: Sendable>(
-        _ expression: () async throws -> T,
+    func XCTAssertThrowsErrorAsync(
+        _ expression: () async throws -> some Sendable,
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
         line: UInt = #line,
-        errorHandler: (Error) -> Void = { _ in }
+        errorHandler: (Error) -> Void = { _ in },
     ) async {
         do {
             _ = try await expression()
