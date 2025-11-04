@@ -155,7 +155,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try await conversation.startConversation(
+            try conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -180,7 +180,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try await conversation.startConversation(
+            try conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -218,7 +218,7 @@ final class ConversationTests: XCTestCase {
         await Task.yield()
         mockConnectionManager.timeoutAgentReady()
 
-        await XCTAssertThrowsErrorAsync(try await startTask.value) { error in
+        await XCTAssertThrowsErrorAsync(try startTask.value) { error in
             XCTAssertEqual(error as? ConversationError, .agentTimeout)
         }
 
@@ -266,7 +266,7 @@ final class ConversationTests: XCTestCase {
         let options = makeOptions()
 
         await XCTAssertThrowsErrorAsync(
-            try await conversation.startConversation(
+            try conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 options: options,
             ),
@@ -299,7 +299,7 @@ final class ConversationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
 
         await conversation._testing_handleIncomingEvent(
-            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42))
+            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)),
         )
 
         // Allow async callbacks to complete
@@ -314,10 +314,10 @@ final class ConversationTests: XCTestCase {
 
         conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
         try await conversation.sendFeedback(FeedbackEvent.Score.like, eventId: 42)
-        
+
         // Allow async callbacks to complete
         try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-        
+
         let updatedFeedbackState = await feedbackStates.last()
         XCTAssertEqual(updatedFeedbackState, false)
     }
@@ -472,7 +472,7 @@ private extension ConversationTests {
     ) -> ConversationOptions {
         var options = ConversationOptions(
             onStartupStateChange: onStartupStateChange,
-            startupConfiguration: startupConfiguration
+            startupConfiguration: startupConfiguration,
         )
 
         options.onError = { [capturedErrors] error in

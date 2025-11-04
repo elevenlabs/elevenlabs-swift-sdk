@@ -56,15 +56,14 @@ extension LiveKitNetworkConfiguration {
 
         let policy = resolvedIceTransportPolicy
         #if os(iOS)
-        if policy == .relay {
-            LocalNetworkPermissionMonitor.shared.recordRelayRequested()
-        }
+            if policy == .relay {
+                LocalNetworkPermissionMonitor.shared.recordRelayRequested()
+            }
         #endif
 
         return ConnectOptions(
             iceServers: customIceServers,
-            iceTransportPolicy: policy
+            iceTransportPolicy: policy,
         )
     }
 }
-
