@@ -29,9 +29,15 @@ let package = Package(
                 .product(name: "LiveKit", package: "client-sdk-swift"),
                 .product(name: "Logging", package: "swift-log"),
             ],
+            exclude: [
+                "Protocol/schemas/agent.asyncapi.yaml",
+            ],
             resources: [
                 .process("PrivacyInfo.xcprivacy"),
             ],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
         ),
         .testTarget(
             name: "ElevenLabsTests",

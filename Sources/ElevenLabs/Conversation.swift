@@ -445,10 +445,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
             audioManager.onMutedSpeechActivity = { [weak self] _, event in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    if let handler = options.audioConfiguration?.onSpeechActivity {
+                    if let handler = self.options.audioConfiguration?.onSpeechActivity {
                         handler(event)
                     }
-                    if let handler = options.onSpeechActivity {
+                    if let handler = self.options.onSpeechActivity {
                         handler(event)
                     }
                 }
