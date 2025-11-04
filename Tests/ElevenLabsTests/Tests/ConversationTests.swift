@@ -154,12 +154,12 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+        await XCTAssertThrowsErrorAsync {
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
-            ),
-        ) { error in
+                options: options
+            )
+        } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
         }
 
@@ -179,12 +179,12 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+        await XCTAssertThrowsErrorAsync {
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
-            ),
-        ) { error in
+                options: options
+            )
+        } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
         }
 
@@ -218,7 +218,9 @@ final class ConversationTests: XCTestCase {
         await Task.yield()
         mockConnectionManager.timeoutAgentReady()
 
-        await XCTAssertThrowsErrorAsync(try startTask.value) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .agentTimeout)
         }
 
@@ -265,12 +267,12 @@ final class ConversationTests: XCTestCase {
 
         let options = makeOptions()
 
-        await XCTAssertThrowsErrorAsync(
-            try conversation.startConversation(
+        await XCTAssertThrowsErrorAsync {
+            try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
-            ),
-        ) { error in
+                options: options
+            )
+        } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
         }
 
@@ -428,12 +430,12 @@ final class ConversationTests: XCTestCase {
 
 @MainActor
 private extension XCTestCase {
-    func XCTAssertThrowsErrorAsync(
-        _ expression: @autoclosure () async throws -> some Any,
+    func XCTAssertThrowsErrorAsync<T>(
+        _ expression: () async throws -> T,
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
         line: UInt = #line,
-        _ errorHandler: (Error) -> Void = { _ in },
+        _ errorHandler: (Error) -> Void = { _ in }
     ) async {
         do {
             _ = try await expression()

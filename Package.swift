@@ -37,7 +37,7 @@ let package = Package(
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
-            ]
+            ],
         ),
         .testTarget(
             name: "ElevenLabsTests",
@@ -45,6 +45,9 @@ let package = Package(
                 "ElevenLabs",
                 .product(name: "LiveKit", package: "client-sdk-swift"),
             ],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
         ),
     ],
     swiftLanguageModes: [
