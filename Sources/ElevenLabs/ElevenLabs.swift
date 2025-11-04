@@ -218,9 +218,9 @@ public enum ElevenLabs {
 
 // MARK: - ElevenLabs.Configuration
 
-public extension ElevenLabs {
+extension ElevenLabs {
     /// Global SDK configuration.
-    struct Configuration: Sendable {
+    public struct Configuration: Sendable {
         public var apiEndpoint: URL?
         public var websocketUrl: String?
         public var logLevel: LogLevel
@@ -242,12 +242,12 @@ public extension ElevenLabs {
     }
 
     /// Minimal, per-conversation bootstrap options.
-    struct ConversationBootstrapOptions: Sendable {
+    public struct ConversationBootstrapOptions: Sendable {
         public init() {}
     }
 
     /// Simple log levels.
-    enum LogLevel: Int, Sendable {
+    public enum LogLevel: Int, Sendable {
         case error
         case warning
         case info
@@ -256,7 +256,7 @@ public extension ElevenLabs {
     }
 
     /// Agent state indicating what the agent is currently doing.
-    enum AgentState: Sendable, Equatable {
+    public enum AgentState: Sendable, Equatable {
         /// Agent is listening to the user
         case listening
         /// Agent is speaking

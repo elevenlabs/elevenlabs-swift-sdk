@@ -453,8 +453,8 @@ final class ConversationTests: XCTestCase {
 }
 
 @MainActor
-private extension XCTestCase {
-    func XCTAssertThrowsErrorAsync(
+extension XCTestCase {
+    fileprivate func XCTAssertThrowsErrorAsync(
         _ expression: () async throws -> some Sendable,
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
@@ -490,8 +490,8 @@ actor ValueRecorder<Value> {
     }
 }
 
-private extension ConversationTests {
-    func makeOptions(
+extension ConversationTests {
+    private func makeOptions(
         startupConfiguration: ConversationStartupConfiguration = .default,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         configure: ((inout ConversationOptions) -> Void)? = nil,

@@ -9,9 +9,11 @@ final class ConversationIntegrationTests: XCTestCase {
         // For now, we'll test the basic flow structure
 
         let config = ConversationConfig(
-            agentOverrides: AgentOverrides(prompt: "You are a test assistant",
-                                           firstMessage: "Hello! How can I help you today?",
-                                           language: Language.english),
+            agentOverrides: AgentOverrides(
+                prompt: "You are a test assistant",
+                firstMessage: "Hello! How can I help you today?",
+                language: Language.english,
+            ),
         )
 
         // In a real integration test environment:

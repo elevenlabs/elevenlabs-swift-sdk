@@ -97,7 +97,11 @@ actor TranscriptionStreamReceiver: MessageReceiver {
 
     /// Aggregates the incoming text into a message, storing the partial content in the `partialMessages` dictionary.
     /// - Note: When the message is finalized, or a new message is started, the dictionary is purged to limit memory usage.
-    private func processIncoming(partialMessage message: String, reader: TextStreamReader, participantIdentity: Participant.Identity) -> ReceivedMessage {
+    private func processIncoming(
+        partialMessage message: String,
+        reader: TextStreamReader,
+        participantIdentity: Participant.Identity,
+    ) -> ReceivedMessage {
         let segmentID = reader.info.attributes[TranscriptionAttributes.segment.rawValue] ?? reader.info.id
         let participantID = participantIdentity
         let partialID = PartialMessageID(segmentID: segmentID, participantID: participantID)
@@ -139,7 +143,8 @@ actor TranscriptionStreamReceiver: MessageReceiver {
         let newOrUpdatedMessage = ReceivedMessage(
             id: segmentID,
             timestamp: timestamp,
-            content: participantIdentity == room.localParticipant.identity ? .userTranscript(updatedContent) : .agentTranscript(updatedContent),
+            content: participantIdentity == room.localParticipant
+                .identity ? .userTranscript(updatedContent) : .agentTranscript(updatedContent),
         )
 
         return newOrUpdatedMessage

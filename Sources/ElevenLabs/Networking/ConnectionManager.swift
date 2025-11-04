@@ -174,9 +174,11 @@ final class ConnectionManager: ConnectionManaging {
 
         let connectStart = Date()
         do {
-            try await room.connect(url: details.serverUrl,
-                                   token: details.participantToken,
-                                   connectOptions: connectOptions)
+            try await room.connect(
+                url: details.serverUrl,
+                token: details.participantToken,
+                connectOptions: connectOptions,
+            )
             print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
         } catch {
             print("[ConnectionManager-Timing] LiveKit room.connect failed with error: \(error)")
@@ -224,9 +226,9 @@ final class ConnectionManager: ConnectionManaging {
 
 // MARK: – Ready‑detection delegate
 
-private extension ConnectionManager {
+extension ConnectionManager {
     /// Internal delegate that guards the *agent‑ready* handshake.
-    final class ReadyDelegate: RoomDelegate, @unchecked Sendable {
+    fileprivate final class ReadyDelegate: RoomDelegate, @unchecked Sendable {
         // MARK: – FSM
 
         private enum Stage { case idle, waitingForSubscription, ready }
@@ -257,10 +259,11 @@ private extension ConnectionManager {
 
         // MARK: – Init
 
-        init(graceTimeout: TimeInterval,
-             onReady: @escaping (ReadySource) -> Void,
-             onDisconnected: @escaping () -> Void)
-        {
+        init(
+            graceTimeout: TimeInterval,
+            onReady: @escaping (ReadySource) -> Void,
+            onDisconnected: @escaping () -> Void,
+        ) {
             self.graceTimeout = graceTimeout
             self.onReady = onReady
             self.onDisconnected = onDisconnected
@@ -300,10 +303,11 @@ private extension ConnectionManager {
             startAudioTrackSubscriptionPolling(room: room)
         }
 
-        func room(_: Room,
-                  participant _: RemoteParticipant,
-                  didSubscribeTrack publication: RemoteTrackPublication)
-        {
+        func room(
+            _: Room,
+            participant _: RemoteParticipant,
+            didSubscribeTrack publication: RemoteTrackPublication,
+        ) {
             guard stage == .waitingForSubscription else { return }
             if publication.kind == .audio {
                 print("[ReadyDelegate-Timing] Audio track subscribed - marking ready!")
@@ -311,9 +315,10 @@ private extension ConnectionManager {
             }
         }
 
-        func room(_ room: Room,
-                  participantDidDisconnect _: RemoteParticipant)
-        {
+        func room(
+            _ room: Room,
+            participantDidDisconnect _: RemoteParticipant,
+        ) {
             guard room.remoteParticipants.isEmpty else { return }
             reset()
             onDisconnected()
