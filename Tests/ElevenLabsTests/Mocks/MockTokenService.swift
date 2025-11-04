@@ -1,7 +1,8 @@
 @testable import ElevenLabs
 import Foundation
 
-final class MockTokenService: @unchecked Sendable {
+@MainActor
+final class MockTokenService {
     enum Scenario {
         case success
         case authenticationFailed(String)

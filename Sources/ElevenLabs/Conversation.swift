@@ -633,7 +633,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             appendAgentMessage(e.response)
             lastAgentEventId = e.eventId
             options.onAgentResponse?(e.response, e.eventId)
-            if lastFeedbackSubmittedEventId == nil || e.eventId > (lastFeedbackSubmittedEventId ?? 0) {
+            if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
                 options.onCanSendFeedbackChange?(true)
             }
 

@@ -192,8 +192,6 @@ public enum ElevenLabs {
     // MARK: - Re-exports
 
     // Protocol event types are already public from their respective files
-    // Re-export AgentState from LiveKit for SDK users
-    public typealias AgentState = LiveKit.AgentState
     public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
     public typealias MicrophoneMuteMode = LiveKit.MicrophoneMuteMode
     public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
@@ -255,5 +253,13 @@ public extension ElevenLabs {
         case info
         case debug
         case trace
+    }
+
+    /// Agent state indicating what the agent is currently doing.
+    public enum AgentState: Sendable, Equatable {
+        /// Agent is listening to the user
+        case listening
+        /// Agent is speaking
+        case speaking
     }
 }
