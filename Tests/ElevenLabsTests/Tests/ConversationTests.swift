@@ -157,7 +157,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: options,
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
@@ -182,7 +182,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: options,
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
@@ -270,7 +270,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: options,
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
@@ -430,12 +430,12 @@ final class ConversationTests: XCTestCase {
 
 @MainActor
 private extension XCTestCase {
-    func XCTAssertThrowsErrorAsync<T>(
-        _ expression: () async throws -> T,
+    func XCTAssertThrowsErrorAsync(
+        _ expression: () async throws -> some Any,
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
         line: UInt = #line,
-        _ errorHandler: (Error) -> Void = { _ in }
+        _ errorHandler: (Error) -> Void = { _ in },
     ) async {
         do {
             _ = try await expression()
