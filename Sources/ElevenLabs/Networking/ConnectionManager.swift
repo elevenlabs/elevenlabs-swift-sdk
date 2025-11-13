@@ -415,7 +415,7 @@ private final class DataChannelDelegate: RoomDelegate, @unchecked Sendable {
 
     // MARK: – Delegate
 
-    nonisolated func room(_: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String) {
+    nonisolated func room(_: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType: EncryptionType) {
         // Only process messages from the agent
         guard participant != nil else {
             print("[DataChannelReceiver] Received data but no participant, ignoring")
