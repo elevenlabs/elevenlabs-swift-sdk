@@ -46,9 +46,9 @@ enum EventParser {
 
         case "audio":
             if let event = json["audio_event"] as? [String: Any],
-               let audioBase64 = event["audio_base_64"] as? String,
                let eventId = event["event_id"] as? Int
             {
+                let audioBase64 = (event["audio_base_64"] as? String) ?? ""
                 var alignment: AudioAlignment? = nil
                 if let alignmentDict = event["alignment"] as? [String: Any],
                    let chars = alignmentDict["chars"] as? [String],
