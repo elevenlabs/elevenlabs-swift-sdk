@@ -172,6 +172,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .authenticationFailed("Mock authentication failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.tokenFetch, metrics.tokenFetch)
+        await Task.yield()
         let errorsAfterTokenFailure = await capturedErrors.values()
         XCTAssertEqual(errorsAfterTokenFailure, [.authenticationFailed("Mock authentication failed")])
     }
@@ -198,6 +199,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.roomConnect, metrics.roomConnect)
+        await Task.yield()
         let errorsAfterConnectionFailure = await capturedErrors.values()
         XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed("Mock connection failed")])
     }
@@ -233,6 +235,7 @@ final class ConversationTests: XCTestCase {
         }
         XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertEqual(conversation.state, .idle)
+        await Task.yield()
         let errorsAfterAgentTimeout = await capturedErrors.values()
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
@@ -296,6 +299,7 @@ final class ConversationTests: XCTestCase {
         }
 
         XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
+        await Task.yield()
         let errorsAfterInitFailure = await capturedErrors.values()
         XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
