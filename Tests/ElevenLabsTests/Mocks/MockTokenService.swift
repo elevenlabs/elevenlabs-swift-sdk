@@ -18,7 +18,7 @@ final class MockTokenService {
             serverUrl: "wss://livekit.rtc.elevenlabs.io",
             roomName: "test-room",
             participantName: "test-user",
-            participantToken: "mock-token",
+            participantToken: "mock-token"
         )
     }
 }

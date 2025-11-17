@@ -9,7 +9,7 @@ final class TestDependencyProvider: ConversationDependencyProvider {
     init(
         tokenService: any TokenServicing,
         connectionManager: any ConnectionManaging,
-        errorHandler: @Sendable @escaping (Swift.Error?) -> Void = { _ in },
+        errorHandler: @Sendable @escaping (Swift.Error?) -> Void = { _ in }
     ) {
         self.tokenService = tokenService
         self.connectionManager = connectionManager

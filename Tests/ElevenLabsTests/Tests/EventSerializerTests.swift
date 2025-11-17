@@ -4,7 +4,7 @@ import XCTest
 final class EventSerializerTests: XCTestCase {
     func testSerializeUserMessage() throws {
         let event = OutgoingEvent.userMessage(
-            UserMessageEvent(text: "Hello agent"),
+            UserMessageEvent(text: "Hello agent")
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -28,8 +28,8 @@ final class EventSerializerTests: XCTestCase {
             ClientToolResultEvent(
                 toolCallId: "tool123",
                 result: "Sunny, 25°C",
-                isError: false,
-            ),
+                isError: false
+            )
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -48,8 +48,8 @@ final class EventSerializerTests: XCTestCase {
             ClientToolResultEvent(
                 toolCallId: "tool456",
                 result: dictResult,
-                isError: false,
-            ),
+                isError: false
+            )
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -72,8 +72,8 @@ final class EventSerializerTests: XCTestCase {
             ClientToolResultEvent(
                 toolCallId: "tool789",
                 result: 42,
-                isError: false,
-            ),
+                isError: false
+            )
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -98,7 +98,7 @@ final class EventSerializerTests: XCTestCase {
     func testSerializeConversationInit() throws {
         let config = ConversationConfig()
         let event = OutgoingEvent.conversationInit(
-            ConversationInitEvent(config: config),
+            ConversationInitEvent(config: config)
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -109,7 +109,7 @@ final class EventSerializerTests: XCTestCase {
 
     func testSerializeContextualUpdate() throws {
         let event = OutgoingEvent.contextualUpdate(
-            ContextualUpdateEvent(text: "Updated context"),
+            ContextualUpdateEvent(text: "Updated context")
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -121,7 +121,7 @@ final class EventSerializerTests: XCTestCase {
 
     func testSerializeFeedback() throws {
         let event = OutgoingEvent.feedback(
-            FeedbackEvent(score: .like, eventId: 123),
+            FeedbackEvent(score: .like, eventId: 123)
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
@@ -134,7 +134,7 @@ final class EventSerializerTests: XCTestCase {
 
     func testSerializeUserAudio() throws {
         let event = OutgoingEvent.userAudio(
-            UserAudioEvent(audioChunk: "base64AudioData"),
+            UserAudioEvent(audioChunk: "base64AudioData")
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)

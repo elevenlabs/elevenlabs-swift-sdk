@@ -43,12 +43,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("✅ onError callback received: \(error)")
                 Task { await collector.addError(error) }
                 errorExpectation.fulfill()
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
@@ -56,7 +56,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent_id_12345"),
-                options: options,
+                options: options
             )
             XCTFail("Should have thrown an error")
         } catch {
@@ -91,7 +91,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(
             agentReadyTimeout: 10.0, // Increased from default 3.0
             initRetryDelays: [0, 0.5, 1.0, 2.0], // More retry attempts
-            failIfAgentNotReady: false,
+            failIfAgentNotReady: false
         )
 
         // Use automatic network strategy for faster test connections (allows all connection types)
@@ -111,19 +111,19 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             onError: { error in
                 print("❌ Unexpected error in success test: \(error)")
                 Task { await collector.addError(error) }
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options,
+                options: options
             )
 
             await fulfillment(of: [readyExpectation], timeout: 15.0)
@@ -171,7 +171,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(
             agentReadyTimeout: 10.0,
             initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false,
+            failIfAgentNotReady: false
         )
 
         // Use automatic network strategy for faster test connections
@@ -186,18 +186,18 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             onError: { error in
                 print("❌ Error reported: \(error)")
                 Task { await collector.addError(error) }
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
         try await conversation.startConversation(
             auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-            options: options,
+            options: options
         )
 
         await fulfillment(of: [readyExpectation], timeout: 15.0)
@@ -229,7 +229,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(
             agentReadyTimeout: 10.0,
             initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false,
+            failIfAgentNotReady: false
         )
 
         // Use automatic network strategy for faster test connections
@@ -246,18 +246,18 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 networkConfiguration: networkConfig,
                 onError: { error in
                     print("  ❌ Error: \(error)")
-                },
+                }
             )
 
             let conversation = Conversation(
                 dependencies: Task { Dependencies.shared },
-                options: options,
+                options: options
             )
 
             do {
                 try await conversation.startConversation(
                     auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                    options: options,
+                    options: options
                 )
 
                 print("  ✅ Connection \(attempt) successful")
@@ -293,12 +293,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             },
             onError: { error in
                 print("❌ Error: \(error)")
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
@@ -306,7 +306,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent"),
-                options: options,
+                options: options
             )
         } catch {
             // Expected
@@ -343,12 +343,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("❌ Token provider error: \(error)")
                 Task { await collector.addError(error) }
                 errorExpectation.fulfill()
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
@@ -357,10 +357,10 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             try await conversation.startConversation(
                 auth: .customTokenProvider {
                     throw NSError(domain: "TestError", code: 500, userInfo: [
-                        NSLocalizedDescriptionKey: "Custom token provider failed",
+                        NSLocalizedDescriptionKey: "Custom token provider failed"
                     ])
                 },
-                options: options,
+                options: options
             )
             XCTFail("Should have thrown error")
         } catch {
@@ -387,12 +387,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             onError: { error in
                 print("❌ Network error: \(error)")
                 Task { await collector.addError(error) }
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
@@ -400,7 +400,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options,
+                options: options
             )
             print("✅ Connection succeeded (network available)")
             await conversation.endConversation()
@@ -435,7 +435,7 @@ extension ErrorHandlingIntegrationTests {
         let startupConfig = ConversationStartupConfiguration(
             agentReadyTimeout: 10.0,
             initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false,
+            failIfAgentNotReady: false
         )
 
         // Use automatic network strategy for faster test connections
@@ -468,12 +468,12 @@ extension ErrorHandlingIntegrationTests {
                 Task {
                     await errorCollector.addError(error)
                 }
-            },
+            }
         )
 
         let conversation = Conversation(
             dependencies: Task { Dependencies.shared },
-            options: options,
+            options: options
         )
         self.conversation = conversation
 
@@ -482,7 +482,7 @@ extension ErrorHandlingIntegrationTests {
         do {
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options,
+                options: options
             )
 
             print("\n✅ CONNECTION SUCCESSFUL")

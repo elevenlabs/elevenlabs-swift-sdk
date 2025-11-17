@@ -34,7 +34,7 @@ final class MockConnectionManager: ConnectionManaging {
         details: TokenService.ConnectionDetails,
         enableMic _: Bool,
         networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval,
+        graceTimeout: TimeInterval
     ) async throws {
         connectCallCount += 1
         lastConnectionDetails = details

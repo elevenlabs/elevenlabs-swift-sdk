@@ -20,7 +20,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         let config = ElevenLabs.Configuration(
             apiEndpoint: URL(string: "https://custom.api.com"),
             logLevel: .debug,
-            debugMode: true,
+            debugMode: true
         )
 
         XCTAssertEqual(config.apiEndpoint, URL(string: "https://custom.api.com"))
@@ -33,7 +33,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         let config = ElevenLabs.Configuration(
             apiEndpoint: URL(string: "https://test.api.com"),
             logLevel: .info,
-            debugMode: false,
+            debugMode: false
         )
 
         ElevenLabs.configure(config)
@@ -48,7 +48,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         do {
             let conversation = try await ElevenLabs.startConversation(
                 agentId: "test-agent-123",
-                config: config,
+                config: config
             )
 
             XCTAssertNotNil(conversation)
@@ -65,7 +65,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         do {
             let conversation = try await ElevenLabs.startConversation(
                 conversationToken: "test-token-123",
-                config: config,
+                config: config
             )
 
             XCTAssertNotNil(conversation)
@@ -84,7 +84,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         do {
             let conversation = try await ElevenLabs.startConversation(
                 tokenProvider: tokenProvider,
-                config: config,
+                config: config
             )
 
             XCTAssertNotNil(conversation)

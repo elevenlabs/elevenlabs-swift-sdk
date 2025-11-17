@@ -16,7 +16,7 @@ final class ConversationTests: XCTestCase {
         mockTokenService = MockTokenService()
         dependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
-            connectionManager: mockConnectionManager,
+            connectionManager: mockConnectionManager
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
         await capturedErrors.reset()
@@ -45,14 +45,14 @@ final class ConversationTests: XCTestCase {
                 if case .active = state {
                     stateExpectation.fulfill()
                 }
-            },
+            }
         )
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
-                options: options,
+                options: options
             )
         }
 
@@ -159,7 +159,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
@@ -185,7 +185,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
@@ -206,7 +206,7 @@ final class ConversationTests: XCTestCase {
         let config = ConversationStartupConfiguration(
             agentReadyTimeout: 0.05,
             initRetryDelays: [0],
-            failIfAgentNotReady: true,
+            failIfAgentNotReady: true
         )
 
         let options = makeOptions(startupConfiguration: config)
@@ -215,7 +215,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
         }
 
@@ -244,7 +244,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
         }
 
@@ -277,7 +277,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options,
+                options: options
             )
         }
 
@@ -319,7 +319,7 @@ final class ConversationTests: XCTestCase {
         mockConnectionManager.room = Room()
 
         await conversation._testing_handleIncomingEvent(
-            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)),
+            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42))
         )
 
         // Allow async callbacks to complete
@@ -459,7 +459,7 @@ extension XCTestCase {
         _ message: @autoclosure () -> String = "",
         file: StaticString = #filePath,
         line: UInt = #line,
-        errorHandler: (Error) -> Void = { _ in },
+        errorHandler: (Error) -> Void = { _ in }
     ) async {
         do {
             _ = try await expression()
@@ -494,11 +494,11 @@ extension ConversationTests {
     private func makeOptions(
         startupConfiguration: ConversationStartupConfiguration = .default,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
-        configure: ((inout ConversationOptions) -> Void)? = nil,
+        configure: ((inout ConversationOptions) -> Void)? = nil
     ) -> ConversationOptions {
         var options = ConversationOptions(
             onStartupStateChange: onStartupStateChange,
-            startupConfiguration: startupConfiguration,
+            startupConfiguration: startupConfiguration
         )
 
         options.onError = { [capturedErrors] error in
