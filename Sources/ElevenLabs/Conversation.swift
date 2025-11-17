@@ -621,8 +621,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
     private func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
-            // Don't change agent state - let voice activity detection handle it
             appendUserTranscript(e.transcript)
+            // After receiving a user transcript, the agent will typically think before responding
+            agentState = .thinking
             options.onUserTranscript?(e.transcript, e.eventId)
 
         case .tentativeAgentResponse:
@@ -679,7 +680,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         case let .agentToolResponse(toolResponse):
             // Agent tool response is available in the event stream
-            // This can be used to track tool executions by the agent
+            agentState = .listening
 
             if toolResponse.toolName == "end_call" {
                 Task {
@@ -687,6 +688,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 }
             }
             options.onAgentToolResponse?(toolResponse)
+        
+        case let .agentToolRequest(toolRequest):
+            // Forward agent tool request to consumer
+            // Switch to thinking while the agent performs the tool call
+            agentState = .thinking
+            options.onAgentToolRequest?(toolRequest)
 
         case .tentativeUserTranscript:
             // Tentative user transcript (in-progress transcription)
@@ -1246,6 +1253,9 @@ public struct ConversationOptions: Sendable {
 
     /// Called when the agent issues a tool response.
     public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
+    
+    /// Called when the agent requests a tool execution.
+    public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
 
     /// Called when the agent detects an interruption.
     public var onInterruption: (@Sendable (_ eventId: Int) -> Void)?
@@ -1282,6 +1292,7 @@ public struct ConversationOptions: Sendable {
         onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
         onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
+        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
         onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
@@ -1307,6 +1318,7 @@ public struct ConversationOptions: Sendable {
         self.onUserTranscript = onUserTranscript
         self.onConversationMetadata = onConversationMetadata
         self.onAgentToolResponse = onAgentToolResponse
+        self.onAgentToolRequest = onAgentToolRequest
         self.onInterruption = onInterruption
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment

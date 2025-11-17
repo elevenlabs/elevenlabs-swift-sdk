@@ -48,6 +48,9 @@ public struct ConversationConfig: Sendable {
 
     /// Called when the agent emits a tool response event.
     public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
+    
+    /// Called when the agent requests a tool execution.
+    public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
 
     /// Called when the agent detects an interruption.
     public var onInterruption: (@Sendable (_ eventId: Int) -> Void)?
@@ -84,6 +87,7 @@ public struct ConversationConfig: Sendable {
         onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
         onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
+        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
         onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
@@ -109,6 +113,7 @@ public struct ConversationConfig: Sendable {
         self.onUserTranscript = onUserTranscript
         self.onConversationMetadata = onConversationMetadata
         self.onAgentToolResponse = onAgentToolResponse
+        self.onAgentToolRequest = onAgentToolRequest
         self.onInterruption = onInterruption
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
@@ -193,6 +198,7 @@ extension ConversationConfig {
             onUserTranscript: onUserTranscript,
             onConversationMetadata: onConversationMetadata,
             onAgentToolResponse: onAgentToolResponse,
+            onAgentToolRequest: onAgentToolRequest,
             onInterruption: onInterruption,
             onVadScore: onVadScore,
             onAudioAlignment: onAudioAlignment,

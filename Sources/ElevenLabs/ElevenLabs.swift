@@ -261,5 +261,7 @@ extension ElevenLabs {
         case listening
         /// Agent is speaking
         case speaking
+        /// Agent is thinking (e.g. preparing a tool call)
+        case thinking
     }
 }

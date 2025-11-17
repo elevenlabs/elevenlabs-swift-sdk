@@ -123,6 +123,9 @@ extension DataChannelReceiver: RoomDelegate {
             case let .clientToolCall(toolCallEvent):
                 handleClientToolCall(toolCallEvent)
 
+            case let .agentToolRequest(agentToolRequestEvent):
+                handleAgentToolRequest(agentToolRequestEvent)
+
             case let .agentToolResponse(toolResponseEvent):
                 handleAgentToolResponse(toolResponseEvent)
 
@@ -216,6 +219,13 @@ extension DataChannelReceiver: RoomDelegate {
     private func handleClientToolCall(_ event: ClientToolCallEvent) {
         logger.info("Received client tool call: \(event.toolName) (ID: \(event.toolCallId))")
         // Tool calls are available in the event stream
+    }
+
+    private func handleAgentToolRequest(_ event: AgentToolRequestEvent) {
+        logger.info(
+            "Received agent tool request: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType))"
+        )
+        // Agent tool requests are available in the event stream
     }
 
     private func handleAgentToolResponse(_ event: AgentToolResponseEvent) {
