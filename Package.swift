@@ -1,5 +1,5 @@
-// swift-tools-version:6.1
-// (Xcode16.1+)
+// swift-tools-version:5.9
+// Swift 5.9+ (Xcode 15.0+)
 
 import PackageDescription
 
@@ -49,9 +49,5 @@ let package = Package(
                 .enableUpcomingFeature("StrictConcurrency"),
             ],
         ),
-    ],
-    swiftLanguageModes: [
-        .v5,
-        .v6,
-    ],
+    ]
 )

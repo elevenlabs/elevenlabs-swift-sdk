@@ -100,7 +100,7 @@ actor TranscriptionStreamReceiver: MessageReceiver {
     private func processIncoming(
         partialMessage message: String,
         reader: TextStreamReader,
-        participantIdentity: Participant.Identity,
+        participantIdentity: Participant.Identity
     ) -> ReceivedMessage {
         let segmentID = reader.info.attributes[TranscriptionAttributes.segment.rawValue] ?? reader.info.id
         let participantID = participantIdentity
@@ -130,7 +130,7 @@ actor TranscriptionStreamReceiver: MessageReceiver {
             partialMessages[partialID] = PartialMessage(
                 content: updatedContent,
                 timestamp: timestamp,
-                streamID: currentStreamID,
+                streamID: currentStreamID
             )
             cleanupPreviousTurn(participantIdentity, exceptSegmentID: segmentID)
         }
@@ -144,7 +144,7 @@ actor TranscriptionStreamReceiver: MessageReceiver {
             id: segmentID,
             timestamp: timestamp,
             content: participantIdentity == room.localParticipant
-                .identity ? .userTranscript(updatedContent) : .agentTranscript(updatedContent),
+                .identity ? .userTranscript(updatedContent) : .agentTranscript(updatedContent)
         )
 
         return newOrUpdatedMessage

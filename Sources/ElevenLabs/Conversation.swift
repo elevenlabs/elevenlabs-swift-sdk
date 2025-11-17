@@ -71,7 +71,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     init(
         dependencies: Task<Dependencies, Never>,
-        options: ConversationOptions = .default,
+        options: ConversationOptions = .default
     ) {
         dependenciesTask = dependencies
         dependencyProvider = nil
@@ -81,7 +81,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     init(
         dependencyProvider: any ConversationDependencyProvider,
-        options: ConversationOptions = .default,
+        options: ConversationOptions = .default
     ) {
         self.dependencyProvider = dependencyProvider
         dependenciesTask = nil
@@ -101,7 +101,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         with agentId: String,
-        options: ConversationOptions = .default,
+        options: ConversationOptions = .default
     ) async throws {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         try await startConversation(auth: authConfig, options: options)
@@ -113,7 +113,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         auth: ElevenLabsConfiguration,
-        options: ConversationOptions = .default,
+        options: ConversationOptions = .default
     ) async throws {
         guard state == .idle || state.isEnded else {
             throw ConversationError.alreadyActive
@@ -195,7 +195,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 details: connDetails,
                 enableMic: !options.conversationOverrides.textOnly,
                 networkConfiguration: options.networkConfiguration,
-                graceTimeout: options.startupConfiguration.agentReadyTimeout,
+                graceTimeout: options.startupConfiguration.agentReadyTimeout
             )
             metrics.roomConnect = Date().timeIntervalSince(connectionStart)
 
@@ -219,7 +219,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         updateStartupState(.waitingForAgent(timeout: options.startupConfiguration.agentReadyTimeout))
 
         let agentOutcome = await connectionManager.waitForAgentReady(
-            timeout: options.startupConfiguration.agentReadyTimeout,
+            timeout: options.startupConfiguration.agentReadyTimeout
         )
 
         let agentReport: ConversationAgentReadyReport
@@ -230,7 +230,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             agentReport = ConversationAgentReadyReport(
                 elapsed: detail.elapsed,
                 viaGraceTimeout: detail.viaGraceTimeout,
-                timedOut: false,
+                timedOut: false
             )
         case let .timedOut(elapsed):
             metrics.agentReady = elapsed
@@ -238,7 +238,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             agentReport = ConversationAgentReadyReport(
                 elapsed: elapsed,
                 viaGraceTimeout: false,
-                timedOut: true,
+                timedOut: true
             )
             if options.startupConfiguration.failIfAgentNotReady {
                 metrics.total = Date().timeIntervalSince(startTime)
@@ -256,7 +256,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         if bufferMilliseconds > 0 {
             metrics.agentReadyBuffer = bufferMilliseconds / 1000
             print(
-                "[ElevenLabs-Timing] Adding \(Int(bufferMilliseconds))ms buffer for agent conversation handler readiness...",
+                "[ElevenLabs-Timing] Adding \(Int(bufferMilliseconds))ms buffer for agent conversation handler readiness..."
             )
             try? await Task.sleep(nanoseconds: UInt64(bufferMilliseconds * 1_000_000))
         }
@@ -264,7 +264,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         do {
             try await sendConversationInitWithRetry(
                 config: options.toConversationConfig(),
-                metrics: &metrics,
+                metrics: &metrics
             )
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
@@ -368,7 +368,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     {
         guard state.isActive else { throw ConversationError.notConnected }
         let toolResult = try ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError,
+            toolCallId: toolCallId, result: result, isError: isError
         )
         let event = OutgoingEvent.clientToolResult(toolResult)
         try await publish(event)
@@ -462,7 +462,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     private func normalizeConversationError(
         _ error: Error,
-        default defaultError: (Error) -> ConversationError,
+        default defaultError: (Error) -> ConversationError
     ) -> ConversationError {
         if let conversationError = error as? ConversationError {
             return conversationError
@@ -810,7 +810,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed > timeout {
                 print(
-                    "[ElevenLabs-Timing] System readiness timeout after \(String(format: "%.3f", elapsed))s",
+                    "[ElevenLabs-Timing] System readiness timeout after \(String(format: "%.3f", elapsed))s"
                 )
                 return false
             }
@@ -825,7 +825,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Check 1: Room connection state
             guard room.connectionState == .connected else {
                 print(
-                    "[ElevenLabs-Timing] Attempt \(attempt): Room not connected (\(room.connectionState))",
+                    "[ElevenLabs-Timing] Attempt \(attempt): Room not connected (\(room.connectionState))"
                 )
                 try? await Task.sleep(nanoseconds: pollInterval)
                 continue
@@ -858,7 +858,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // This is a reasonable assumption since LiveKit handles data channel setup automatically
 
             print(
-                "[ElevenLabs-Timing] ✅ System ready after \(String(format: "%.3f", elapsed))s (attempt \(attempt))",
+                "[ElevenLabs-Timing] ✅ System ready after \(String(format: "%.3f", elapsed))s (attempt \(attempt))"
             )
             print("[ElevenLabs-Timing]   - Room: connected")
             print("[ElevenLabs-Timing]   - Remote participants: \(room.remoteParticipants.count)")
@@ -869,14 +869,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         let elapsed = Date().timeIntervalSince(startTime)
         print(
-            "[ElevenLabs-Timing] System readiness check exhausted after \(String(format: "%.3f", elapsed))s",
+            "[ElevenLabs-Timing] System readiness check exhausted after \(String(format: "%.3f", elapsed))s"
         )
         return false
     }
 
     private func sendConversationInitWithRetry(
         config: ConversationConfig,
-        metrics: inout ConversationStartupMetrics,
+        metrics: inout ConversationStartupMetrics
     ) async throws {
         let delays = options.startupConfiguration.initRetryDelays.isEmpty
             ? [0]
@@ -917,8 +917,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .user,
                 content: text,
-                timestamp: Date(),
-            ),
+                timestamp: Date()
+            )
         )
     }
 
@@ -928,8 +928,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .agent,
                 content: text,
-                timestamp: Date(),
-            ),
+                timestamp: Date()
+            )
         )
     }
 
@@ -940,8 +940,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .user,
                 content: text,
-                timestamp: Date(),
-            ),
+                timestamp: Date()
+            )
         )
     }
 
@@ -951,8 +951,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .agent,
                 content: text,
-                timestamp: Date(),
-            ),
+                timestamp: Date()
+            )
         )
     }
 
@@ -963,7 +963,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: UUID().uuidString,
                 role: .agent,
                 content: event.text,
-                timestamp: Date(),
+                timestamp: Date()
             )
             currentStreamingMessage = newMessage
             messages.append(newMessage)
@@ -980,7 +980,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 id: streamingMessage.id,
                 role: .agent,
                 content: updatedContent,
-                timestamp: streamingMessage.timestamp,
+                timestamp: streamingMessage.timestamp
             )
             currentStreamingMessage = updatedMessage
             messages.append(updatedMessage)
@@ -994,7 +994,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                         id: streamingMessage.id,
                         role: .agent,
                         content: finalContent,
-                        timestamp: streamingMessage.timestamp,
+                        timestamp: streamingMessage.timestamp
                     )
                     messages.append(finalMessage)
                 }
@@ -1008,7 +1008,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
 extension Conversation {
     public nonisolated func room(
-        _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
+        _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
         if participant is RemoteParticipant {
             Task { @MainActor in
@@ -1033,7 +1033,7 @@ extension Conversation {
 
 extension Conversation: ParticipantDelegate {
     public nonisolated func participant(
-        _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool,
+        _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
         if participant is RemoteParticipant {
             Task { @MainActor in
@@ -1060,7 +1060,7 @@ private final class ConversationDataDelegate: RoomDelegate, @unchecked Sendable 
     }
 
     func room(
-        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
+        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data, forTopic _: String
     ) {
         onData(data)
     }
@@ -1136,7 +1136,7 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
         agentReadyTimedOut: Bool = false,
         agentReadyBuffer: TimeInterval? = nil,
         conversationInit: TimeInterval? = nil,
-        conversationInitAttempts: Int = 0,
+        conversationInitAttempts: Int = 0
     ) {
         self.total = total
         self.tokenFetch = tokenFetch
@@ -1188,7 +1188,7 @@ public struct ConversationStartupConfiguration: Sendable, Equatable {
     public init(
         agentReadyTimeout: TimeInterval = 3.0,
         initRetryDelays: [TimeInterval] = [0, 0.2, 0.5],
-        failIfAgentNotReady: Bool = false,
+        failIfAgentNotReady: Bool = false
     ) {
         self.agentReadyTimeout = agentReadyTimeout
         self.initRetryDelays = initRetryDelays
@@ -1286,7 +1286,7 @@ public struct ConversationOptions: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
-        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil
     ) {
         self.conversationOverrides = conversationOverrides
         self.agentOverrides = agentOverrides
@@ -1333,7 +1333,7 @@ extension ConversationOptions {
             audioConfiguration: audioConfiguration,
             networkConfiguration: networkConfiguration,
             onError: onError,
-            onSpeechActivity: onSpeechActivity,
+            onSpeechActivity: onSpeechActivity
         )
     }
 }

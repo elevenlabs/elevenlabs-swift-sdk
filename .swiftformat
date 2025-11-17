@@ -16,3 +16,7 @@
 --wrapparameters before-first
 --wrapcollections before-first
 
+# Disable trailing commas for Swift 5.9+ compatibility
+# Trailing commas are only supported in Swift 6.1+
+--trailingcommas never
+

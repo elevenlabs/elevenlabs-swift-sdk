@@ -63,7 +63,7 @@ extension LiveKitNetworkConfiguration {
 
         return ConnectOptions(
             iceServers: customIceServers,
-            iceTransportPolicy: policy,
+            iceTransportPolicy: policy
         )
     }
 }

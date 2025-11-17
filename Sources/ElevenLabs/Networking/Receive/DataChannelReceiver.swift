@@ -66,7 +66,7 @@ actor DataChannelReceiver: MessageReceiver {
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(
-        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String,
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String
     ) {
         // Only process messages from the agent
         guard participant != nil else {
@@ -148,7 +148,7 @@ extension DataChannelReceiver: RoomDelegate {
         let message = ReceivedMessage(
             id: UUID().uuidString,
             timestamp: Date(),
-            content: .agentTranscript(event.response),
+            content: .agentTranscript(event.response)
         )
         yield(message: message)
         logger.debug("Agent response: \(event.response)")
@@ -160,7 +160,7 @@ extension DataChannelReceiver: RoomDelegate {
         let message = ReceivedMessage(
             id: UUID().uuidString,
             timestamp: Date(),
-            content: .agentTranscript(event.correctedAgentResponse),
+            content: .agentTranscript(event.correctedAgentResponse)
         )
         yield(message: message)
         logger.debug(
@@ -171,7 +171,7 @@ extension DataChannelReceiver: RoomDelegate {
         let message = ReceivedMessage(
             id: UUID().uuidString,
             timestamp: Date(),
-            content: .userTranscript(event.transcript),
+            content: .userTranscript(event.transcript)
         )
         yield(message: message)
         logger.debug("User transcript: \(event.transcript)")
@@ -206,7 +206,7 @@ extension DataChannelReceiver: RoomDelegate {
         do {
             let data = try EventSerializer.serializeOutgoingEvent(outgoingEvent)
             try await room.localParticipant.publish(
-                data: data, options: DataPublishOptions(reliable: true),
+                data: data, options: DataPublishOptions(reliable: true)
             )
         } catch {
             logger.error("Failed to send pong response: \(error)")
@@ -220,7 +220,7 @@ extension DataChannelReceiver: RoomDelegate {
 
     private func handleAgentToolResponse(_ event: AgentToolResponseEvent) {
         logger.info(
-            "Received agent tool response: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType), Error: \(event.isError))",
+            "Received agent tool response: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType), Error: \(event.isError))"
         )
         // Agent tool responses are available in the event stream
     }
@@ -238,7 +238,7 @@ extension DataChannelReceiver: RoomDelegate {
             logger.debug("MCP tool \(event.toolName) is loading...")
         case .awaitingApproval:
             logger.info(
-                "MCP tool \(event.toolName) awaiting approval (timeout: \(event.approvalTimeoutSecs ?? 0)s)",
+                "MCP tool \(event.toolName) awaiting approval (timeout: \(event.approvalTimeoutSecs ?? 0)s)"
             )
         case .success:
             logger.info("MCP tool \(event.toolName) completed successfully")
@@ -251,7 +251,7 @@ extension DataChannelReceiver: RoomDelegate {
         logger.info("MCP connection status update: \(event.integrations.count) integrations")
         for integration in event.integrations {
             logger.debug(
-                "Integration \(integration.integrationId): connected=\(integration.isConnected), tools=\(integration.toolCount)",
+                "Integration \(integration.integrationId): connected=\(integration.isConnected), tools=\(integration.toolCount)"
             )
         }
         // MCP connection status is available in the event stream
