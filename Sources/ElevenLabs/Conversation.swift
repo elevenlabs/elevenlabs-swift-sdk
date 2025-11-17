@@ -688,7 +688,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 }
             }
             options.onAgentToolResponse?(toolResponse)
-        
+
         case let .agentToolRequest(toolRequest):
             // Forward agent tool request to consumer
             // Switch to thinking while the agent performs the tool call
@@ -1253,7 +1253,7 @@ public struct ConversationOptions: Sendable {
 
     /// Called when the agent issues a tool response.
     public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
-    
+
     /// Called when the agent requests a tool execution.
     public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
 

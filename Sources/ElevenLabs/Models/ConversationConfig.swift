@@ -48,7 +48,7 @@ public struct ConversationConfig: Sendable {
 
     /// Called when the agent emits a tool response event.
     public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
-    
+
     /// Called when the agent requests a tool execution.
     public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
 
