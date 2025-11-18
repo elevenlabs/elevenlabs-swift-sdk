@@ -622,8 +622,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
         switch event {
         case let .userTranscript(e):
             appendUserTranscript(e.transcript)
-            // After receiving a user transcript, the agent will typically think before responding
-            agentState = .thinking
             options.onUserTranscript?(e.transcript, e.eventId)
 
         case .tentativeAgentResponse:
