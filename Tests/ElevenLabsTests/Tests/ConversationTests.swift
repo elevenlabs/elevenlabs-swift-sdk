@@ -172,6 +172,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .authenticationFailed("Mock authentication failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.tokenFetch, metrics.tokenFetch)
+        // Give the async error callback Task time to complete
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
         let errorsAfterTokenFailure = await capturedErrors.values()
         XCTAssertEqual(errorsAfterTokenFailure, [.authenticationFailed("Mock authentication failed")])
     }
