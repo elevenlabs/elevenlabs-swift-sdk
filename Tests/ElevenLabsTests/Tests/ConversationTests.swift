@@ -1,4 +1,5 @@
 @testable import ElevenLabs
+import Foundation
 import LiveKit
 import XCTest
 
@@ -172,7 +173,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .authenticationFailed("Mock authentication failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.tokenFetch, metrics.tokenFetch)
-        let errorsAfterTokenFailure = await capturedErrors.values()
+        let errorsAfterTokenFailure = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterTokenFailure, [.authenticationFailed("Mock authentication failed")])
     }
 
@@ -198,7 +199,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertEqual(conversation.startupMetrics?.roomConnect, metrics.roomConnect)
-        let errorsAfterConnectionFailure = await capturedErrors.values()
+        let errorsAfterConnectionFailure = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed("Mock connection failed")])
     }
 
@@ -233,7 +234,7 @@ final class ConversationTests: XCTestCase {
         }
         XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertEqual(conversation.state, .idle)
-        let errorsAfterAgentTimeout = await capturedErrors.values()
+        let errorsAfterAgentTimeout = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
 
@@ -296,7 +297,7 @@ final class ConversationTests: XCTestCase {
         }
 
         XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
-        let errorsAfterInitFailure = await capturedErrors.values()
+        let errorsAfterInitFailure = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
 
@@ -483,6 +484,26 @@ actor ValueRecorder<Value> {
 
     func values() -> [Value] {
         storage
+    }
+
+    func values(waitingFor expectedCount: Int, timeout: TimeInterval = 1.0) async -> [Value] {
+        guard expectedCount > 0 else {
+            return storage
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while storage.count < expectedCount, Date() < deadline {
+            let remaining = max(deadline.timeIntervalSinceNow, 0)
+            let sleepInterval = remaining > 0 ? min(remaining, 0.01) : 0
+            if sleepInterval <= 0 {
+                break
+            }
+            let nanos = UInt64(sleepInterval * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: max(nanos, 1_000_000)) // minimum 1ms
+        }
+
+        return storage
     }
 
     func last() -> Value? {

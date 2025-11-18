@@ -20,7 +20,7 @@ import LiveKit
 public enum ElevenLabs {
     // MARK: - Version
 
-    public static let version = "2.1.0-alpha.1"
+    public static let version = "2.1.0-alpha.2"
 
     // MARK: - Configuration
 
