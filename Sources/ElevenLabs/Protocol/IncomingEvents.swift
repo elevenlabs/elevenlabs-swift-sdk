@@ -16,6 +16,7 @@ public enum IncomingEvent: Sendable {
     case conversationMetadata(ConversationMetadataEvent)
     case ping(PingEvent)
     case clientToolCall(ClientToolCallEvent)
+    case agentToolRequest(AgentToolRequestEvent)
     case agentToolResponse(AgentToolResponseEvent)
     case mcpToolCall(MCPToolCallEvent)
     case mcpConnectionStatus(MCPConnectionStatusEvent)
@@ -112,6 +113,14 @@ public struct ClientToolCallEvent: Sendable {
     public func getParameters() throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: parametersData) as? [String: Any] ?? [:]
     }
+}
+
+/// Agent tool request event (request initiated by the agent)
+public struct AgentToolRequestEvent: Sendable {
+    public let toolName: String
+    public let toolCallId: String
+    public let toolType: String
+    public let eventId: Int
 }
 
 /// Agent tool response event

@@ -315,6 +315,7 @@ components:
         - tentative_user_transcript
         - conversation_initiation_metadata
         - client_tool_call
+        - agent_tool_request
         - agent_tool_response
         - mcp_tool_call
         - mcp_connection_status
@@ -703,6 +704,16 @@ components:
         agent_tool_response:
           $ref: "#/components/schemas/AgentToolResponseData"
 
+    AgentToolRequestPayload:
+      type: object
+      required: [agent_tool_request, type]
+      properties:
+        type:
+          type: string
+          const: agent_tool_request
+        agent_tool_request:
+          $ref: "#/components/schemas/AgentToolRequestData"
+
     MCPToolCallPayload:
       type: object
       required: [mcp_tool_call, type]
@@ -890,6 +901,22 @@ components:
         is_error:
           type: boolean
           description: Whether the tool execution resulted in an error
+        event_id:
+          type: integer
+
+    AgentToolRequestData:
+      type: object
+      required: [tool_name, tool_call_id, tool_type, event_id]
+      properties:
+        tool_name:
+          type: string
+          description: Name of the tool being requested
+        tool_call_id:
+          type: string
+          description: Unique identifier for the requested tool call
+        tool_type:
+          type: string
+          description: Type of tool (client, system, or mcp)
         event_id:
           type: integer
 
