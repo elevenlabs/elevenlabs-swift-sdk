@@ -1,14 +1,12 @@
 # SwiftFormat Configuration
-
-# Specify Swift version for version-specific rules
 --swiftversion 5.9
 
-# Preserve existing formatting
+--trailingcommas never
+
 --ifdef no-indent
 --indentcase false
 --extensionacl on-declarations
 
-# Standard formatting
 --indent 4
 --maxwidth 140
 --wraparguments before-first

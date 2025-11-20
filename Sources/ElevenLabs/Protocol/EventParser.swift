@@ -143,8 +143,8 @@ enum EventParser {
                         toolName: toolName,
                         toolCallId: toolCallId,
                         toolType: toolType,
-                        eventId: eventId,
-                    ),
+                        eventId: eventId
+                    )
                 )
             }
 

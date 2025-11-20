@@ -420,7 +420,7 @@ private final class DataChannelDelegate: RoomDelegate, @unchecked Sendable {
         participant: RemoteParticipant?,
         didReceiveData data: Data,
         forTopic _: String,
-        encryptionType _: EncryptionType,
+        encryptionType _: EncryptionType
     ) {
         // Only process messages from the agent
         guard participant != nil else {

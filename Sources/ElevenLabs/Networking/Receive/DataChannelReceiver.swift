@@ -66,7 +66,7 @@ actor DataChannelReceiver: MessageReceiver {
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(
-        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType,
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType
     ) {
         // Only process messages from the agent
         guard participant != nil else {
@@ -223,7 +223,7 @@ extension DataChannelReceiver: RoomDelegate {
 
     private func handleAgentToolRequest(_ event: AgentToolRequestEvent) {
         logger.info(
-            "Received agent tool request: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType))",
+            "Received agent tool request: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType))"
         )
         // Agent tool requests are available in the event stream
     }

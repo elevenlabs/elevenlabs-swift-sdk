@@ -20,7 +20,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.10.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.3")
     ],
     targets: [
         .target(
@@ -37,7 +37,7 @@ let package = Package(
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy")
-            ],
+            ]
         ),
         .testTarget(
             name: "ElevenLabsTests",
