@@ -18,7 +18,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     @Published public private(set) var startupState: ConversationStartupState = .idle
     @Published public private(set) var startupMetrics: ConversationStartupMetrics?
     @Published public private(set) var messages: [Message] = []
-    @Published public private(set) var agentState: AgentState = .listening
+    @Published public private(set) var agentState: ElevenLabs.AgentState = .listening
     @Published public private(set) var isMuted: Bool = true // Start as true, will be updated based on actual state
 
     /// Stream of client tool calls that need to be executed by the app
