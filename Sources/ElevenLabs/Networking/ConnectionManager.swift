@@ -81,7 +81,7 @@ final class ConnectionManager: ConnectionManaging {
         let elapsed = Date().timeIntervalSince(readyStartTime ?? Date())
         let detail = AgentReadyDetail(
             elapsed: elapsed,
-            viaGraceTimeout: source == .graceTimeout,
+            viaGraceTimeout: source == .graceTimeout
         )
 
         // cache for future waiters
@@ -149,7 +149,7 @@ final class ConnectionManager: ConnectionManaging {
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval = 0.5, // Reduced to 500ms based on test results showing consistent timeouts
+        graceTimeout: TimeInterval = 0.5 // Reduced to 500ms based on test results showing consistent timeouts
     ) async throws {
         resolveReadyAwaiters(with: .timedOut(elapsed: 0))
         readyStartTime = Date()
@@ -167,7 +167,7 @@ final class ConnectionManager: ConnectionManaging {
                 print("[ConnectionManager-Timing] Ready delegate fired onReady callback (source: \(source))")
                 self?.handleAgentReady(source: source)
             },
-            onDisconnected: { [weak self] in self?.onAgentDisconnected?() },
+            onDisconnected: { [weak self] in self?.onAgentDisconnected?() }
         )
         readyDelegate = rd
         room.add(delegate: rd)
@@ -177,7 +177,7 @@ final class ConnectionManager: ConnectionManaging {
             try await room.connect(
                 url: details.serverUrl,
                 token: details.participantToken,
-                connectOptions: connectOptions,
+                connectOptions: connectOptions
             )
             print("[ConnectionManager-Timing] LiveKit room.connect completed in \(Date().timeIntervalSince(connectStart))s")
         } catch {
@@ -262,7 +262,7 @@ extension ConnectionManager {
         init(
             graceTimeout: TimeInterval,
             onReady: @escaping (ReadySource) -> Void,
-            onDisconnected: @escaping () -> Void,
+            onDisconnected: @escaping () -> Void
         ) {
             self.graceTimeout = graceTimeout
             self.onReady = onReady
@@ -306,7 +306,7 @@ extension ConnectionManager {
         func room(
             _: Room,
             participant _: RemoteParticipant,
-            didSubscribeTrack publication: RemoteTrackPublication,
+            didSubscribeTrack publication: RemoteTrackPublication
         ) {
             guard stage == .waitingForSubscription else { return }
             if publication.kind == .audio {
@@ -317,7 +317,7 @@ extension ConnectionManager {
 
         func room(
             _ room: Room,
-            participantDidDisconnect _: RemoteParticipant,
+            participantDidDisconnect _: RemoteParticipant
         ) {
             guard room.remoteParticipants.isEmpty else { return }
             reset()
@@ -420,7 +420,7 @@ private final class DataChannelDelegate: RoomDelegate, @unchecked Sendable {
         participant: RemoteParticipant?,
         didReceiveData data: Data,
         forTopic _: String,
-        encryptionType _: EncryptionType,
+        encryptionType _: EncryptionType
     ) {
         // Only process messages from the agent
         guard participant != nil else {

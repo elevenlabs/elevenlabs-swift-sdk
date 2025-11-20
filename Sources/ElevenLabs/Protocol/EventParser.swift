@@ -40,7 +40,7 @@ enum EventParser {
                 return .agentResponseCorrection(AgentResponseCorrectionEvent(
                     originalAgentResponse: originalResponse,
                     correctedAgentResponse: correctedResponse,
-                    eventId: eventId,
+                    eventId: eventId
                 ))
             }
 
@@ -58,14 +58,14 @@ enum EventParser {
                     alignment = AudioAlignment(
                         chars: chars,
                         charStartTimesMs: charStartTimesMs,
-                        charDurationsMs: charDurationsMs,
+                        charDurationsMs: charDurationsMs
                     )
                 }
 
                 return .audio(AudioEvent(
                     audioBase64: audioBase64,
                     eventId: eventId,
-                    alignment: alignment,
+                    alignment: alignment
                 ))
             }
 
@@ -100,7 +100,7 @@ enum EventParser {
                     ConversationMetadataEvent(
                         conversationId: conversationId,
                         agentOutputAudioFormat: agentFormat,
-                        userInputAudioFormat: userFormat,
+                        userInputAudioFormat: userFormat
                     ))
             }
 
@@ -126,7 +126,7 @@ enum EventParser {
                             toolName: toolName,
                             toolCallId: toolCallId,
                             parametersData: parametersData,
-                            eventId: eventId,
+                            eventId: eventId
                         ))
                 }
             }
@@ -143,8 +143,8 @@ enum EventParser {
                         toolName: toolName,
                         toolCallId: toolCallId,
                         toolType: toolType,
-                        eventId: eventId,
-                    ),
+                        eventId: eventId
+                    )
                 )
             }
 
@@ -162,7 +162,7 @@ enum EventParser {
                         toolCallId: toolCallId,
                         toolType: toolType,
                         isError: isError,
-                        eventId: eventId,
+                        eventId: eventId
                     ))
             }
 
@@ -205,7 +205,7 @@ enum EventParser {
                         state: stateEnum,
                         approvalTimeoutSecs: approvalTimeoutSecs,
                         resultData: resultData,
-                        errorMessage: errorMessage,
+                        errorMessage: errorMessage
                     ))
                 }
             }
@@ -225,7 +225,7 @@ enum EventParser {
                         integrationId: integrationId,
                         integrationType: integrationType,
                         isConnected: isConnected,
-                        toolCount: toolCount,
+                        toolCount: toolCount
                     )
                 }
 

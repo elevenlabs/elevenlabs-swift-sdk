@@ -23,7 +23,7 @@ public struct AudioPipelineConfiguration: Sendable {
         recordingAlwaysPrepared: Bool? = true,
         voiceProcessingBypassed: Bool? = nil,
         voiceProcessingAGCEnabled: Bool? = nil,
-        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil
     ) {
         self.microphoneMuteMode = microphoneMuteMode
         self.recordingAlwaysPrepared = recordingAlwaysPrepared

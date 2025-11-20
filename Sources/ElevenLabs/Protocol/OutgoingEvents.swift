@@ -76,7 +76,7 @@ public struct ClientToolResultEvent: Sendable {
                 throw NSError(
                     domain: "ClientToolResultEvent",
                     code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"],
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"]
                 )
             }
             self.result = jsonString

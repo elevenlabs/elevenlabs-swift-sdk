@@ -47,7 +47,7 @@ public struct ElevenLabsConfiguration: Sendable {
     /// Initialize with a custom token provider
     public static func customTokenProvider(
         _ provider: @escaping @Sendable () async throws -> String,
-        participantName: String = "user",
+        participantName: String = "user"
     ) -> Self {
         .init(authSource: .customTokenProvider(provider), participantName: participantName)
     }
@@ -91,7 +91,7 @@ public struct TokenService: Sendable {
     public init(
         configuration: Configuration = .default,
         urlSession: URLSession = .shared,
-        debugApiKey: String? = nil,
+        debugApiKey: String? = nil
     ) {
         self.configuration = configuration
         self.urlSession = urlSession
@@ -100,7 +100,7 @@ public struct TokenService: Sendable {
     #else
     public init(
         configuration: Configuration = .default,
-        urlSession: URLSession = .shared,
+        urlSession: URLSession = .shared
     ) {
         self.configuration = configuration
         self.urlSession = urlSession
@@ -126,7 +126,7 @@ public struct TokenService: Sendable {
             serverUrl: websocketURL,
             roomName: "", // LiveKit extracts from JWT
             participantName: "", // LiveKit extracts from JWT
-            participantToken: token,
+            participantToken: token
         )
     }
 
@@ -138,7 +138,7 @@ public struct TokenService: Sendable {
         components.queryItems = [
             URLQueryItem(name: "agent_id", value: agentId),
             URLQueryItem(name: "source", value: "swift_sdk"),
-            URLQueryItem(name: "version", value: SDKVersion.version),
+            URLQueryItem(name: "version", value: SDKVersion.version)
         ]
 
         guard let url = components.url else {

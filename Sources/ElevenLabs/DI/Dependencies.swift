@@ -17,7 +17,7 @@ protocol ConnectionManaging: AnyObject {
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval,
+        graceTimeout: TimeInterval
     ) async throws
 
     func disconnect() async
@@ -55,7 +55,7 @@ final class Dependencies: ConversationDependencyProvider {
         let globalConfig = ElevenLabs.Global.shared.configuration
         let tokenServiceConfig = TokenService.Configuration(
             apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
-            websocketURL: globalConfig.websocketUrl,
+            websocketURL: globalConfig.websocketUrl
         )
         return TokenService(configuration: tokenServiceConfig)
     }()
@@ -65,11 +65,11 @@ final class Dependencies: ConversationDependencyProvider {
     private lazy var localMessageSender = LocalMessageSender(room: room)
 
     lazy var messageSenders: [any MessageSender] = [
-        localMessageSender,
+        localMessageSender
     ]
     lazy var messageReceivers: [any MessageReceiver] = [
         TranscriptionStreamReceiver(room: room), // Keep for audio transcriptions
-        localMessageSender, // Keep for loopback messages
+        localMessageSender // Keep for loopback messages
     ]
 
     // MARK: Error

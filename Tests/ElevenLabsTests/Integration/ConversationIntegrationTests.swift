@@ -12,8 +12,8 @@ final class ConversationIntegrationTests: XCTestCase {
             agentOverrides: AgentOverrides(
                 prompt: "You are a test assistant",
                 firstMessage: "Hello! How can I help you today?",
-                language: Language.english,
-            ),
+                language: Language.english
+            )
         )
 
         // In a real integration test environment:
@@ -106,7 +106,7 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv2.sendToolResult(
                 for: "test-tool-call",
                 result: "Tool executed successfully",
-                isError: false,
+                isError: false
             )
         }
 
@@ -222,7 +222,7 @@ final class ConversationIntegrationTests: XCTestCase {
     @MainActor
     private func assertThrowsConversationError(
         _ expectedError: ConversationError,
-        _ operation: @Sendable () async throws -> Void,
+        _ operation: @Sendable () async throws -> Void
     ) async {
         do {
             try await operation()

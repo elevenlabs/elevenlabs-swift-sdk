@@ -1,15 +1,12 @@
 # SwiftFormat Configuration
+--swiftversion 5.9
 
-# CRITICAL: Disable redundantSelf rule for Swift 6 strict concurrency compatibility
-# Swift 6 requires explicit 'self.' in closures to make capture semantics clear
---disable redundantSelf
+--trailingcommas never
 
-# Preserve existing formatting
 --ifdef no-indent
 --indentcase false
 --extensionacl on-declarations
 
-# Standard formatting
 --indent 4
 --maxwidth 140
 --wraparguments before-first
