@@ -1,8 +1,7 @@
 # SwiftFormat Configuration
 
-# CRITICAL: Disable redundantSelf rule for Swift 6 strict concurrency compatibility
-# Swift 6 requires explicit 'self.' in closures to make capture semantics clear
---disable redundantSelf
+# Specify Swift version for version-specific rules
+--swiftversion 5.9
 
 # Preserve existing formatting
 --ifdef no-indent
@@ -15,8 +14,4 @@
 --wraparguments before-first
 --wrapparameters before-first
 --wrapcollections before-first
-
-# Disable trailing commas for Swift 5.9+ compatibility
-# Trailing commas are only supported in Swift 6.1+
---trailingcommas never
 

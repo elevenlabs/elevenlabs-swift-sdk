@@ -44,11 +44,7 @@ let package = Package(
             dependencies: [
                 "ElevenLabs",
                 .product(name: "LiveKit", package: "client-sdk-swift")
-            ],
-        ),
-    ],
-    swiftLanguageModes: [
-        .v5,
-        .v6,
-    ],
+            ]
+        )
+    ]
 )
