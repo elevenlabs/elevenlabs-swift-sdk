@@ -66,7 +66,7 @@ actor DataChannelReceiver: MessageReceiver {
 @available(macOS 11.0, iOS 14.0, *)
 extension DataChannelReceiver: RoomDelegate {
     nonisolated func room(
-        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String
+        _: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic _: String, encryptionType _: EncryptionType,
     ) {
         // Only process messages from the agent
         guard participant != nil else {
@@ -122,6 +122,9 @@ extension DataChannelReceiver: RoomDelegate {
 
             case let .clientToolCall(toolCallEvent):
                 handleClientToolCall(toolCallEvent)
+
+            case let .agentToolRequest(agentToolRequestEvent):
+                handleAgentToolRequest(agentToolRequestEvent)
 
             case let .agentToolResponse(toolResponseEvent):
                 handleAgentToolResponse(toolResponseEvent)
@@ -216,6 +219,13 @@ extension DataChannelReceiver: RoomDelegate {
     private func handleClientToolCall(_ event: ClientToolCallEvent) {
         logger.info("Received client tool call: \(event.toolName) (ID: \(event.toolCallId))")
         // Tool calls are available in the event stream
+    }
+
+    private func handleAgentToolRequest(_ event: AgentToolRequestEvent) {
+        logger.info(
+            "Received agent tool request: \(event.toolName) (ID: \(event.toolCallId), Type: \(event.toolType))",
+        )
+        // Agent tool requests are available in the event stream
     }
 
     private func handleAgentToolResponse(_ event: AgentToolResponseEvent) {

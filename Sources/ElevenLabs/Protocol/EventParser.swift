@@ -131,6 +131,23 @@ enum EventParser {
                 }
             }
 
+        case "agent_tool_request":
+            if let event = json["agent_tool_request"] as? [String: Any],
+               let toolName = event["tool_name"] as? String,
+               let toolCallId = event["tool_call_id"] as? String,
+               let toolType = event["tool_type"] as? String,
+               let eventId = event["event_id"] as? Int
+            {
+                return .agentToolRequest(
+                    AgentToolRequestEvent(
+                        toolName: toolName,
+                        toolCallId: toolCallId,
+                        toolType: toolType,
+                        eventId: eventId,
+                    ),
+                )
+            }
+
         case "agent_tool_response":
             if let event = json["agent_tool_response"] as? [String: Any],
                let toolName = event["tool_name"] as? String,
