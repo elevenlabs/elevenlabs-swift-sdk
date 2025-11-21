@@ -24,9 +24,13 @@ public struct LiveKitNetworkConfiguration: Sendable {
     /// Optional custom ICE servers to use instead of those supplied by the ElevenLabs backend.
     public var customIceServers: [IceServer]
 
-    public init(strategy: Strategy = .automatic, customIceServers: [IceServer] = []) {
+    /// Optional override for LiveKit's reconnectAttempts connection option
+    public var reconnectAttempts: Int? = nil
+
+    public init(strategy: Strategy = .automatic, customIceServers: [IceServer] = [], reconnectAttempts: Int? = nil) {
         self.strategy = strategy
         self.customIceServers = customIceServers
+        self.reconnectAttempts = reconnectAttempts
     }
 
     /// Default configuration (automatic ICE candidate gathering, no custom ICE servers).
@@ -46,7 +50,7 @@ extension LiveKitNetworkConfiguration {
     }
 
     var requiresCustomConnectOptions: Bool {
-        strategy != .automatic || !customIceServers.isEmpty
+        strategy != .automatic || !customIceServers.isEmpty || reconnectAttempts != nil
     }
 
     func makeConnectOptions() -> ConnectOptions? {
@@ -62,6 +66,7 @@ extension LiveKitNetworkConfiguration {
         #endif
 
         return ConnectOptions(
+            reconnectAttempts: reconnectAttempts ?? ConnectOptions().reconnectAttempts,
             iceServers: customIceServers,
             iceTransportPolicy: policy
         )
