@@ -277,4 +277,26 @@ final class EventParserTests: XCTestCase {
         XCTAssertEqual(part.text, "Test")
         XCTAssertEqual(part.type, .delta)
     }
+
+    func testParseAgentResponseMetadataEvent() throws {
+        let json = """
+        {
+            "type": "agent_response_metadata",
+            "agent_response_metadata_event": {
+                "event_id": 456,
+                "metadata": {"custom_field": "custom_value"}
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .agentResponseMetadata(metadata) = event else {
+            XCTFail("Expected agentResponseMetadata event")
+            return
+        }
+
+        XCTAssertEqual(metadata.eventId, 456)
+        XCTAssertFalse(metadata.metadataData.isEmpty)
+    }
 }

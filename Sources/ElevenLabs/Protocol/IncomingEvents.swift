@@ -8,6 +8,7 @@ public enum IncomingEvent: Sendable {
     case tentativeUserTranscript(TentativeUserTranscriptEvent)
     case agentResponse(AgentResponseEvent)
     case agentResponseCorrection(AgentResponseCorrectionEvent)
+    case agentResponseMetadata(AgentResponseMetadataEvent)
     case agentChatResponsePart(AgentChatResponsePartEvent)
     case audio(AudioEvent)
     case interruption(InterruptionEvent)
@@ -53,6 +54,12 @@ public struct AgentResponseCorrectionEvent: Sendable {
     public let originalAgentResponse: String
     public let correctedAgentResponse: String
     public let eventId: Int
+}
+
+/// Agent response metadata
+public struct AgentResponseMetadataEvent: Sendable {
+    public let eventId: Int
+    public let metadataData: Data
 }
 
 public struct AgentChatResponsePartEvent: Sendable {

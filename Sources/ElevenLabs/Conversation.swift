@@ -640,6 +640,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Handle agent response corrections
             options.onAgentResponseCorrection?(correction.originalAgentResponse, correction.correctedAgentResponse, correction.eventId)
 
+        case let .agentResponseMetadata(metadata):
+            options.onAgentResponseMetadata?(metadata.metadataData, metadata.eventId)
+
         case let .agentChatResponsePart(e):
             handleAgentChatResponsePart(e)
 
@@ -1244,6 +1247,9 @@ public struct ConversationOptions: Sendable {
     /// Called when an agent response is corrected.
     public var onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)?
 
+    /// Called when agent response metadata is received.
+    public var onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)?
+
     /// Called for each user transcript event emitted by the server.
     public var onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
 
@@ -1288,6 +1294,7 @@ public struct ConversationOptions: Sendable {
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
         onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
         onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
@@ -1314,6 +1321,7 @@ public struct ConversationOptions: Sendable {
         self.onSpeechActivity = onSpeechActivity
         self.onAgentResponse = onAgentResponse
         self.onAgentResponseCorrection = onAgentResponseCorrection
+        self.onAgentResponseMetadata = onAgentResponseMetadata
         self.onUserTranscript = onUserTranscript
         self.onConversationMetadata = onConversationMetadata
         self.onAgentToolResponse = onAgentToolResponse

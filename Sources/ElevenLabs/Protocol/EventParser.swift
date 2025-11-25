@@ -44,6 +44,18 @@ enum EventParser {
                 ))
             }
 
+        case "agent_response_metadata":
+            if let event = json["agent_response_metadata_event"] as? [String: Any],
+               let eventId = event["event_id"] as? Int,
+               let metadata = event["metadata"] as? [String: Any],
+               let metadataData = try? JSONSerialization.data(withJSONObject: metadata)
+            {
+                return .agentResponseMetadata(AgentResponseMetadataEvent(
+                    eventId: eventId,
+                    metadataData: metadataData
+                ))
+            }
+
         case "audio":
             if let event = json["audio_event"] as? [String: Any],
                let eventId = event["event_id"] as? Int
