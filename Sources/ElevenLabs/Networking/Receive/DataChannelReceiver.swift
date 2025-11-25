@@ -92,6 +92,9 @@ extension DataChannelReceiver: RoomDelegate {
             case let .agentResponseCorrection(correctionEvent):
                 handleAgentResponseCorrection(correctionEvent)
 
+            case let .agentResponseMetadata(metadataEvent):
+                handleAgentResponseMetadata(metadataEvent)
+
             case let .agentChatResponsePart(chatResponsePartEvent):
                 handleAgentChatResponsePart(chatResponsePartEvent)
 
@@ -168,6 +171,11 @@ extension DataChannelReceiver: RoomDelegate {
         yield(message: message)
         logger.debug(
             "Agent correction: \(event.originalAgentResponse) -> \(event.correctedAgentResponse)")
+    }
+
+    private func handleAgentResponseMetadata(_ event: AgentResponseMetadataEvent) {
+        logger.info("Agent response metadata received (Event ID: \(event.eventId))")
+        // Agent response metadata is available in the event stream
     }
 
     private func handleUserTranscript(_ event: UserTranscriptEvent) {
