@@ -40,6 +40,9 @@ public struct ConversationConfig: Sendable {
     /// Called when an agent response correction is received.
     public var onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)?
 
+    /// Called when agent response metadata is received.
+    public var onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)?
+
     /// Called for each user transcript event.
     public var onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
 
@@ -84,6 +87,7 @@ public struct ConversationConfig: Sendable {
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
         onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
         onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
@@ -110,6 +114,7 @@ public struct ConversationConfig: Sendable {
         self.onSpeechActivity = onSpeechActivity
         self.onAgentResponse = onAgentResponse
         self.onAgentResponseCorrection = onAgentResponseCorrection
+        self.onAgentResponseMetadata = onAgentResponseMetadata
         self.onUserTranscript = onUserTranscript
         self.onConversationMetadata = onConversationMetadata
         self.onAgentToolResponse = onAgentToolResponse
@@ -195,6 +200,7 @@ extension ConversationConfig {
             onSpeechActivity: onSpeechActivity,
             onAgentResponse: onAgentResponse,
             onAgentResponseCorrection: onAgentResponseCorrection,
+            onAgentResponseMetadata: onAgentResponseMetadata,
             onUserTranscript: onUserTranscript,
             onConversationMetadata: onConversationMetadata,
             onAgentToolResponse: onAgentToolResponse,
