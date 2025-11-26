@@ -1,6 +1,13 @@
 import Foundation
 import LiveKit
 
+/// Reason for the conversation disconnection
+public enum DisconnectionReason: Sendable {
+    case agent
+    case user
+    case error
+}
+
 /// Main configuration for a conversation session
 public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
@@ -14,7 +21,7 @@ public struct ConversationConfig: Sendable {
     public var onAgentReady: (@Sendable () -> Void)?
 
     /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable () -> Void)?
+    public var onDisconnect: (@Sendable (DisconnectionReason) -> Void)?
 
     /// Called whenever the startup state transitions
     public var onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)?
@@ -78,7 +85,7 @@ public struct ConversationConfig: Sendable {
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,

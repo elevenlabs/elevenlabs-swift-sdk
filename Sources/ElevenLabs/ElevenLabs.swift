@@ -72,7 +72,7 @@ public enum ElevenLabs {
         agentId: String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
         var updatedConfig = config
@@ -113,7 +113,7 @@ public enum ElevenLabs {
         conversationToken: String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.conversationToken(conversationToken)
         var updatedConfig = config
@@ -150,7 +150,7 @@ public enum ElevenLabs {
         tokenProvider: @escaping @Sendable () async throws -> String,
         config: ConversationConfig = .init(),
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
         let authConfig = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
         var updatedConfig = config
