@@ -319,7 +319,8 @@ extension ConnectionManager {
             _ room: Room,
             participantDidDisconnect participant: RemoteParticipant
         ) {
-            let isAgent = participant.identity?.hasPrefix("agent") == true
+            let identityString = participant.identity.map { String(describing: $0) } ?? ""
+            let isAgent = identityString.hasPrefix("agent")
             guard isAgent || room.remoteParticipants.isEmpty else { return }
             reset()
             onDisconnected()
