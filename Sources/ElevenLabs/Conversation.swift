@@ -182,7 +182,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 if self.state.isActive {
                     self.state = .ended(reason: .remoteDisconnected)
                     self.cleanupPreviousConversation()
-                    self.options.onDisconnect?()
+                    self.options.onDisconnect?(.agent)
                 }
             }
         }
@@ -306,7 +306,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         cleanupPreviousConversation()
 
         // Call user's onDisconnect callback if provided
-        options.onDisconnect?()
+        options.onDisconnect?(.user)
         options.onCanSendFeedbackChange?(false)
     }
 
@@ -583,7 +583,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 cleanupPreviousConversation()
 
                 // Call user's onDisconnect callback if provided
-                options.onDisconnect?()
+                options.onDisconnect?(.agent)
             }
         default: break
         }
@@ -1221,7 +1221,7 @@ public struct ConversationOptions: Sendable {
     public var onAgentReady: (@Sendable () -> Void)?
 
     /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable () -> Void)?
+    public var onDisconnect: (@Sendable (DisconnectionReason) -> Void)?
 
     /// Called whenever the startup state transitions
     public var onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)?
@@ -1285,7 +1285,7 @@ public struct ConversationOptions: Sendable {
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable () -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,

@@ -626,22 +626,22 @@ let config = ConversationConfig(
     onAgentResponse: { text, eventId in
         print("Agent said: \(text) [event: \(eventId)]")
     },
-    
+
     // Agent response corrections (when agent self-corrects)
     onAgentResponseCorrection: { original, corrected, eventId in
         print("Agent corrected: '\(original)' → '\(corrected)'")
     },
-    
+
     // User transcript events
     onUserTranscript: { text, eventId in
         print("You said: \(text) [event: \(eventId)]")
     },
-    
+
     // Interruption detection
     onInterruption: { eventId in
         print("User interrupted agent [event: \(eventId)]")
     },
-    
+
     // Feedback availability tracking
     onCanSendFeedbackChange: { canSend in
         // Enable/disable feedback UI based on whether feedback can be sent
@@ -660,12 +660,12 @@ let config = ConversationConfig(
         // alignment.chars: ["H", "e", "l", "l", "o"]
         // alignment.charStartTimesMs: [0, 100, 150, 200, 250]
         // alignment.charDurationsMs: [100, 50, 50, 50, 100]
-        
+
         // Example: Highlight text character by character
         for (index, char) in alignment.chars.enumerated() {
             let startMs = alignment.charStartTimesMs[index]
             let durationMs = alignment.charDurationsMs[index]
-            
+
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(startMs * 1_000_000))
                 await highlightCharacter(at: index, duration: durationMs)
@@ -686,17 +686,17 @@ let audioConfig = AudioPipelineConfiguration(
     // - .restart: Mute by restarting the audio session
     // - .inputMixer: Mute at the input mixer level (default)
     microphoneMuteMode: .inputMixer,
-    
+
     // Keep mic warm to avoid first-word latency (default: true)
     recordingAlwaysPrepared: true,
-    
+
     // Bypass WebRTC voice processing (AEC/NS/VAD)
     // Set to true if you want raw audio without processing
     voiceProcessingBypassed: false,
-    
+
     // Enable Auto Gain Control for consistent volume
     voiceProcessingAGCEnabled: true,
-    
+
     // Detect speech while muted (useful for "tap to speak" UX)
     onSpeechActivity: { event in
         print("Speech detected while muted!")
@@ -717,11 +717,11 @@ Fine-tune the connection handshake behavior:
 let startupConfig = ConversationStartupConfiguration(
     // How long to wait for agent to be ready (default: 3.0s)
     agentReadyTimeout: 5.0,
-    
+
     // Retry delays for conversation init in seconds (default: [0, 0.5, 1.0])
     // First attempt: immediate, 2nd: wait 0.5s, 3rd: wait 1.0s, etc.
     initRetryDelays: [0, 0.5, 1.0, 2.0],
-    
+
     // Whether to fail if agent isn't ready in time (default: false)
     // false = continue with grace period, true = throw error immediately
     failIfAgentNotReady: false
@@ -753,18 +753,18 @@ let config = ConversationConfig(
     onAgentReady: {
         print("✅ Agent is ready!")
     },
-    onDisconnect: {
-        print("🔌 Disconnected")
+    onDisconnect: { reason in
+        print("🔌 Disconnection reason: \(reason)")
     },
     onError: { error in
         print("❌ Error: \(error.localizedDescription)")
     },
-    
+
     // Startup monitoring
     onStartupStateChange: { state in
         print("Startup: \(state)")
     },
-    
+
     // Event callbacks
     onAgentResponse: { text, eventId in
         print("Agent: \(text)")
@@ -775,7 +775,7 @@ let config = ConversationConfig(
     onInterruption: { eventId in
         print("Interrupted!")
     },
-    
+
     // Advanced features
     onAudioAlignment: { alignment in
         // Highlight words as agent speaks
@@ -783,7 +783,7 @@ let config = ConversationConfig(
     onCanSendFeedbackChange: { canSend in
         // Enable/disable feedback button
     },
-    
+
     // Audio pipeline
     audioConfiguration: AudioPipelineConfiguration(
         microphoneMuteMode: .inputMixer,
@@ -791,12 +791,12 @@ let config = ConversationConfig(
         voiceProcessingBypassed: false,
         voiceProcessingAGCEnabled: true
     ),
-    
+
     // Network configuration
     networkConfiguration: LiveKitNetworkConfiguration(
         strategy: .automatic
     ),
-    
+
     // Startup tuning
     startupConfiguration: ConversationStartupConfiguration(
         agentReadyTimeout: 5.0,
