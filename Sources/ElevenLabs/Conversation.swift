@@ -51,6 +51,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     private var lastFeedbackSubmittedEventId: Int?
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
+    private var shouldAbortRetries = false
 
     // Audio tracks for advanced use cases
     public var inputTrack: LocalAudioTrack? {
@@ -299,6 +300,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// End and clean up.
     public func endConversation() async {
+        shouldAbortRetries = true
         guard state.isActive else { return }
         guard let connectionManager = resolvedConnectionManager() else { return }
         await connectionManager.disconnect()
@@ -890,6 +892,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             ? [0]
             : options.startupConfiguration.initRetryDelays
 
+        self.shouldAbortRetries = false
         for (index, delay) in delays.enumerated() {
             let attemptNumber = index + 1
             metrics.conversationInitAttempts = attemptNumber
@@ -897,7 +900,13 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
             if delay > 0 {
                 print("[Retry] Attempt \(attemptNumber) delay: \(delay)s")
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try Task.checkCancellation()
+            }
+
+            if shouldAbortRetries {
+                print("[Retry] Aborting retry loop after sleep")
+                throw CancellationError()
             }
 
             let attemptStart = Date()
