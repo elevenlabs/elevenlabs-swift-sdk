@@ -1,7 +1,6 @@
 import Foundation
 import LiveKit
 
-@MainActor
 protocol ConnectionManaging: AnyObject {
     var onAgentReady: (() -> Void)? { get set }
     var onAgentDisconnected: (() -> Void)? { get set }
@@ -29,7 +28,6 @@ protocol ConversationDependencyProvider: AnyObject {
     var conversationStartup: any ConversationStartup { get async }
     var errorHandler: (Swift.Error?) -> Void { get }
     
-    @MainActor
     func connectionManager() async -> any ConnectionManaging
 }
 
@@ -70,9 +68,7 @@ actor Dependencies: ConversationDependencyProvider {
             return existing
         }
         let loggerInstance = self.logger
-        let manager = await MainActor.run {
-            ConnectionManager(logger: loggerInstance)
-        }
+        let manager = ConnectionManager(logger: loggerInstance)
         _connectionManager = manager
         return manager
     }

@@ -1,7 +1,6 @@
 import Foundation
 
 /// Step responsible for fetching authentication token and connection details
-@MainActor
 final class TokenResolutionStep: StartupStep {
     let stepName = "Token Resolution"
     

@@ -33,7 +33,6 @@ enum ConnectionManagerError: Error {
 /// This class isolates LiveKit dependency from the rest of the SDK. It uses an internal `ReadyDelegate`
 /// actor to manage the complex state machine of connection + subscription + grace periods, converting
 /// them into simple linear `async/await` flows for the consumer.
-@MainActor
 final class ConnectionManager: ConnectionManaging {
     /// Fired **once** when the remote agent is considered ready.
     var onAgentReady: (() -> Void)?
@@ -61,6 +60,7 @@ final class ConnectionManager: ConnectionManaging {
     }
 
     private var readyAwaiters: [ReadyAwaiter] = []
+    private let stateQueue = DispatchQueue(label: "com.elevenlabs.sdk.connection.state")
 
     private let logger: any Logging
     
@@ -71,9 +71,12 @@ final class ConnectionManager: ConnectionManaging {
     // MARK: – Lifecycle
 
     private func resolveReadyAwaiters(with result: AgentReadyWaitResult) {
-        guard !readyAwaiters.isEmpty else { return }
-        let awaiters = readyAwaiters
-        readyAwaiters.removeAll()
+        var awaiters: [ReadyAwaiter] = []
+        stateQueue.sync {
+            guard !readyAwaiters.isEmpty else { return }
+            awaiters = readyAwaiters
+            readyAwaiters.removeAll()
+        }
         for awaiter in awaiters {
             awaiter.timeoutTask.cancel()
             awaiter.continuation.resume(returning: result)
@@ -94,8 +97,10 @@ final class ConnectionManager: ConnectionManaging {
         )
 
         // cache for future waiters
-        if lastReadyDetail == nil {
-            lastReadyDetail = detail
+        stateQueue.sync {
+            if lastReadyDetail == nil {
+                lastReadyDetail = detail
+            }
         }
 
         resolveReadyAwaiters(with: .success(detail))
@@ -118,20 +123,24 @@ final class ConnectionManager: ConnectionManaging {
             let timeoutTask = Task { [weak self] in
                 guard timeout > 0 else { return }
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                await MainActor.run {
-                    guard let self else { return }
+                guard let self else { return }
+                var awaiter: ReadyAwaiter?
+                var elapsed: TimeInterval = 0
+                stateQueue.sync {
                     guard self.lastReadyDetail == nil,
                           let index = self.readyAwaiters.firstIndex(where: { $0.id == id })
                     else { return }
 
-                    let elapsed = Date().timeIntervalSince(start)
-                    let awaiter = self.readyAwaiters.remove(at: index)
-                    awaiter.timeoutTask.cancel()
-                    awaiter.continuation.resume(returning: .timedOut(elapsed: elapsed))
+                    elapsed = Date().timeIntervalSince(start)
+                    awaiter = self.readyAwaiters.remove(at: index)
                 }
+                guard let awaiter else { return }
+                awaiter.timeoutTask.cancel()
+                awaiter.continuation.resume(returning: .timedOut(elapsed: elapsed))
             }
-
-            readyAwaiters.append(ReadyAwaiter(id: id, continuation: continuation, timeoutTask: timeoutTask))
+            stateQueue.sync {
+                readyAwaiters.append(ReadyAwaiter(id: id, continuation: continuation, timeoutTask: timeoutTask))
+            }
         }
     }
 
@@ -169,10 +178,10 @@ final class ConnectionManager: ConnectionManaging {
         let room = Room()
         self.room = room
 
-        let connectOptions = networkConfiguration.makeConnectOptions()
+        let connectOptions = await networkConfiguration.makeConnectOptions()
 
         // Delegate encapsulates all readiness logic.
-        let rd = ReadyDelegate(
+        let rd = await ReadyDelegate(
             graceTimeout: graceTimeout,
             logger: logger,
             onReady: { [weak self] source in
@@ -197,7 +206,7 @@ final class ConnectionManager: ConnectionManaging {
         } catch {
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
             errorHandler(error)
-            if LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
+            if await LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
                 errorHandler(ConversationError.localNetworkPermissionRequired)
             }
             throw error

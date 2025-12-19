@@ -2,7 +2,6 @@ import Foundation
 
 /// Protocol for individual startup steps in the conversation initialization process.
 /// Each step is responsible for a specific phase of the startup sequence.
-@MainActor
 protocol StartupStep {
     /// The name of this step for logging purposes
     var stepName: String { get }
@@ -13,7 +12,6 @@ protocol StartupStep {
 }
 
 /// A startup step that can be retried with configurable delays
-@MainActor
 protocol RetryableStartupStep: StartupStep {
     /// The delays between retry attempts (empty = no retries)
     var retryDelays: [TimeInterval] { get }

@@ -2,7 +2,6 @@ import Foundation
 import LiveKit
 
 /// Step responsible for sending conversation initialization with retry logic
-@MainActor
 final class ConversationInitStep: RetryableStartupStep {
     let stepName = "Conversation Init"
     

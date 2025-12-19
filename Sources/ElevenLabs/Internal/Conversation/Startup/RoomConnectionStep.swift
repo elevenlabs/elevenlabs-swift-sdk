@@ -2,7 +2,6 @@ import Foundation
 import LiveKit
 
 /// Step responsible for establishing LiveKit room connection
-@MainActor
 final class RoomConnectionStep: StartupStep {
     let stepName = "Room Connection"
     

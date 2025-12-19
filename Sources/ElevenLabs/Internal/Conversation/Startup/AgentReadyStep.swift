@@ -1,7 +1,6 @@
 import Foundation
 
 /// Step responsible for waiting for agent to be ready
-@MainActor
 final class AgentReadyStep: StartupStep {
     let stepName = "Agent Ready"
     

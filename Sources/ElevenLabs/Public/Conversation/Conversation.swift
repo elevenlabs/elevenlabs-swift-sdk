@@ -245,7 +245,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
     public func endConversation() async {
         guard state.isActive else { return }
         guard let connectionManager = resolvedConnectionManager() else { return }
-        await connectionManager.disconnect()
+        
+        // Disconnect in background to avoid blocking the main thread
+        Task {
+            await connectionManager.disconnect()
+        }
+        
         state = .ended(reason: .userEnded)
         cleanupPreviousConversation()
 
