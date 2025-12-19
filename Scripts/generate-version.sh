@@ -12,7 +12,7 @@ VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
 VERSION=${VERSION#v}
 
 # Path to the Version.swift file
-VERSION_FILE="Sources/ElevenLabs/Version.swift"
+VERSION_FILE="Sources/ElevenLabs/Internal/Version.swift"
 
 # Generate the Version.swift file
 cat > "$VERSION_FILE" << EOF
