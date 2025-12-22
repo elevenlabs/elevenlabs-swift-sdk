@@ -589,7 +589,7 @@ let config = ConversationConfig(
             print("Not started")
         case .resolvingToken:
             print("Fetching authentication token...")
-        case .connectingToRoom:
+        case .connectingRoom:
             print("Connecting to LiveKit room...")
         case .waitingForAgent(let timeout):
             print("Waiting for agent (timeout: \(timeout)s)...")
