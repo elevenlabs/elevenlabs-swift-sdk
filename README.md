@@ -178,23 +178,18 @@ private func handleToolCall(_ toolCall: ClientToolCallEvent) async {
             parameters: parameters
         )
 
-        if toolCall.expectsResponse {
-            try await conversation?.sendToolResult(
-                for: toolCall.toolCallId,
-                result: result
-            )
-        } else {
-            conversation?.markToolCallCompleted(toolCall.toolCallId)
-        }
+        // Send the tool result back to the agent
+        try await conversation?.sendToolResult(
+            for: toolCall.toolCallId,
+            result: result
+        )
     } catch {
         // Handle tool execution errors
-        if toolCall.expectsResponse {
-            try? await conversation?.sendToolResult(
-                for: toolCall.toolCallId,
-                result: ["error": error.localizedDescription],
-                isError: true
-            )
-        }
+        try? await conversation?.sendToolResult(
+            for: toolCall.toolCallId,
+            result: ["error": error.localizedDescription],
+            isError: true
+        )
     }
 }
 
