@@ -28,28 +28,28 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     func testToolCallLifecycle() async throws {
         // 1. Receive a tool call
-        let toolCall = ClientToolCallEvent(
+        let toolCall = try ClientToolCallEvent(
             toolName: "test_tool",
             toolCallId: "call_123",
-            parametersData: try JSONSerialization.data(withJSONObject: ["arg": "val"]),
+            parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
             eventId: 1
         )
-        
+
         await conversation._testing_handleIncomingEvent(.clientToolCall(toolCall))
-        
+
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)
         XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
-        
+
         // 2. Set up active state to allow sending result
         mockConnectionManager.room = Room()
         conversation._testing_setState(.active(CallInfo(agentId: "test")))
-        
+
         // 3. Send result
         try await conversation.sendToolResult(for: "call_123", result: "success")
-        
+
         // 4. Verify tool is removed from pending list
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
-        
+
         // 5. Verify result was published
         XCTAssertEqual(mockConnectionManager.publishedPayloads.count, 1)
         let lastPayload = mockConnectionManager.publishedPayloads.last ?? Data()
@@ -64,22 +64,22 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         // 1. Start streaming
         let startEvent = AgentChatResponsePartEvent(text: "Hello", type: .start)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(startEvent))
-        
+
         XCTAssertEqual(conversation.messages.count, 1)
         XCTAssertEqual(conversation.messages.first?.content, "Hello")
         XCTAssertEqual(conversation.messages.first?.role, .agent)
-        
+
         // 2. Delta update
         let deltaEvent = AgentChatResponsePartEvent(text: " world", type: .delta)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(deltaEvent))
-        
+
         XCTAssertEqual(conversation.messages.count, 1, "Should still have only 1 message, just updated")
         XCTAssertEqual(conversation.messages.first?.content, "Hello world")
-        
+
         // 3. Stop streaming
         let stopEvent = AgentChatResponsePartEvent(text: "!", type: .stop)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(stopEvent))
-        
+
         XCTAssertEqual(conversation.messages.count, 1)
         XCTAssertEqual(conversation.messages.first?.content, "Hello world!")
     }
@@ -89,7 +89,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     func testAutomaticEndCallHandling() async throws {
         mockConnectionManager.room = Room()
         conversation._testing_setState(.active(CallInfo(agentId: "test")))
-        
+
         let toolResponse = AgentToolResponseEvent(
             toolName: "end_call",
             toolCallId: "id",
@@ -97,9 +97,9 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             isError: false,
             eventId: 1
         )
-        
+
         await conversation._testing_handleIncomingEvent(.agentToolResponse(toolResponse))
-        
+
         // Verify conversation ended automatically
         XCTAssertEqual(conversation.state, .ended(reason: .userEnded)) // endConversation() sets userEnded by default currently
     }
@@ -109,20 +109,20 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     func testStateTransitionsImmediatelyToConnecting() async throws {
         // Simulate a previously ended conversation
         conversation._testing_setState(.ended(reason: .userEnded))
-        
+
         // Start a new one
         let startTask = Task {
             try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
         }
-        
+
         // Check state immediately
         await Task.yield()
         XCTAssertEqual(conversation.state, .connecting, "Should be connecting immediately, even if disconnect() is slow")
-        
+
         // Complete the start
         mockConnectionManager.succeedAgentReady()
         try await startTask.value
-        
+
         XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "new-agent")))
     }
 
@@ -135,9 +135,9 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             charDurationsMs: [100, 100, 100, 100, 100]
         )
         let audioEvent = AudioEvent(audioBase64: "base64", eventId: 1, alignment: alignment)
-        
+
         await conversation._testing_handleIncomingEvent(.audio(audioEvent))
-        
+
         XCTAssertEqual(conversation.latestAudioAlignment?.chars, ["H", "e", "l", "l", "o"])
     }
 }

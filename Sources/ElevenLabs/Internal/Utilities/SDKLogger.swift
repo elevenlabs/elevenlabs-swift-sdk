@@ -34,12 +34,12 @@ struct SDKLogger: Logging {
         self.category = category
         self.logLevel = logLevel
     }
-    
+
     // Helper to log safely
     private func log(_ message: String, type: OSLogType, context: [String: String]?) {
         let prefix = "[ElevenLabs]"
         let finalMessage: String
-        if let context = context, !context.isEmpty {
+        if let context, !context.isEmpty {
             let contextString = context.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
             finalMessage = "\(prefix) [\(contextString)] \(message)"
         } else {

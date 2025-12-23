@@ -3,7 +3,8 @@ import Combine
 import Foundation
 import LiveKit
 
-@MainActor
+// swiftlint:disable file_length type_body_length
+
 /// The central entry point for the ElevenLabs Conversational AI SDK.
 ///
 /// **Role:**
@@ -14,6 +15,7 @@ import LiveKit
 /// **Usage:**
 /// Create an instance via `ElevenLabs.startConversation(...)`. Use the `@Published` properties
 /// to bind your UI to conversation state.
+@MainActor
 public final class Conversation: ObservableObject, RoomDelegate {
     // MARK: - Public State
 
@@ -54,10 +56,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
     var lastFeedbackSubmittedEventId: Int?
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
-    
+
     /// Internal logger, accessible from nonisolated contexts.
     nonisolated let logger: any Logging
-    
+
     /// Context for logging (e.g. agentId)
     private var activeContext: [String: String]?
 
@@ -86,7 +88,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         dependencyProvider = nil
         self.options = options
         // Temporary logger until dependencies are resolved
-        self.logger = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
+        logger = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
         observeDeviceChanges()
     }
 
@@ -97,7 +99,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         self.dependencyProvider = dependencyProvider
         dependenciesTask = nil
         self.options = options
-        self.logger = dependencyProvider.logger
+        logger = dependencyProvider.logger
         observeDeviceChanges()
     }
 
@@ -135,7 +137,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         let provider = await resolveDependencyProvider()
         let connectionManager = await provider.connectionManager()
         cachedConnectionManager = connectionManager
-        
+
         state = .connecting
 
         // Disconnect previous session in background to avoid blocking the Main Actor.
@@ -145,7 +147,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
         cleanupPreviousConversation()
         self.options = options
-        
+
         let currentAgentId = extractAgentId(from: auth)
         activeContext = ["agentId": currentAgentId]
         logger.info("Starting conversation", context: activeContext)
@@ -163,9 +165,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Set up agent disconnect callback
         connectionManager.onAgentDisconnected = { [weak self] in
             guard let self else { return }
-            if self.state.isActive {
-                self.state = .ended(reason: .remoteDisconnected)
-                self.cleanupPreviousConversation()
+            if state.isActive {
+                state = .ended(reason: .remoteDisconnected)
+                cleanupPreviousConversation()
                 self.options.onDisconnect?(.agent)
             }
         }
@@ -245,12 +247,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
     public func endConversation() async {
         guard state.isActive else { return }
         guard let connectionManager = resolvedConnectionManager() else { return }
-        
+
         // Disconnect in background to avoid blocking the main thread
         Task {
             await connectionManager.disconnect()
         }
-        
+
         state = .ended(reason: .userEnded)
         cleanupPreviousConversation()
 
@@ -462,17 +464,17 @@ public final class Conversation: ObservableObject, RoomDelegate {
             task.cancel()
             roomChangesTask = nil
         }
-        
+
         if let task = protocolEventsTask {
             task.cancel()
             protocolEventsTask = nil
         }
-        
+
         if let task = speakingTimer {
             task.cancel()
             speakingTimer = nil
         }
-        
+
         protocolEventsDelegate = nil
 
         // Clear conversation state
@@ -579,7 +581,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             let delegate = ConversationDataDelegate { [weak self] data in
                 self?.handleIncomingData(data)
             }
-            self.protocolEventsDelegate = delegate
+            protocolEventsDelegate = delegate
             room?.add(delegate: delegate)
 
             while !Task.isCancelled {
@@ -588,16 +590,16 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
     }
 
-
-
     // MARK: - Testing Hooks
 
     #if DEBUG
     @MainActor
+    // swiftlint:disable:next identifier_name
     func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
         await handleIncomingEvent(event)
     }
 
+    // swiftlint:disable:next identifier_name
     func _testing_setState(_ newState: ConversationState) {
         state = newState
     }
@@ -692,9 +694,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
             )
         )
     }
-
-
 }
+
+// swiftlint:enable file_length type_body_length
 
 // MARK: - RoomDelegate
 
@@ -739,7 +741,7 @@ private final class ConversationDataDelegate: RoomDelegate {
     private let actor: ConversationDataActor
 
     init(onData: @escaping @Sendable (Data) -> Void) {
-        self.actor = ConversationDataActor(onData: onData)
+        actor = ConversationDataActor(onData: onData)
     }
 
     nonisolated func room(

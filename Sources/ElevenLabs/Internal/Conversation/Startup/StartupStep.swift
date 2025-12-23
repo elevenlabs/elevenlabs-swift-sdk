@@ -5,7 +5,7 @@ import Foundation
 protocol StartupStep {
     /// The name of this step for logging purposes
     var stepName: String { get }
-    
+
     /// Execute the step
     /// - Throws: Any error that occurs during execution
     func execute() async throws
@@ -15,7 +15,7 @@ protocol StartupStep {
 protocol RetryableStartupStep: StartupStep {
     /// The delays between retry attempts (empty = no retries)
     var retryDelays: [TimeInterval] { get }
-    
+
     /// Execute a single attempt of the step
     /// - Throws: Any error that occurs during execution
     func executeAttempt() async throws
@@ -24,14 +24,14 @@ protocol RetryableStartupStep: StartupStep {
 extension RetryableStartupStep {
     func execute() async throws {
         let delays = retryDelays.isEmpty ? [0] : retryDelays
-        
+
         for (index, delay) in delays.enumerated() {
             let attemptNumber = index + 1
-            
+
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
-            
+
             do {
                 try await executeAttempt()
                 return // Success!

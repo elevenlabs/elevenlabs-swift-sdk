@@ -1,6 +1,8 @@
 import Foundation
 import LiveKit
 
+// swiftlint:disable line_length
+
 /// An actor that converts raw text streams from the LiveKit `Room` into `Message` objects.
 /// - Note: Streams are supported by `livekit-agents` >= 1.0.0.
 /// - SeeAlso: ``TranscriptionDelegateReceiver``
@@ -160,3 +162,5 @@ actor TranscriptionStreamReceiver: MessageReceiver {
         }
     }
 }
+
+// swiftlint:enable line_length

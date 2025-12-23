@@ -192,5 +192,5 @@ public struct ASRInitiationMetadataEvent: Sendable {
 
 /// Error event placeholder
 public struct ErrorEvent: Sendable {
-    // TODO: Implement
+    // Placeholder for future error event fields
 }

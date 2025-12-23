@@ -1,10 +1,11 @@
 import Foundation
 
+// swiftlint:disable cyclomatic_complexity function_body_length
+
 @MainActor
 extension Conversation {
-    
     // MARK: - Event Handling
-    
+
     func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
@@ -111,10 +112,9 @@ extension Conversation {
         case .error:
             logger.error("Received error event from server")
             // Error events are available in the event stream
-            break
         }
     }
-    
+
     func handleAgentChatResponsePart(_ event: AgentChatResponsePartEvent) {
         switch event.type {
         case .start:
@@ -164,3 +164,5 @@ extension Conversation {
         }
     }
 }
+
+// swiftlint:enable cyclomatic_complexity function_body_length

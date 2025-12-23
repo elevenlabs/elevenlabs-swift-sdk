@@ -2,7 +2,6 @@ import Foundation
 import LiveKit
 
 public struct ConversationOptions: Sendable {
-    
     /// Determines how microphone setup failures are handled during connection
     public enum MicrophoneFailureHandling: Sendable {
         /// Throw an error if microphone setup fails (recommended for voice-first apps)
@@ -10,14 +9,14 @@ public struct ConversationOptions: Sendable {
         /// Log a warning but continue without microphone (useful for fallback scenarios)
         case continueWithoutMicrophone
     }
-    
+
     public var conversationOverrides: ConversationOverrides
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
     public var userId: String?
-    
+
     /// How to handle microphone setup failures during connection
     public var microphoneFailureHandling: MicrophoneFailureHandling
 

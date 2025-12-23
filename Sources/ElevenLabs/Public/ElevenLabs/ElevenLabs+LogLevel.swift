@@ -8,7 +8,7 @@ extension ElevenLabs {
         case info = 2
         case debug = 3
         case trace = 4
-        
+
         public static func < (lhs: LogLevel, rhs: LogLevel) -> Bool {
             lhs.rawValue < rhs.rawValue
         }

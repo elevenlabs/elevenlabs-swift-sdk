@@ -21,7 +21,7 @@ extension ElevenLabs {
         }
 
         public static let `default` = Configuration()
-        
+
         /// Create a new configuration with updated values (builder pattern)
         public func with(
             apiEndpoint: URL? = nil,

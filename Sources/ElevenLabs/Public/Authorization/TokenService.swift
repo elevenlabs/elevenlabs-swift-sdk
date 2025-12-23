@@ -1,17 +1,16 @@
 import Foundation
 
-/// A service for fetching ElevenLabs authentication tokens
-///
-/// This service supports two authentication methods:
-/// 1. Public Agent ID - Fetches a token from ElevenLabs API using a public agent ID
-/// 2. Conversation Token - Uses a pre-generated conversation token from your backend
-///
-/// ⚠️ SECURITY WARNING:
-/// NEVER include your ElevenLabs API key in a client application!
-/// API keys should only be used server-side. For production apps:
-/// - Use public agents (no authentication required)
-/// - OR implement a backend endpoint that generates conversation tokens
-
+// A service for fetching ElevenLabs authentication tokens
+//
+// This service supports two authentication methods:
+// 1. Public Agent ID - Fetches a token from ElevenLabs API using a public agent ID
+// 2. Conversation Token - Uses a pre-generated conversation token from your backend
+//
+// SECURITY NOTE:
+// NEVER include your ElevenLabs API key in a client application!
+// API keys should only be used server-side. For production apps:
+// - Use public agents (no authentication required)
+// - OR implement a backend endpoint that generates conversation tokens
 
 // MARK: - Token Service
 

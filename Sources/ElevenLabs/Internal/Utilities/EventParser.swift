@@ -1,5 +1,7 @@
 import Foundation
 
+// swiftlint:disable cyclomatic_complexity function_body_length
+
 enum EventParseError: Error {
     case unknownEventType(String)
     case invalidEventData
@@ -117,7 +119,8 @@ struct EventParser: EventParsable {
                         conversationId: conversationId,
                         agentOutputAudioFormat: agentFormat,
                         userInputAudioFormat: userFormat
-                    ))
+                    )
+                )
             }
 
         case "ping":
@@ -143,7 +146,8 @@ struct EventParser: EventParsable {
                             toolCallId: toolCallId,
                             parametersData: parametersData,
                             eventId: eventId
-                        ))
+                        )
+                    )
                 }
             }
 
@@ -179,7 +183,8 @@ struct EventParser: EventParsable {
                         toolType: toolType,
                         isError: isError,
                         eventId: eventId
-                    ))
+                    )
+                )
             }
 
         case "tentative_user_transcript":
@@ -275,3 +280,5 @@ struct EventParser: EventParsable {
         throw EventParseError.invalidEventData
     }
 }
+
+// swiftlint:enable cyclomatic_complexity function_body_length

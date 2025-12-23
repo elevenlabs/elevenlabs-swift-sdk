@@ -1,6 +1,8 @@
 import Foundation
 import LiveKit
 
+// swiftlint:disable file_length
+
 struct AgentReadyDetail: Equatable, Sendable {
     let elapsed: TimeInterval
     let viaGraceTimeout: Bool
@@ -63,11 +65,11 @@ final class ConnectionManager: ConnectionManaging {
     private let stateQueue = DispatchQueue(label: "com.elevenlabs.sdk.connection.state")
 
     private let logger: any Logging
-    
+
     init(logger: any Logging) {
         self.logger = logger
     }
-    
+
     // MARK: – Lifecycle
 
     private func resolveReadyAwaiters(with result: AgentReadyWaitResult) {
@@ -219,7 +221,7 @@ final class ConnectionManager: ConnectionManaging {
                 logger.info("Microphone enabled successfully")
             } catch {
                 logger.error("Failed to enable microphone", context: ["error": "\(error)"])
-                
+
                 if throwOnMicrophoneFailure {
                     errorHandler(error)
                     throw ConversationError.microphoneToggleFailed(error)
@@ -249,7 +251,7 @@ final class ConnectionManager: ConnectionManaging {
         return AsyncStream { continuation in
             let delegate = DataChannelDelegate(continuation: continuation, logger: logger)
             room.add(delegate: delegate)
-            
+
             continuation.onTermination = { @Sendable [weak room, weak delegate] _ in
                 // Clean up the delegate when stream terminates
                 guard let room, let delegate else { return }
@@ -270,7 +272,7 @@ extension ConnectionManager {
         // MARK: – FSM
 
         private enum Stage { case idle, waitingForSubscription, ready }
-        
+
         private var stage: Stage = .idle
         private var timeoutTask: Task<Void, Never>?
 
@@ -317,10 +319,10 @@ extension ConnectionManager {
                 await self.handleRoomDidConnect(room: room)
             }
         }
-        
+
         private func handleRoomDidConnect(room: Room) {
             guard stage == .idle else { return }
-            
+
             // Check if we can go ready immediately (fast path)
             var foundReadyAgent = false
             for participant in room.remoteParticipants.values {
@@ -330,7 +332,7 @@ extension ConnectionManager {
                     break
                 }
             }
-            
+
             if !foundReadyAgent {
                 stage = .waitingForSubscription
                 startTimeout()
@@ -342,7 +344,7 @@ extension ConnectionManager {
                 await self.handleParticipantDidConnect(room: room)
             }
         }
-        
+
         private func handleParticipantDidConnect(room: Room) {
             if stage == .idle {
                 stage = .waitingForSubscription
@@ -350,7 +352,7 @@ extension ConnectionManager {
             } else if stage != .waitingForSubscription {
                 return
             }
-            
+
             evaluateExistingSubscriptions(in: room)
         }
 
@@ -363,10 +365,10 @@ extension ConnectionManager {
                 await self.handleDidSubscribeTrack(publication: publication)
             }
         }
-        
+
         private func handleDidSubscribeTrack(publication: RemoteTrackPublication) {
             guard stage == .waitingForSubscription else { return }
-            
+
             if publication.kind == .audio {
                 logger.debug("Audio track subscribed - marking ready!")
                 markReady(source: .trackSubscribed)
@@ -384,10 +386,10 @@ extension ConnectionManager {
                 await self.handleParticipantDidDisconnect(room: room, identityString: identityString)
             }
         }
-            
+
         func handleParticipantDidDisconnect(room: Room, identityString: String) {
             let isAgent = identityString.hasPrefix("agent")
-            
+
             if isAgent || room.remoteParticipants.isEmpty {
                 reset()
                 onDisconnected()
@@ -424,20 +426,20 @@ extension ConnectionManager {
 
         private func startTimeout() {
             logger.debug("Starting grace timeout", context: ["seconds": "\(graceTimeout)"])
-            
+
             // Cancel previous if any (though shouldn't happen in valid flow)
             timeoutTask?.cancel()
-            
+
             timeoutTask = Task { [weak self, graceTimeout] in
                 try? await Task.sleep(nanoseconds: UInt64(graceTimeout * 1_000_000_000))
-                guard let self = self else { return }
-                
+                guard let self else { return }
+
                 if !Task.isCancelled {
-                    self.handleTimeout()
+                    handleTimeout()
                 }
             }
         }
-        
+
         private func handleTimeout() {
             if stage == .waitingForSubscription {
                 logger.warning("Grace timeout reached! Marking ready anyway.")
@@ -477,17 +479,17 @@ private actor DataChannelActor {
         }
         continuation.yield(data)
     }
-    
+
     func handleConnectionStateChange(_ connectionState: ConnectionState) {
         if connectionState == .disconnected {
             continuation.finish()
         }
     }
-    
+
     func handleParticipantConnected(identity: String) {
         logger.debug("Remote participant connected", context: ["identity": identity])
     }
-    
+
     func handleParticipantDisconnected(identity: String) {
         logger.debug("Remote participant disconnected", context: ["identity": identity])
     }
@@ -497,7 +499,7 @@ private final class DataChannelDelegate: RoomDelegate {
     private let actor: DataChannelActor
 
     init(continuation: AsyncStream<Data>.Continuation, logger: any Logging) {
-        self.actor = DataChannelActor(continuation: continuation, logger: logger)
+        actor = DataChannelActor(continuation: continuation, logger: logger)
     }
 
     // MARK: – Delegate
@@ -514,7 +516,7 @@ private final class DataChannelDelegate: RoomDelegate {
         }
     }
 
-    nonisolated func room(_ room: Room, didUpdateConnectionState connectionState: ConnectionState, from previousState: ConnectionState) {
+    nonisolated func room(_: Room, didUpdateConnectionState connectionState: ConnectionState, from _: ConnectionState) {
         Task {
             await actor.handleConnectionStateChange(connectionState)
         }
@@ -534,6 +536,8 @@ private final class DataChannelDelegate: RoomDelegate {
         }
     }
 }
+
+// swiftlint:enable file_length
 
 // MARK: – Convenience error extension
 

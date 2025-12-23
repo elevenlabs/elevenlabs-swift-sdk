@@ -3,10 +3,23 @@ import LiveKit
 
 @MainActor
 protocol ConversationConnectionManagerDelegate: AnyObject {
-    func connectionManager(_ manager: ConversationConnectionManager, didUpdateSpeakingState isSpeaking: Bool, for participant: Participant)
-    func connectionManager(_ manager: ConversationConnectionManager, participantDidJoin participant: RemoteParticipant)
-    func connectionManager(_ manager: ConversationConnectionManager, didReceiveData data: Data)
-    func connectionManager(_ manager: ConversationConnectionManager, didUpdateConnectionState state: ConnectionState)
+    func connectionManager(
+        _ manager: ConversationConnectionManager,
+        didUpdateSpeakingState isSpeaking: Bool,
+        for participant: Participant
+    )
+    func connectionManager(
+        _ manager: ConversationConnectionManager,
+        participantDidJoin participant: RemoteParticipant
+    )
+    func connectionManager(
+        _ manager: ConversationConnectionManager,
+        didReceiveData data: Data
+    )
+    func connectionManager(
+        _ manager: ConversationConnectionManager,
+        didUpdateConnectionState state: ConnectionState
+    )
 }
 
 @MainActor
@@ -64,32 +77,38 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
 
     // MARK: - RoomDelegate
 
-    nonisolated func room(_ room: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
+    nonisolated func room(_: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.delegate?.connectionManager(self, didUpdateSpeakingState: isSpeaking, for: participant)
+            delegate?.connectionManager(self, didUpdateSpeakingState: isSpeaking, for: participant)
         }
     }
 
-    nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
+    nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             participant.add(delegate: self)
-            self.delegate?.connectionManager(self, participantDidJoin: participant)
+            delegate?.connectionManager(self, participantDidJoin: participant)
         }
     }
 
-    nonisolated func room(_ room: Room, didUpdateConnectionState connectionState: ConnectionState, from oldValue: ConnectionState) {
+    nonisolated func room(_: Room, didUpdateConnectionState connectionState: ConnectionState, from _: ConnectionState) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.delegate?.connectionManager(self, didUpdateConnectionState: connectionState)
+            delegate?.connectionManager(self, didUpdateConnectionState: connectionState)
         }
     }
 
-    nonisolated func room(_ room: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic topic: String, encryptionType: EncryptionType) {
+    nonisolated func room(
+        _: Room,
+        participant _: RemoteParticipant?,
+        didReceiveData data: Data,
+        forTopic _: String,
+        encryptionType _: EncryptionType
+    ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.delegate?.connectionManager(self, didReceiveData: data)
+            delegate?.connectionManager(self, didReceiveData: data)
         }
     }
 
@@ -98,7 +117,7 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
     nonisolated func participant(_ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.delegate?.connectionManager(self, didUpdateSpeakingState: isSpeaking, for: participant)
+            delegate?.connectionManager(self, didUpdateSpeakingState: isSpeaking, for: participant)
         }
     }
 }

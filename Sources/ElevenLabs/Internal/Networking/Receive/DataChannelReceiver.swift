@@ -81,6 +81,7 @@ extension DataChannelReceiver: RoomDelegate {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private func handleDataMessage(_ data: Data) async {
         do {
             guard let event = try await dataHandler.parseIncomingEvent(from: data) else {
@@ -173,7 +174,8 @@ extension DataChannelReceiver: RoomDelegate {
         )
         yield(message: message)
         logger.debug(
-            "Agent correction: \(event.originalAgentResponse) -> \(event.correctedAgentResponse)")
+            "Agent correction: \(event.originalAgentResponse) -> \(event.correctedAgentResponse)"
+        )
     }
 
     private func handleAgentResponseMetadata(_ event: AgentResponseMetadataEvent) {
@@ -252,7 +254,8 @@ extension DataChannelReceiver: RoomDelegate {
 
     private func handleMCPToolCall(_ event: MCPToolCallEvent) {
         logger.info(
-            "MCP tool call: \(event.toolName) (Service: \(event.serviceId)")
+            "MCP tool call: \(event.toolName) (Service: \(event.serviceId)"
+        )
 
         switch event.state {
         case .loading:

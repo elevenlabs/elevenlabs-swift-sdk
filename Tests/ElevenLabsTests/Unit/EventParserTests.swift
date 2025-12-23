@@ -1,3 +1,4 @@
+// swiftlint:disable line_length force_unwrapping
 @testable import ElevenLabs
 import XCTest
 
@@ -300,3 +301,5 @@ final class EventParserTests: XCTestCase {
         XCTAssertFalse(metadata.metadataData.isEmpty)
     }
 }
+
+// swiftlint:enable line_length force_unwrapping

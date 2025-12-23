@@ -17,7 +17,8 @@ enum TokenError: LocalizedError, Sendable {
         case let .httpError(code):
             "HTTP error: \(code)"
         case .authenticationFailed:
-            "Authentication failed - agent may be private. For private agents, use a conversation token from your backend instead of connecting directly."
+            "Authentication failed - agent may be private." +
+                " For private agents, use a conversation token from your backend instead of connecting directly."
         case .invalidTokenResponse:
             "Invalid token in response"
         }

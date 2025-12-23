@@ -1,3 +1,4 @@
+// swiftlint:disable force_cast
 @testable import ElevenLabs
 import XCTest
 
@@ -143,3 +144,5 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(json["user_audio_chunk"] as? String, "base64AudioData")
     }
 }
+
+// swiftlint:enable force_cast

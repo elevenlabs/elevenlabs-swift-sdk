@@ -3,12 +3,12 @@ import Foundation
 /// Step responsible for fetching authentication token and connection details
 final class TokenResolutionStep: StartupStep {
     let stepName = "Token Resolution"
-    
+
     private let tokenService: any TokenServicing
     private let auth: ElevenLabsConfiguration
     private let logger: any Logging
     private let onResult: (TokenService.ConnectionDetails) -> Void
-    
+
     init(
         tokenService: any TokenServicing,
         auth: ElevenLabsConfiguration,
@@ -20,10 +20,10 @@ final class TokenResolutionStep: StartupStep {
         self.logger = logger
         self.onResult = onResult
     }
-    
+
     func execute() async throws {
         logger.debug("Fetching token/connection details...")
-        
+
         do {
             let details = try await tokenService.fetchConnectionDetails(configuration: auth)
             onResult(details)

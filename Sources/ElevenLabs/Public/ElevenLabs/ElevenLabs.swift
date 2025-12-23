@@ -219,10 +219,8 @@ public enum ElevenLabs {
 // MARK: - ElevenLabs.Configuration
 
 extension ElevenLabs {
-
     /// Minimal, per-conversation bootstrap options.
     public struct ConversationBootstrapOptions: Sendable {
         public init() {}
     }
-
 }

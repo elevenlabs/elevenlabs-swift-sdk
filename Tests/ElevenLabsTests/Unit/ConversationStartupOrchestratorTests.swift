@@ -1,5 +1,5 @@
-import XCTest
 @testable import ElevenLabs
+import XCTest
 
 @MainActor
 final class ConversationStartupOrchestratorTests: XCTestCase {
@@ -8,7 +8,7 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
     var mockTokenService: MockTokenService!
     var mockConnectionManager: MockConnectionManager!
     var logger: SDKLogger!
-    
+
     override func setUp() async throws {
         mockTokenService = MockTokenService()
         mockConnectionManager = MockConnectionManager()
@@ -19,14 +19,14 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
         logger = SDKLogger(logLevel: .error)
         orchestrator = ConversationStartupOrchestrator(logger: logger)
     }
-    
+
     override func tearDown() {
         orchestrator = nil
         mockDependencyProvider = nil
         mockTokenService = nil
         mockConnectionManager = nil
     }
-    
+
     func testExecute_SuccessfulStartup() async throws {
         // Setup Mocks
         let connectionDetails = TokenService.ConnectionDetails(
@@ -37,13 +37,13 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
         )
         mockTokenService.scenario = .success
         mockTokenService.mockConnectionDetails = connectionDetails
-        
+
         // Prime the connection manager to succeed immediately when asked to wait
         mockConnectionManager.succeedAgentReady()
-        
+
         let auth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
         var stateChanges = [ConversationStartupState]()
-        
+
         do {
             let result = try await orchestrator.execute(
                 auth: auth,
@@ -54,9 +54,9 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
                 },
                 onRoomConnected: { _ in }
             )
-            
+
             XCTAssertEqual(result.agentId, "agent-123")
-            
+
             // Validate flow
             XCTAssertTrue(stateChanges.contains(where: {
                 if case .resolvingToken = $0 { return true }; return false
@@ -64,22 +64,22 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
             XCTAssertTrue(stateChanges.contains(where: {
                 if case .connectingRoom = $0 { return true }; return false
             }))
-            
+
         } catch StartupFailure.agentTimeout {
             // Expected in mock env if we don't simulate agent ready signal
-             XCTAssertTrue(stateChanges.contains(where: {
+            XCTAssertTrue(stateChanges.contains(where: {
                 if case .connectingRoom = $0 { return true }; return false
             }))
         } catch {
-             XCTAssertTrue(mockTokenService.mockConnectionDetails != nil)
+            XCTAssertTrue(mockTokenService.mockConnectionDetails != nil)
         }
     }
-    
+
     func testExecute_TokenFailure_ThrowsError() async {
         mockTokenService.scenario = .arbitrary(TokenError.invalidResponse)
-        
+
         let auth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
-        
+
         do {
             _ = try await orchestrator.execute(
                 auth: auth,

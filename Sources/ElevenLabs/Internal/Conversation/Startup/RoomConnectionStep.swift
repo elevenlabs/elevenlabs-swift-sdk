@@ -4,7 +4,7 @@ import LiveKit
 /// Step responsible for establishing LiveKit room connection
 final class RoomConnectionStep: StartupStep {
     let stepName = "Room Connection"
-    
+
     private let connectionManager: any ConnectionManaging
     private let details: TokenService.ConnectionDetails
     private let enableMic: Bool
@@ -12,7 +12,7 @@ final class RoomConnectionStep: StartupStep {
     private let networkConfiguration: LiveKitNetworkConfiguration
     private let graceTimeout: TimeInterval
     private let logger: any Logging
-    
+
     init(
         connectionManager: any ConnectionManaging,
         details: TokenService.ConnectionDetails,
@@ -30,10 +30,10 @@ final class RoomConnectionStep: StartupStep {
         self.graceTimeout = graceTimeout
         self.logger = logger
     }
-    
+
     func execute() async throws {
         logger.debug("Starting room connection...")
-        
+
         do {
             try await connectionManager.connect(
                 details: details,

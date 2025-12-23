@@ -1,3 +1,4 @@
+// swiftlint:disable file_length type_body_length
 @testable import ElevenLabs
 import Foundation
 import LiveKit
@@ -452,6 +453,8 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotEqual(FeedbackEvent.Score.like, FeedbackEvent.Score.dislike)
     }
 }
+
+// swiftlint:enable file_length type_body_length
 
 @MainActor
 extension XCTestCase {

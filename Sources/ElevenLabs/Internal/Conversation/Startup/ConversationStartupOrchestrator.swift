@@ -1,16 +1,18 @@
+import AVFoundation
 import Foundation
 import LiveKit
-import AVFoundation
+
+// swiftlint:disable function_body_length cyclomatic_complexity
 
 /// Orchestrates the conversation startup sequence using individual steps
 @MainActor
 final class ConversationStartupOrchestrator {
     private let logger: any Logging
-    
+
     init(logger: any Logging) {
         self.logger = logger
     }
-    
+
     /// Execute the full startup sequence
     func execute(
         auth: ElevenLabsConfiguration,
@@ -21,18 +23,18 @@ final class ConversationStartupOrchestrator {
     ) async throws -> StartupResult {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
-        
+
         // Cache connection manager for synchronous access throughout startup
         let connectionManager = await provider.connectionManager()
-        
+
         let agentId = extractAgentId(from: auth)
         let context = ["agentId": agentId]
         logger.info("Starting conversation startup sequence", context: context)
-        
+
         // Step 1: Parallel Token Resolution & Mic Permission
         onStateChange(.resolvingToken)
-        
-        var connectionDetails: TokenService.ConnectionDetails!
+
+        var connectionDetails: TokenService.ConnectionDetails?
         let tokenService = await provider.tokenService
         let tokenStep = TokenResolutionStep(
             tokenService: tokenService,
@@ -41,10 +43,10 @@ final class ConversationStartupOrchestrator {
         ) { details in
             connectionDetails = details
         }
-        
+
         // 1. Start fetching token (Main Task)
         async let tokenResult: Void = tokenStep.execute()
-        
+
         // 2. Start requesting permission (Background Task)
         // This allows the system permission prompt to appear immediately
         async let permissionResult: Bool = {
@@ -70,39 +72,44 @@ final class ConversationStartupOrchestrator {
                 #endif
             }
         }()
-        
+
         let tokenStart = Date()
         let permissionGranted: Bool
         do {
             // Wait for both to complete
             try await tokenResult
             permissionGranted = await permissionResult
-            
+
             metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
         } catch {
             metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
             metrics.total = Date().timeIntervalSince(startTime)
             throw StartupFailure.token(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
-        
+
         // Step 2: Room Connection
         onStateChange(.connectingRoom)
         let throwOnMicFailure = options.microphoneFailureHandling == .throwError
+        guard let safeDetails = connectionDetails else {
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw StartupFailure.token(.authenticationFailed("Missing connection details"), metrics)
+        }
+
         let roomStep = RoomConnectionStep(
             connectionManager: connectionManager,
-            details: connectionDetails,
+            details: safeDetails,
             enableMic: !options.conversationOverrides.textOnly && permissionGranted,
             throwOnMicrophoneFailure: throwOnMicFailure,
             networkConfiguration: options.networkConfiguration,
             graceTimeout: options.startupConfiguration.agentReadyTimeout,
             logger: logger
         )
-        
+
         let roomStart = Date()
         do {
             try await roomStep.execute()
             metrics.roomConnect = Date().timeIntervalSince(roomStart)
-            
+
             if let room = connectionManager.room {
                 onRoomConnected(room)
             }
@@ -111,7 +118,7 @@ final class ConversationStartupOrchestrator {
             metrics.total = Date().timeIntervalSince(startTime)
             throw StartupFailure.room(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
-        
+
         // Step 3: Agent Ready
         onStateChange(
             .waitingForAgent(
@@ -127,7 +134,7 @@ final class ConversationStartupOrchestrator {
         ) { result in
             agentResult = result
         }
-        
+
         let agentStart = Date()
         do {
             try await agentStep.execute()
@@ -142,25 +149,25 @@ final class ConversationStartupOrchestrator {
             metrics.total = Date().timeIntervalSince(startTime)
             throw StartupFailure.agentTimeout(metrics)
         }
-        
+
         // Step 3b: Process Agent Ready Result (Non-failing or Success)
         if let result = agentResult {
             switch result {
             case let .success(detail):
                 metrics.agentReady = detail.elapsed
                 metrics.agentReadyViaGraceTimeout = detail.viaGraceTimeout
-                
+
                 let report = ConversationAgentReadyReport(
                     elapsed: detail.elapsed,
                     viaGraceTimeout: detail.viaGraceTimeout,
                     timedOut: false
                 )
                 onStateChange(.agentReady(report))
-                
+
             case let .timedOut(elapsed):
                 metrics.agentReady = elapsed
                 metrics.agentReadyTimedOut = true
-                
+
                 let report = ConversationAgentReadyReport(
                     elapsed: elapsed,
                     viaGraceTimeout: false,
@@ -172,7 +179,7 @@ final class ConversationStartupOrchestrator {
             // Fallback for safety
             metrics.agentReady = Date().timeIntervalSince(agentStart)
         }
-        
+
         // Step 4: Conversation Init
         let initStep = ConversationInitStep(
             connectionManager: connectionManager,
@@ -182,7 +189,7 @@ final class ConversationStartupOrchestrator {
         ) { attemptNumber in
             onStateChange(.sendingConversationInit(attempt: attemptNumber))
         }
-        
+
         let initStart = Date()
         do {
             try await initStep.execute()
@@ -193,24 +200,26 @@ final class ConversationStartupOrchestrator {
             metrics.total = Date().timeIntervalSince(startTime)
             throw StartupFailure.conversationInit(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
-        
+
         metrics.total = Date().timeIntervalSince(startTime)
-        
+
         return StartupResult(
             agentId: extractAgentId(from: auth),
             metrics: metrics
         )
     }
-    
+
     private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
         switch auth.authSource {
         case let .publicAgentId(id):
-            return id
+            id
         case .conversationToken, .customTokenProvider:
-            return "unknown"
+            "unknown"
         }
     }
 }
+
+// swiftlint:enable function_body_length cyclomatic_complexity
 
 // MARK: - Result Types
 

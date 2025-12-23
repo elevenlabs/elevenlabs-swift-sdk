@@ -27,7 +27,7 @@ protocol ConversationDependencyProvider: AnyObject {
     var logger: any Logging { get }
     var conversationStartup: any ConversationStartup { get async }
     var errorHandler: (Swift.Error?) -> Void { get }
-    
+
     func connectionManager() async -> any ConnectionManaging
 }
 
@@ -62,12 +62,12 @@ actor Dependencies: ConversationDependencyProvider {
     }
 
     private var _connectionManager: (any ConnectionManaging)?
-    
+
     func connectionManager() async -> any ConnectionManaging {
         if let existing = _connectionManager {
             return existing
         }
-        let loggerInstance = self.logger
+        let loggerInstance = logger
         let manager = ConnectionManager(logger: loggerInstance)
         _connectionManager = manager
         return manager
@@ -83,7 +83,7 @@ actor Dependencies: ConversationDependencyProvider {
             if let existing = _conversationStartup {
                 return existing
             }
-            let loggerInstance = self.logger
+            let loggerInstance = logger
             let startup = await MainActor.run {
                 DefaultConversationStartup(logger: loggerInstance)
             }

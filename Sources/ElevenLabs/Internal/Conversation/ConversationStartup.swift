@@ -41,7 +41,7 @@ final class DefaultConversationStartup: ConversationStartup {
     }
 
     func determineOptimalBuffer(room: Room?) async -> TimeInterval {
-        guard let room = room else {
+        guard let room else {
             logger.debug("No room available, using default buffer")
             return 150.0
         }
@@ -56,10 +56,10 @@ final class DefaultConversationStartup: ConversationStartup {
         return buffer
     }
 
-    func waitForSystemReady(room: Room?, timeout: TimeInterval) async -> Bool {
+    func waitForSystemReady(room: Room?, timeout _: TimeInterval) async -> Bool {
         // Event-based approach: readiness is handled in ConnectionManager.waitForAgentReady.
         // This method only performs a quick snapshot (no polling) for API compatibility.
-        guard let room = room else { return false }
+        guard let room else { return false }
         guard room.connectionState == .connected else { return false }
         guard !room.remoteParticipants.isEmpty else { return false }
         let agentHasAudioTrack = room.remoteParticipants.values.contains { !$0.audioTracks.isEmpty }
@@ -112,6 +112,10 @@ final class DefaultConversationStartup: ConversationStartup {
             }
         }
 
-        throw ConversationError.connectionFailed(NSError(domain: "ConversationStartup", code: -1, userInfo: [NSLocalizedDescriptionKey: "All retry attempts failed"]))
+        throw ConversationError.connectionFailed(NSError(
+            domain: "ConversationStartup",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "All retry attempts failed"]
+        ))
     }
 }

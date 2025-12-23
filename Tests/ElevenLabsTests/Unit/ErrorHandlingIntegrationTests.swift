@@ -1,3 +1,4 @@
+// swiftlint:disable file_length type_body_length function_body_length
 @testable import ElevenLabs
 import XCTest
 
@@ -416,6 +417,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         }
     }
 }
+
+// swiftlint:enable file_length type_body_length function_body_length
 
 // MARK: - Manual Test Helper
 
