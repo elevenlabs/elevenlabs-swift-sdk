@@ -31,7 +31,9 @@ actor DataChannelReceiver: MessageReceiver {
 
         continuation.onTermination = { [weak self] _ in
             Task { [weak self] in
-                await self?.cleanup()
+                guard let self else { return }
+                await self.cleanup()
+                self.room.remove(delegate: self) // Unregister from the room to stop receiving messages and prevent memory leaks
             }
         }
 
@@ -48,6 +50,8 @@ actor DataChannelReceiver: MessageReceiver {
     // MARK: - Private Methods
 
     private func cleanup() {
+        messageContinuation?.finish() // Finish the stream to avoid memory leaks and signal termination
+        eventContinuation?.finish()
         messageContinuation = nil
         eventContinuation = nil
     }
@@ -73,8 +77,9 @@ extension DataChannelReceiver: RoomDelegate {
             print("[DataChannelReceiver] Received data but no participant, ignoring")
             return
         }
-        Task {
-            await handleDataMessage(data)
+        Task { [weak self] in
+            // Use weak self to avoid retaining the actor and leaking Tasks
+            await self?.handleDataMessage(data)
         }
     }
 
