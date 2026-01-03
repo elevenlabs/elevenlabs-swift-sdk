@@ -78,7 +78,7 @@ extension DataChannelReceiver: RoomDelegate {
             return
         }
         Task { [weak self] in
-            // Use weak self to avoid retaining the actor and leaking Tasks
+            // Avoid processing events after the receiver has been deallocated
             await self?.handleDataMessage(data)
         }
     }
