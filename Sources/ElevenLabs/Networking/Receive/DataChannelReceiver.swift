@@ -19,21 +19,22 @@ actor DataChannelReceiver: MessageReceiver {
     }
 
     deinit {
+        // Finish streams first, then unregister from room
+        messageContinuation?.finish()
+        eventContinuation?.finish()
         room.remove(delegate: self)
     }
 
     // MARK: - Public API
 
     /// Stream of chat messages (agent responses and user transcripts)
-    func messages() async throws -> AsyncStream<ReceivedMessage> {
+    func messages() async -> AsyncStream<ReceivedMessage> {
         let (stream, continuation) = AsyncStream<ReceivedMessage>.makeStream()
         messageContinuation = continuation
 
         continuation.onTermination = { [weak self] _ in
             Task { [weak self] in
-                guard let self else { return }
-                await self.cleanup()
-                self.room.remove(delegate: self) // Unregister from the room to stop receiving messages and prevent memory leaks
+                await self?.handleMessageStreamTermination()
             }
         }
 
@@ -44,15 +45,23 @@ actor DataChannelReceiver: MessageReceiver {
     func events() async -> AsyncStream<IncomingEvent> {
         let (stream, continuation) = AsyncStream<IncomingEvent>.makeStream()
         eventContinuation = continuation
+
+        continuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleMessageStreamTermination()
+            }
+        }
+
         return stream
     }
 
     // MARK: - Private Methods
 
-    private func cleanup() {
-        messageContinuation?.finish() // Finish the stream to avoid memory leaks and signal termination
-        eventContinuation?.finish()
+    private func handleMessageStreamTermination() {
         messageContinuation = nil
+    }
+
+    private func handleEventStreamTermination() {
         eventContinuation = nil
     }
 
@@ -77,9 +86,8 @@ extension DataChannelReceiver: RoomDelegate {
             print("[DataChannelReceiver] Received data but no participant, ignoring")
             return
         }
-        Task { [weak self] in
-            // Avoid processing events after the receiver has been deallocated
-            await self?.handleDataMessage(data)
+        Task {
+            await self.handleDataMessage(data)
         }
     }
 

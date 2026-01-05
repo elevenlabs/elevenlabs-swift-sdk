@@ -269,6 +269,15 @@ extension ConnectionManager {
             self.onDisconnected = onDisconnected
         }
 
+        deinit {
+            // Normally tasks are cancelled via `reset()` on agent disconnect.
+            // `deinit` serves as a safety net when disconnect events aren’t delivered
+            // (e.g., when a Conversation is deallocated). Ensures all tasks are cleaned up.
+            print("[ReadyDelegate] Deinitializing - cleaning up tasks")
+            cancelTimeout()
+            cancelPolling()
+        }
+
         // MARK: – RoomDelegate
 
         func roomDidConnect(_ room: Room) {
