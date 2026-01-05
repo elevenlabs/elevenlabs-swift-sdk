@@ -87,7 +87,7 @@ extension DataChannelReceiver: RoomDelegate {
             return
         }
         Task {
-            await self.handleDataMessage(data)
+            await handleDataMessage(data)
         }
     }
 
