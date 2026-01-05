@@ -19,19 +19,22 @@ actor DataChannelReceiver: MessageReceiver {
     }
 
     deinit {
+        // Finish streams first, then unregister from room
+        messageContinuation?.finish()
+        eventContinuation?.finish()
         room.remove(delegate: self)
     }
 
     // MARK: - Public API
 
     /// Stream of chat messages (agent responses and user transcripts)
-    func messages() async throws -> AsyncStream<ReceivedMessage> {
+    func messages() async -> AsyncStream<ReceivedMessage> {
         let (stream, continuation) = AsyncStream<ReceivedMessage>.makeStream()
         messageContinuation = continuation
 
         continuation.onTermination = { [weak self] _ in
             Task { [weak self] in
-                await self?.cleanup()
+                await self?.handleMessageStreamTermination()
             }
         }
 
@@ -42,13 +45,23 @@ actor DataChannelReceiver: MessageReceiver {
     func events() async -> AsyncStream<IncomingEvent> {
         let (stream, continuation) = AsyncStream<IncomingEvent>.makeStream()
         eventContinuation = continuation
+
+        continuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.handleMessageStreamTermination()
+            }
+        }
+
         return stream
     }
 
     // MARK: - Private Methods
 
-    private func cleanup() {
+    private func handleMessageStreamTermination() {
         messageContinuation = nil
+    }
+
+    private func handleEventStreamTermination() {
         eventContinuation = nil
     }
 
