@@ -318,6 +318,12 @@ extension ConnectionManager {
             self.onDisconnected = onDisconnected
         }
 
+        deinit {
+            // Safety net: cancel timeout when delegate is deallocated without
+            // going through reset() (e.g. Conversation deallocated directly).
+            timeoutTask?.cancel()
+        }
+
         // MARK: – RoomDelegate
 
         nonisolated func roomDidConnect(_ room: Room) {
