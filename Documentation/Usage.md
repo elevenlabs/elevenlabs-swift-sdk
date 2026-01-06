@@ -101,7 +101,7 @@ let conversation = try await ElevenLabs.startConversation(
 )
 
 // 2) Send text messages
-try await conversation.sendMessage("Hej! Opowiedz mi o pogodzie.")
+try await conversation.sendMessage("Hi! Tell me about the weather.")
 
 // 3) Receive responses (reactive)
 conversation.$messages
@@ -127,6 +127,19 @@ try await conversation.toggleMute()
 
 // Set explicitly
 try await conversation.setMuted(true)
+
+// Note: setMuted() requires an active connection. Call it after the conversation connects,
+// for example in the onAgentReady callback:
+let conversation = try await ElevenLabs.startConversation(
+    agentId: "agent_123",
+    config: .init(
+        onAgentReady: {
+            Task {
+                try? await conversation.setMuted(false) // Unmute when ready
+            }
+        }
+    )
+)
 ```
 
 ### Raw Audio Tracks
@@ -153,9 +166,11 @@ if let agentTrack = conversation.agentAudioTrack as? RemoteAudioTrack {
 Client tools allow your agent to execute logic within your app. You must register the tools in the ElevenLabs Dashboard first.
 
 ```swift
+// Observe tool calls using Combine
 conversation.$pendingToolCalls
     .receive(on: DispatchQueue.main)
-    .sink { toolCalls in
+    .sink { [weak conversation] toolCalls in
+        guard let conversation else { return }
         for toolCall in toolCalls {
             Task {
                 // 1. Parse parameters (JSON)
@@ -173,6 +188,21 @@ conversation.$pendingToolCalls
         }
     }
     .store(in: &cancellables)
+
+// Alternative: Using async/await pattern with observation
+Task {
+    for await toolCalls in conversation.$pendingToolCalls.values {
+        await withTaskGroup(of: Void.self) { group in
+            for toolCall in toolCalls {
+                group.addTask {
+                    let params = (try? toolCall.getParameters()) ?? [:]
+                    let result = await myAppService.execute(toolName: toolCall.toolName, params: params)
+                    try? await conversation.sendToolResult(for: toolCall.toolCallId, result: result)
+                }
+            }
+        }
+    }
+}
 ```
 
 ### MCP (Model Context Protocol) Tools
@@ -180,9 +210,11 @@ conversation.$pendingToolCalls
 If your agent uses MCP, you can monitor and approve sensitive operations.
 
 ```swift
+// Using Combine
 conversation.$mcpToolCalls
     .receive(on: DispatchQueue.main)
-    .sink { mcpCalls in
+    .sink { [weak conversation] mcpCalls in
+        guard let conversation else { return }
         for call in mcpCalls where call.state == .awaitingApproval {
             Task {
                 let approved = await showApprovalUI(for: call)
@@ -194,6 +226,19 @@ conversation.$mcpToolCalls
         }
     }
     .store(in: &cancellables)
+
+// Alternative: Using async/await pattern
+Task {
+    for await mcpCalls in conversation.$mcpToolCalls.values {
+        for call in mcpCalls where call.state == .awaitingApproval {
+            let approved = await showApprovalUI(for: call)
+            try? await conversation.sendMCPToolApproval(
+                toolCallId: call.toolCallId,
+                isApproved: approved
+            )
+        }
+    }
+}
 ```
 
 ---
@@ -399,9 +444,40 @@ Always call SDK methods from the `@MainActor` when interacting with the UI. The 
 
 ### 2. Manual Cleanup
 
-While the SDK uses ARC, it's good practice to call `endConversation()` explicitly when the user leaves the chat screen to ensure immediate release of WebRTC resources.
+Although the SDK uses ARC, we recommend calling `endConversation()` when the user leaves the chat screen to promptly release WebRTC resources.
 
-### 3. Handling Connection Drops
+```swift
+// Call endConversation() when the conversation is active
+if conversation.state.isActive {
+    await conversation.endConversation()
+}
+```
+
+### 3. Cancelling Startup
+
+If you want to abort connecting (e.g., the user dismisses the screen during `startConversation(...)`), run the start in a separate `Task` and cancel it if needed:
+
+```swift
+// Start
+let connectTask = Task { () -> Conversation in
+    try await ElevenLabs.startConversation(agentId: "agent_123")
+}
+
+// Cancel later
+connectTask.cancel()
+
+// Optionally await the result
+do {
+    let conversation = try await connectTask.value
+    // conversation is ready
+} catch is CancellationError {
+    // connection cancelled
+} catch {
+    // startup error
+}
+```
+
+### 4. Handling Connection Drops
 
 Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff.
 

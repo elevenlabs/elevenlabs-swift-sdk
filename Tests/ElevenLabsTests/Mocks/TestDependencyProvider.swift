@@ -2,28 +2,38 @@
 
 @MainActor
 final class TestDependencyProvider: ConversationDependencyProvider {
-    var logger: any Logging
-    var conversationStartup: any ConversationStartup
-
-    var tokenService: any TokenServicing
-    var connectionManager: any ConnectionManaging
-    var errorHandler: (Swift.Error?) -> Void
+    let logger: any Logging
+    private let _conversationStartup: any ConversationStartup
+    private let _tokenService: any TokenServicing
+    private let _connectionManager: any ConnectionManaging
+    let errorHandler: (Swift.Error?) -> Void
 
     init(
         tokenService: any TokenServicing,
         connectionManager: any ConnectionManaging,
         errorHandler: @Sendable @escaping (Swift.Error?) -> Void = { _ in }
     ) {
-        self.tokenService = tokenService
-        self.connectionManager = connectionManager
+        _tokenService = tokenService
+        _connectionManager = connectionManager
         self.errorHandler = errorHandler
 
-        // Initialize with minimal defaults for tests that don't need them
         logger = SDKLogger(logLevel: .error)
-        conversationStartup = DefaultConversationStartup(logger: logger)
+        _conversationStartup = DefaultConversationStartup(logger: logger)
 
-        self.connectionManager.errorHandler = { [weak self] error in
+        _connectionManager.errorHandler = { [weak self] error in
             self?.errorHandler(error)
         }
+    }
+
+    var tokenService: any TokenServicing {
+        get async { _tokenService }
+    }
+
+    var conversationStartup: any ConversationStartup {
+        get async { _conversationStartup }
+    }
+
+    func connectionManager() async -> any ConnectionManaging {
+        _connectionManager
     }
 }

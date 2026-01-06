@@ -430,12 +430,14 @@ extension ConnectionManager {
             // Cancel previous if any (though shouldn't happen in valid flow)
             timeoutTask?.cancel()
 
-            timeoutTask = Task { [weak self, graceTimeout] in
-                try? await Task.sleep(nanoseconds: UInt64(graceTimeout * 1_000_000_000))
-                guard let self else { return }
-
-                if !Task.isCancelled {
+            timeoutTask = Task<Void, Never> { [weak self, graceTimeout] in
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(graceTimeout * 1_000_000_000))
+                    guard let self, !Task.isCancelled else { return }
                     handleTimeout()
+                } catch {
+                    // Task was cancelled or failed, exit gracefully without throwing
+                    return
                 }
             }
         }

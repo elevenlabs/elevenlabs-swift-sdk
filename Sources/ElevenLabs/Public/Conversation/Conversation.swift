@@ -603,6 +603,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
     func _testing_setState(_ newState: ConversationState) {
         state = newState
     }
+
+    // swiftlint:disable:next identifier_name
+    func _testing_setConnectionManager(_ manager: any ConnectionManaging) {
+        cachedConnectionManager = manager
+    }
     #endif
 
     /// Processes incoming raw data from the network.

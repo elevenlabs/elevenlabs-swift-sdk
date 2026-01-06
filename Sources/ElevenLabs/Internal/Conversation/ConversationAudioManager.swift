@@ -2,9 +2,11 @@ import Foundation
 import LiveKit
 
 @MainActor
-final class ConversationAudioManager: ObservableObject {
-    @Published private(set) var audioDevices: [AudioDevice] = []
-    @Published private(set) var selectedAudioDeviceID: String = ""
+final class ConversationAudioManager {
+    private(set) var audioDevices: [AudioDevice] = []
+    private(set) var selectedAudioDeviceID: String = ""
+    private var devicesContinuation: AsyncStream<[AudioDevice]>.Continuation?
+    private var selectedDeviceContinuation: AsyncStream<String>.Continuation?
 
     private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
@@ -14,7 +16,7 @@ final class ConversationAudioManager: ObservableObject {
     init() {
         audioDevices = audioManager.inputDevices
         selectedAudioDeviceID = audioManager.inputDevice.deviceId
-        observeDeviceChanges()
+        setupAudioConfiguration()
     }
 
     deinit {
@@ -22,6 +24,8 @@ final class ConversationAudioManager: ObservableObject {
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
         }
+        devicesContinuation?.finish()
+        selectedDeviceContinuation?.finish()
     }
 
     func configure(with options: ConversationOptions) async {
@@ -74,28 +78,48 @@ final class ConversationAudioManager: ObservableObject {
         }
     }
 
-    private func observeDeviceChanges() {
+    private func setupAudioConfiguration() {
         do {
             try audioManager.set(microphoneMuteMode: .inputMixer)
         } catch {
             logger.error("Failed to set microphone mute mode: \(error.localizedDescription)")
-            // ignore
         }
 
         Task {
             do {
                 try await audioManager.setRecordingAlwaysPreparedMode(true)
             } catch {
-                // ignore
+                logger.error("Failed to set recording always prepared mode: \(error.localizedDescription)")
             }
         }
 
+        setupDeviceChangeObserver()
+    }
+
+    private func setupDeviceChangeObserver() {
         audioManager.onDeviceUpdate = { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                // Update audio devices list and default device when system notifies us of changes
                 self.audioDevices = self.audioManager.inputDevices
                 self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
+                self.devicesContinuation?.yield(self.audioDevices)
+                self.selectedDeviceContinuation?.yield(self.selectedAudioDeviceID)
             }
+        }
+    }
+
+    func devicesUpdates() -> AsyncStream<[AudioDevice]> {
+        AsyncStream { continuation in
+            devicesContinuation = continuation
+            continuation.yield(audioDevices)
+        }
+    }
+
+    func selectedDeviceIdUpdates() -> AsyncStream<String> {
+        AsyncStream { continuation in
+            selectedDeviceContinuation = continuation
+            continuation.yield(selectedAudioDeviceID)
         }
     }
 }

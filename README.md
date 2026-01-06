@@ -103,6 +103,20 @@ struct ChatView: View {
 }
 ```
 
+### Cancel connecting
+
+If you need to stop connecting (e.g., the user leaves the screen before the connection completes), start the session inside a `Task` and cancel it:
+
+```swift
+// Start connecting
+let connectTask = Task { () -> Conversation in
+    try await ElevenLabs.startConversation(agentId: "your-agent-id")
+}
+
+// Cancel connecting
+connectTask.cancel()
+```
+
 ---
 
 ## Authentication Modes

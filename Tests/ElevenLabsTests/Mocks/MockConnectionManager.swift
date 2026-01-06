@@ -2,7 +2,6 @@
 import Foundation
 import LiveKit
 
-@MainActor
 final class MockConnectionManager: ConnectionManaging {
     enum Error: Swift.Error {
         case connectionFailed
@@ -33,6 +32,7 @@ final class MockConnectionManager: ConnectionManaging {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic _: Bool,
+        throwOnMicrophoneFailure _: Bool,
         networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval
     ) async throws {

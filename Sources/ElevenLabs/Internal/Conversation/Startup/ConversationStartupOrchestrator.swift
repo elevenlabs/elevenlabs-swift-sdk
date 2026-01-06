@@ -44,11 +44,14 @@ final class ConversationStartupOrchestrator {
             connectionDetails = details
         }
 
-        // 1. Start fetching token (Main Task)
-        async let tokenResult: Void = tokenStep.execute()
+        // Step 1: Token Fetch & Permission Request in parallel
+        let tokenStart = Date()
 
-        // 2. Start requesting permission (Background Task)
-        // This allows the system permission prompt to appear immediately
+        // Run both operations in parallel using async let.
+        // Note: async let is preferred over TaskGroup for exactly 2 parallel operations
+        // as it's more concise and equally performant. TaskGroup would be better for
+        // dynamic number of tasks or when collecting results iteratively.
+        async let tokenResult: Void = tokenStep.execute()
         async let permissionResult: Bool = {
             guard !options.conversationOverrides.textOnly else { return true }
             return await withCheckedContinuation { continuation in
@@ -73,14 +76,16 @@ final class ConversationStartupOrchestrator {
             }
         }()
 
-        let tokenStart = Date()
         let permissionGranted: Bool
         do {
-            // Wait for both to complete
             try await tokenResult
             permissionGranted = await permissionResult
-
             metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
+        } catch is CancellationError {
+            // Handle cancellation separately - don't wrap in StartupFailure
+            metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw CancellationError()
         } catch {
             metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
             metrics.total = Date().timeIntervalSince(startTime)
@@ -113,6 +118,11 @@ final class ConversationStartupOrchestrator {
             if let room = connectionManager.room {
                 onRoomConnected(room)
             }
+        } catch is CancellationError {
+            // Handle cancellation separately - don't wrap in StartupFailure
+            metrics.roomConnect = Date().timeIntervalSince(roomStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw CancellationError()
         } catch {
             metrics.roomConnect = Date().timeIntervalSince(roomStart)
             metrics.total = Date().timeIntervalSince(startTime)

@@ -22,6 +22,7 @@ protocol ConnectionManaging: AnyObject {
     func publish(data: Data, options: DataPublishOptions) async throws
 }
 
+@MainActor
 protocol ConversationDependencyProvider: AnyObject {
     var tokenService: any TokenServicing { get async }
     var logger: any Logging { get }
@@ -31,13 +32,16 @@ protocol ConversationDependencyProvider: AnyObject {
     func connectionManager() async -> any ConnectionManaging
 }
 
-/// A minimalistic dependency injection container using actor for thread-safe lazy initialization.
-/// It centralizes services so that SDK surface remains lightweight for app integrations.
+/// A minimalistic dependency injection container for internal SDK use.
+/// Since all SDK operations run on MainActor, this uses simple lazy initialization
+/// without additional synchronization overhead.
+///
 /// - Note: For production apps, consider using a more flexible approach offered by e.g.:
 ///   - [Factory](https://github.com/hmlongco/Factory)
 ///   - [swift-dependencies](https://github.com/pointfreeco/swift-dependencies)
 ///   - [Needle](https://github.com/uber/needle)
-actor Dependencies: ConversationDependencyProvider {
+@MainActor
+final class Dependencies: ConversationDependencyProvider {
     static let shared = Dependencies()
 
     private init() {}
@@ -50,7 +54,7 @@ actor Dependencies: ConversationDependencyProvider {
             if let existing = _tokenService {
                 return existing
             }
-            let globalConfig = await ElevenLabs.Global.shared.configuration
+            let globalConfig = ElevenLabs.Global.shared.configuration
             let tokenServiceConfig = TokenService.Configuration(
                 apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
                 websocketURL: globalConfig.websocketUrl
@@ -73,7 +77,7 @@ actor Dependencies: ConversationDependencyProvider {
         return manager
     }
 
-    nonisolated var logger: any Logging {
+    var logger: any Logging {
         SDKLogger(logLevel: .warning)
     }
 
@@ -84,15 +88,13 @@ actor Dependencies: ConversationDependencyProvider {
                 return existing
             }
             let loggerInstance = logger
-            let startup = await MainActor.run {
-                DefaultConversationStartup(logger: loggerInstance)
-            }
+            let startup = DefaultConversationStartup(logger: loggerInstance)
             _conversationStartup = startup
             return startup
         }
     }
 
-    nonisolated var errorHandler: (Swift.Error?) -> Void {
+    var errorHandler: (Swift.Error?) -> Void {
         { _ in }
     }
 }

@@ -317,8 +317,10 @@ final class ConversationTests: XCTestCase {
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
 
-        // Set up mock connection manager with a room so sendFeedback can publish
+        // Set up mock connection manager with a room and active state so sendFeedback can publish
         mockConnectionManager.room = Room()
+        conversation._testing_setConnectionManager(mockConnectionManager)
+        conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
 
         await conversation._testing_handleIncomingEvent(
             IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42))
@@ -334,7 +336,6 @@ final class ConversationTests: XCTestCase {
         let initialFeedbackState = await feedbackStates.last()
         XCTAssertEqual(initialFeedbackState, true)
 
-        conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
         try await conversation.sendFeedback(FeedbackEvent.Score.like, eventId: 42)
 
         // Allow async callbacks to complete

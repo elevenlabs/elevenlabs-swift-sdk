@@ -29,7 +29,7 @@ extension RetryableStartupStep {
             let attemptNumber = index + 1
 
             if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
 
             do {
