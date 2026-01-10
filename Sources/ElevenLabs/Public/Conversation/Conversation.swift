@@ -592,7 +592,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     // MARK: - Testing Hooks
 
-    #if DEBUG
     @MainActor
     // swiftlint:disable:next identifier_name
     func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
@@ -608,7 +607,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
     func _testing_setConnectionManager(_ manager: any ConnectionManaging) {
         cachedConnectionManager = manager
     }
-    #endif
 
     /// Processes incoming raw data from the network.
     /// - Note: This is nonisolated to allow heavy JSON parsing on background threads.

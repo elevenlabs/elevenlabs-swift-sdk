@@ -477,10 +477,37 @@ do {
 }
 ```
 
+Timeout-based cancellation:
+
+If you want to automatically cancel connecting after a timeout (e.g., 10 seconds), start the task and schedule a cancellation using `Task.sleep`:
+
+```swift
+// Start connecting
+let connectTask = Task { () -> Conversation in
+    try await ElevenLabs.startConversation(agentId: "agent_123")
+}
+
+// Cancel after timeout
+Task {
+    try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+    connectTask.cancel()
+}
+
+// Await result (optional)
+do {
+    let conversation = try await connectTask.value
+    // connected
+} catch is CancellationError {
+    // cancelled due to timeout
+} catch {
+    // startup error
+}
+```
+
 ### 4. Handling Connection Drops
 
 Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff.
 
-### 4. Privacy
+### 5. Privacy
 
 Always ensure you have requested microphone permissions **before** calling `startConversation` for a smoother user experience, although the SDK will handle basics.
