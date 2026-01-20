@@ -13,7 +13,7 @@ final class MockConnectionManager: ConnectionManaging {
 
     var room: Room?
     var shouldObserveRoomConnection: Bool { false }
-    var errorHandler: (Swift.Error?) -> Void = { _ in }
+    var errorHandler: ((Swift.Error?) -> Void)?
 
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
@@ -42,7 +42,7 @@ final class MockConnectionManager: ConnectionManaging {
         lastNetworkConfiguration = networkConfiguration
 
         if shouldFailConnection {
-            errorHandler(connectionError)
+            errorHandler?(connectionError)
             throw connectionError
         }
 
@@ -77,7 +77,7 @@ final class MockConnectionManager: ConnectionManaging {
 
     func publish(data: Data, options _: DataPublishOptions) async throws {
         if let publishError {
-            errorHandler(publishError)
+            errorHandler?(publishError)
             throw publishError
         }
         publishedPayloads.append(data)

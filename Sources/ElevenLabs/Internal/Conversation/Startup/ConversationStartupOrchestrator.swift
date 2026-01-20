@@ -2,8 +2,6 @@ import AVFoundation
 import Foundation
 import LiveKit
 
-// swiftlint:disable function_body_length cyclomatic_complexity
-
 /// Orchestrates the conversation startup sequence using individual steps
 @MainActor
 final class ConversationStartupOrchestrator {
@@ -13,6 +11,7 @@ final class ConversationStartupOrchestrator {
         self.logger = logger
     }
 
+    // swiftlint:disable:next function_body_length cyclomatic_complexity
     /// Execute the full startup sequence
     func execute(
         auth: ElevenLabsConfiguration,
@@ -228,8 +227,6 @@ final class ConversationStartupOrchestrator {
         }
     }
 }
-
-// swiftlint:enable function_body_length cyclomatic_complexity
 
 // MARK: - Result Types
 

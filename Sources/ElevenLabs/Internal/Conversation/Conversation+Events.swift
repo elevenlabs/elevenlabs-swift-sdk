@@ -1,11 +1,10 @@
 import Foundation
 
-// swiftlint:disable cyclomatic_complexity function_body_length
-
 @MainActor
 extension Conversation {
     // MARK: - Event Handling
 
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
@@ -164,5 +163,3 @@ extension Conversation {
         }
     }
 }
-
-// swiftlint:enable cyclomatic_complexity function_body_length

@@ -6,12 +6,12 @@ final class TestDependencyProvider: ConversationDependencyProvider {
     private let _conversationStartup: any ConversationStartup
     private let _tokenService: any TokenServicing
     private let _connectionManager: any ConnectionManaging
-    let errorHandler: (Swift.Error?) -> Void
+    let errorHandler: ((Swift.Error?) -> Void)?
 
     init(
         tokenService: any TokenServicing,
         connectionManager: any ConnectionManaging,
-        errorHandler: @Sendable @escaping (Swift.Error?) -> Void = { _ in }
+        errorHandler: (@Sendable (Swift.Error?) -> Void)? = nil
     ) {
         _tokenService = tokenService
         _connectionManager = connectionManager
@@ -21,7 +21,7 @@ final class TestDependencyProvider: ConversationDependencyProvider {
         _conversationStartup = DefaultConversationStartup(logger: logger)
 
         _connectionManager.errorHandler = { [weak self] error in
-            self?.errorHandler(error)
+            self?.errorHandler?(error)
         }
     }
 

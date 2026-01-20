@@ -53,7 +53,7 @@ final class ConnectionManager: ConnectionManaging {
     private var readyDelegate: ReadyDelegate?
     private var readyStartTime: Date?
     private var lastReadyDetail: AgentReadyDetail?
-    var errorHandler: (Swift.Error?) -> Void = { _ in }
+    var errorHandler: ((Swift.Error?) -> Void)?
 
     private struct ReadyAwaiter {
         let id: UUID
@@ -124,7 +124,12 @@ final class ConnectionManager: ConnectionManaging {
             let id = UUID()
             let timeoutTask = Task { [weak self] in
                 guard timeout > 0 else { return }
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                } catch {
+                    // Task was cancelled, exit gracefully
+                    return
+                }
                 guard let self else { return }
                 var awaiter: ReadyAwaiter?
                 var elapsed: TimeInterval = 0
@@ -153,7 +158,7 @@ final class ConnectionManager: ConnectionManaging {
         do {
             try await room.localParticipant.publish(data: data, options: options)
         } catch {
-            errorHandler(error)
+            errorHandler?(error)
             throw error
         }
     }
@@ -207,9 +212,9 @@ final class ConnectionManager: ConnectionManaging {
             logger.info("LiveKit room.connect completed", context: ["duration": "\(Date().timeIntervalSince(connectStart))"])
         } catch {
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
-            errorHandler(error)
+            errorHandler?(error)
             if await LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
-                errorHandler(ConversationError.localNetworkPermissionRequired)
+                errorHandler?(ConversationError.localNetworkPermissionRequired)
             }
             throw error
         }
@@ -221,13 +226,12 @@ final class ConnectionManager: ConnectionManaging {
                 logger.info("Microphone enabled successfully")
             } catch {
                 logger.error("Failed to enable microphone", context: ["error": "\(error)"])
+                errorHandler?(error)
 
                 if throwOnMicrophoneFailure {
-                    errorHandler(error)
                     throw ConversationError.microphoneToggleFailed(error)
                 } else {
                     logger.warning("Continuing without microphone due to error handling policy")
-                    errorHandler(error)
                 }
             }
         }

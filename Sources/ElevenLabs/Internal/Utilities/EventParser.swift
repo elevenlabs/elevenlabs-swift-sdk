@@ -1,7 +1,5 @@
 import Foundation
 
-// swiftlint:disable cyclomatic_complexity function_body_length
-
 enum EventParseError: Error {
     case unknownEventType(String)
     case invalidEventData
@@ -12,6 +10,7 @@ protocol EventParsable: Sendable {
 }
 
 struct EventParser: EventParsable {
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     // Parse incoming JSON data into an IncomingEvent
     static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -280,5 +279,3 @@ struct EventParser: EventParsable {
         throw EventParseError.invalidEventData
     }
 }
-
-// swiftlint:enable cyclomatic_complexity function_body_length

@@ -1,42 +1,54 @@
 import Foundation
-import LiveKit
 
+#if canImport(LiveKit)
+import LiveKit
+#endif
+
+/// Manages audio device configuration and speech activity handling for conversations.
+/// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
 @MainActor
 final class ConversationAudioManager {
     private(set) var audioDevices: [AudioDevice] = []
     private(set) var selectedAudioDeviceID: String = ""
-    private var devicesContinuation: AsyncStream<[AudioDevice]>.Continuation?
-    private var selectedDeviceContinuation: AsyncStream<String>.Continuation?
 
     private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
-    private let logger: any Logging = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
+    private let logger: any Logging
 
-    init() {
+    /// Callback when audio devices list changes
+    var onDevicesChanged: (([AudioDevice]) -> Void)?
+
+    /// Callback when selected device changes
+    var onSelectedDeviceChanged: ((String) -> Void)?
+
+    init(logger: any Logging) {
+        self.logger = logger
         audioDevices = audioManager.inputDevices
         selectedAudioDeviceID = audioManager.inputDevice.deviceId
-        setupAudioConfiguration()
+        setupInitialConfiguration()
     }
 
     deinit {
+        // Reset callbacks directly since we can't call MainActor methods from deinit
         audioManager.onDeviceUpdate = nil
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
         }
-        devicesContinuation?.finish()
-        selectedDeviceContinuation?.finish()
     }
 
+    // MARK: - Configuration
+
+    /// Apply audio pipeline configuration from conversation options.
     func configure(with options: ConversationOptions) async {
         let config = options.audioConfiguration
 
         if let mode = config?.microphoneMuteMode {
-            try? audioManager.set(microphoneMuteMode: mode)
-        }
-
-        if let prepared = config?.recordingAlwaysPrepared {
-            try? await audioManager.setRecordingAlwaysPreparedMode(prepared)
+            do {
+                try audioManager.set(microphoneMuteMode: mode)
+            } catch {
+                logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
+            }
         }
 
         if let bypass = config?.voiceProcessingBypassed {
@@ -47,6 +59,56 @@ final class ConversationAudioManager {
             audioManager.isVoiceProcessingAGCEnabled = agc
         }
 
+        if let prepared = config?.recordingAlwaysPrepared {
+            do {
+                try await audioManager.setRecordingAlwaysPreparedMode(prepared)
+            } catch {
+                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
+            }
+        }
+
+        configureSpeechHandler(options: options)
+    }
+
+    /// Cleanup audio state when conversation ends.
+    func cleanup() {
+        cleanupSpeechHandler()
+    }
+
+    // MARK: - Private
+
+    private func setupInitialConfiguration() {
+        // Set initial microphone mute mode
+        do {
+            try audioManager.set(microphoneMuteMode: .inputMixer)
+        } catch {
+            logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
+        }
+
+        // Set recording always prepared mode asynchronously
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.audioManager.setRecordingAlwaysPreparedMode(true)
+            } catch {
+                self.logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
+            }
+        }
+
+        // Setup device change observer
+        audioManager.onDeviceUpdate = { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.audioDevices = self.audioManager.inputDevices
+                self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
+                self.onDevicesChanged?(self.audioDevices)
+                self.onSelectedDeviceChanged?(self.selectedAudioDeviceID)
+            }
+        }
+    }
+
+    private func configureSpeechHandler(options: ConversationOptions) {
+        let config = options.audioConfiguration
         let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
 
         if needsSpeechHandler {
@@ -56,7 +118,7 @@ final class ConversationAudioManager {
             }
             audioManager.onMutedSpeechActivity = { _, event in
                 // Handlers are @Sendable, they manage their own synchronization
-                if let handler = options.audioConfiguration?.onSpeechActivity {
+                if let handler = config?.onSpeechActivity {
                     handler(event)
                 }
                 if let handler = options.onSpeechActivity {
@@ -64,62 +126,15 @@ final class ConversationAudioManager {
                 }
             }
         } else if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
-            previousSpeechActivityHandler = nil
-            audioSpeechHandlerInstalled = false
+            cleanupSpeechHandler()
         }
     }
 
-    func cleanup() {
+    private func cleanupSpeechHandler() {
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
             previousSpeechActivityHandler = nil
             audioSpeechHandlerInstalled = false
-        }
-    }
-
-    private func setupAudioConfiguration() {
-        do {
-            try audioManager.set(microphoneMuteMode: .inputMixer)
-        } catch {
-            logger.error("Failed to set microphone mute mode: \(error.localizedDescription)")
-        }
-
-        Task {
-            do {
-                try await audioManager.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                logger.error("Failed to set recording always prepared mode: \(error.localizedDescription)")
-            }
-        }
-
-        setupDeviceChangeObserver()
-    }
-
-    private func setupDeviceChangeObserver() {
-        audioManager.onDeviceUpdate = { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                // Update audio devices list and default device when system notifies us of changes
-                self.audioDevices = self.audioManager.inputDevices
-                self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
-                self.devicesContinuation?.yield(self.audioDevices)
-                self.selectedDeviceContinuation?.yield(self.selectedAudioDeviceID)
-            }
-        }
-    }
-
-    func devicesUpdates() -> AsyncStream<[AudioDevice]> {
-        AsyncStream { continuation in
-            devicesContinuation = continuation
-            continuation.yield(audioDevices)
-        }
-    }
-
-    func selectedDeviceIdUpdates() -> AsyncStream<String> {
-        AsyncStream { continuation in
-            selectedDeviceContinuation = continuation
-            continuation.yield(selectedAudioDeviceID)
         }
     }
 }

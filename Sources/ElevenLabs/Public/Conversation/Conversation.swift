@@ -54,8 +54,13 @@ public final class Conversation: ObservableObject, RoomDelegate {
     var currentStreamingMessage: Message?
     var lastAgentEventId: Int?
     var lastFeedbackSubmittedEventId: Int?
-    private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
-    private var audioSpeechHandlerInstalled = false
+
+    /// Pending mute state to apply after connection completes.
+    /// Allows setting mute state during connection phase.
+    private var pendingMuteState: Bool?
+
+    /// Audio device management
+    private var audioManager: ConversationAudioManager?
 
     /// Internal logger, accessible from nonisolated contexts.
     nonisolated let logger: any Logging
@@ -89,7 +94,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         self.options = options
         // Temporary logger until dependencies are resolved
         logger = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
-        observeDeviceChanges()
+        setupAudioManager()
     }
 
     init(
@@ -100,11 +105,21 @@ public final class Conversation: ObservableObject, RoomDelegate {
         dependenciesTask = nil
         self.options = options
         logger = dependencyProvider.logger
-        observeDeviceChanges()
+        setupAudioManager()
     }
 
-    deinit {
-        AudioManager.shared.onDeviceUpdate = nil
+    private func setupAudioManager() {
+        let manager = ConversationAudioManager(logger: logger)
+        manager.onDevicesChanged = { [weak self] devices in
+            self?.audioDevices = devices
+        }
+        manager.onSelectedDeviceChanged = { [weak self] deviceId in
+            self?.selectedAudioDeviceID = deviceId
+        }
+        audioManager = manager
+        // Sync initial values
+        audioDevices = manager.audioDevices
+        selectedAudioDeviceID = manager.selectedAudioDeviceID
     }
 
     // MARK: - Public API
@@ -140,11 +155,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         state = .connecting
 
-        // Disconnect previous session in background to avoid blocking the Main Actor.
-        // ConnectionManager handles internal synchronization.
-        Task {
-            await connectionManager.disconnect()
-        }
+        // Disconnect previous session before starting new one.
+        // This ensures clean state and prevents race conditions with ConnectionManager.
+        await connectionManager.disconnect()
         cleanupPreviousConversation()
         self.options = options
 
@@ -152,7 +165,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         activeContext = ["agentId": currentAgentId]
         logger.info("Starting conversation", context: activeContext)
 
-        await applyAudioPipelineConfiguration()
+        await audioManager?.configure(with: options)
         options.onCanSendFeedbackChange?(false)
 
         connectionManager.errorHandler = provider.errorHandler
@@ -227,6 +240,20 @@ public final class Conversation: ObservableObject, RoomDelegate {
         state = .active(.init(agentId: result.agentId))
         startupMetrics = result.metrics
         updateStartupState(.active(CallInfo(agentId: result.agentId), result.metrics))
+
+        // Apply pending mute state if user called setMuted during connection
+        if let pendingMute = pendingMuteState {
+            pendingMuteState = nil
+            if let room = connectionManager.room {
+                do {
+                    try await room.localParticipant.setMicrophone(enabled: !pendingMute)
+                    isMuted = pendingMute
+                } catch {
+                    logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
+                }
+            }
+        }
+
         options.onAgentReady?()
 
         startRoomObservers()
@@ -244,14 +271,21 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     /// End and clean up.
+    /// Can be called during connection phase to cancel, or during active conversation to end.
     public func endConversation() async {
-        guard state.isActive else { return }
-        guard let connectionManager = resolvedConnectionManager() else { return }
-
-        // Disconnect in background to avoid blocking the main thread
-        Task {
-            await connectionManager.disconnect()
+        // Allow ending during both active and connecting states
+        guard state.isActive || state == .connecting else { return }
+        guard let connectionManager = resolvedConnectionManager() else {
+            // No connection manager yet, just reset state
+            if state == .connecting {
+                state = .idle
+                cleanupPreviousConversation()
+            }
+            return
         }
+
+        // Disconnect synchronously to ensure clean state
+        await connectionManager.disconnect()
 
         state = .ended(reason: .userEnded)
         cleanupPreviousConversation()
@@ -277,13 +311,23 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     public func setMuted(_ muted: Bool) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
-        guard let room = resolvedConnectionManager()?.room else { throw ConversationError.notConnected }
-        do {
-            try await room.localParticipant.setMicrophone(enabled: !muted)
+        if state.isActive {
+            guard let room = resolvedConnectionManager()?.room else {
+                throw ConversationError.notConnected
+            }
+            do {
+                try await room.localParticipant.setMicrophone(enabled: !muted)
+                isMuted = muted
+                pendingMuteState = nil
+            } catch {
+                throw ConversationError.microphoneToggleFailed(error)
+            }
+        } else if state == .connecting {
+            // Buffer the mute state to apply after connection completes
+            pendingMuteState = muted
             isMuted = muted
-        } catch {
-            throw ConversationError.microphoneToggleFailed(error)
+        } else {
+            throw ConversationError.notConnected
         }
     }
 
@@ -352,7 +396,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     var speakingTimer: Task<Void, Never>?
     private var roomChangesTask: Task<Void, Never>?
-    private var protocolEventsTask: Task<Void, Never>?
     private var protocolEventsDelegate: RoomDelegate?
 
     private func resolvedConnectionManager() -> (any ConnectionManaging)? {
@@ -376,55 +419,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
             fatalError("Conversation dependency provider not configured")
         }
         return dependencyProvider
-    }
-
-    private func applyAudioPipelineConfiguration() async {
-        let audioManager = AudioManager.shared
-
-        let config = options.audioConfiguration
-
-        // Apply audio settings asynchronously but in a structured way
-        // This prevents blocking the main actor while maintaining proper task management
-        if let mode = config?.microphoneMuteMode {
-            try? audioManager.set(microphoneMuteMode: mode)
-        }
-
-        if let bypass = config?.voiceProcessingBypassed {
-            audioManager.isVoiceProcessingBypassed = bypass
-        }
-
-        if let agc = config?.voiceProcessingAGCEnabled {
-            audioManager.isVoiceProcessingAGCEnabled = agc
-        }
-
-        if let prepared = config?.recordingAlwaysPrepared {
-            try? await audioManager.setRecordingAlwaysPreparedMode(prepared)
-        }
-
-        let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
-
-        if needsSpeechHandler {
-            if !audioSpeechHandlerInstalled {
-                previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
-                audioSpeechHandlerInstalled = true
-            }
-            audioManager.onMutedSpeechActivity = { [weak self] _, event in
-                guard let self else { return }
-                Task { @MainActor in
-                    // Handlers are @Sendable, they manage their own synchronization
-                    if let handler = self.options.audioConfiguration?.onSpeechActivity {
-                        handler(event)
-                    }
-                    if let handler = self.options.onSpeechActivity {
-                        handler(event)
-                    }
-                }
-            }
-        } else if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
-            previousSpeechActivityHandler = nil
-            audioSpeechHandlerInstalled = false
-        }
     }
 
     private func normalizeConversationError(
@@ -459,21 +453,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// preventing any state leakage between conversations when using new Room objects.
     private func cleanupPreviousConversation() {
         // Cancel any ongoing tasks and reset references immediately
-        // The tasks will complete their cancellation asynchronously
-        if let task = roomChangesTask {
-            task.cancel()
-            roomChangesTask = nil
-        }
+        roomChangesTask?.cancel()
+        roomChangesTask = nil
 
-        if let task = protocolEventsTask {
-            task.cancel()
-            protocolEventsTask = nil
-        }
-
-        if let task = speakingTimer {
-            task.cancel()
-            speakingTimer = nil
-        }
+        speakingTimer?.cancel()
+        speakingTimer = nil
 
         protocolEventsDelegate = nil
 
@@ -494,35 +478,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         lastAgentEventId = nil
         lastFeedbackSubmittedEventId = nil
-        if audioSpeechHandlerInstalled {
-            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
-            previousSpeechActivityHandler = nil
-            audioSpeechHandlerInstalled = false
-        }
+        audioManager?.cleanup()
         options.onCanSendFeedbackChange?(false)
         latestAudioEvent = nil
 
         logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
-    }
-
-    private func observeDeviceChanges() {
-        // Set initial microphone mute mode
-        try? AudioManager.shared.set(microphoneMuteMode: .inputMixer)
-
-        Task { [weak self] in
-            do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                self?.logger.error("Failed to set recording always prepared mode: \(error)")
-            }
-        }
-
-        AudioManager.shared.onDeviceUpdate = { [weak self] _ in
-            Task { @MainActor in
-                self?.audioDevices = AudioManager.shared.inputDevices
-                self?.selectedAudioDeviceID = AudioManager.shared.defaultInputDevice.deviceId
-            }
-        }
     }
 
     private func startRoomObservers() {
@@ -566,28 +526,18 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func startProtocolEventLoop() {
-        guard let connectionManager = resolvedConnectionManager() else {
+        guard let connectionManager = resolvedConnectionManager(),
+              let room = connectionManager.room else {
             return
         }
-        protocolEventsTask?.cancel()
-        protocolEventsTask = Task { [weak self] in
-            guard let self else {
-                return
-            }
 
-            let room = connectionManager.room
-
-            // Set up our own delegate to listen for data
-            let delegate = ConversationDataDelegate { [weak self] data in
-                self?.handleIncomingData(data)
-            }
-            protocolEventsDelegate = delegate
-            room?.add(delegate: delegate)
-
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            }
+        // Set up delegate to listen for data events
+        // Delegate is stored in protocolEventsDelegate and will be cleaned up in cleanupPreviousConversation
+        let delegate = ConversationDataDelegate { [weak self] data in
+            self?.handleIncomingData(data)
         }
+        protocolEventsDelegate = delegate
+        room.add(delegate: delegate)
     }
 
     // MARK: - Testing Hooks
@@ -626,9 +576,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
     private func scheduleBackToListening(delay: TimeInterval = 0.5) {
         speakingTimer?.cancel()
         speakingTimer = Task {
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            if !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 self.agentState = .listening
+            } catch {
+                // Task was cancelled, do nothing
             }
         }
     }

@@ -6,7 +6,7 @@ protocol ConnectionManaging: AnyObject {
     var onAgentDisconnected: (() -> Void)? { get set }
     var room: Room? { get }
     var shouldObserveRoomConnection: Bool { get }
-    var errorHandler: (Swift.Error?) -> Void { get set }
+    var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
     func connect(
         details: TokenService.ConnectionDetails,
@@ -27,7 +27,7 @@ protocol ConversationDependencyProvider: AnyObject {
     var tokenService: any TokenServicing { get async }
     var logger: any Logging { get }
     var conversationStartup: any ConversationStartup { get async }
-    var errorHandler: (Swift.Error?) -> Void { get }
+    var errorHandler: ((Swift.Error?) -> Void)? { get }
 
     func connectionManager() async -> any ConnectionManaging
 }
@@ -94,7 +94,7 @@ final class Dependencies: ConversationDependencyProvider {
         }
     }
 
-    var errorHandler: (Swift.Error?) -> Void {
-        { _ in }
+    var errorHandler: ((Swift.Error?) -> Void)? {
+        nil
     }
 }
