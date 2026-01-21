@@ -527,7 +527,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     private func startProtocolEventLoop() {
         guard let connectionManager = resolvedConnectionManager(),
-              let room = connectionManager.room else {
+              let room = connectionManager.room
+        else {
             return
         }
 

@@ -89,9 +89,9 @@ final class ConversationAudioManager {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.audioManager.setRecordingAlwaysPreparedMode(true)
+                try await audioManager.setRecordingAlwaysPreparedMode(true)
             } catch {
-                self.logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
+                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
             }
         }
 
