@@ -12,7 +12,10 @@ final class MockConnectionManager: ConnectionManaging {
     var onAgentDisconnected: (() -> Void)?
 
     var room: Room?
-    var shouldObserveRoomConnection: Bool { false }
+    var shouldObserveRoomConnection: Bool {
+        false
+    }
+
     var errorHandler: ((Swift.Error?) -> Void)?
 
     var shouldFailConnection = false

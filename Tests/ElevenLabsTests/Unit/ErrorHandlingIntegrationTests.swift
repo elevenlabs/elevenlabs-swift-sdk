@@ -14,7 +14,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         XCTestSuite(name: "Skipped Integration Tests")
     }
 
-    // Public test agent that requires no authentication
+    /// Public test agent that requires no authentication
     private let testAgentId = "agent_7601k95fk7q2eyfbp4bncp5znp6x"
 
     private var conversation: Conversation?
@@ -532,7 +532,7 @@ extension ErrorHandlingIntegrationTests {
         print(String(repeating: "=", count: 80) + "\n")
     }
 
-    // Helper to format timestamp for iOS 13+ compatibility
+    /// Helper to format timestamp for iOS 13+ compatibility
     private nonisolated static func formatTimestamp() -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium
@@ -541,7 +541,7 @@ extension ErrorHandlingIntegrationTests {
     }
 }
 
-// Actor to safely collect errors from Sendable closures
+/// Actor to safely collect errors from Sendable closures
 private actor ErrorCollector {
     var errors: [ConversationError] = []
     var states: [ConversationStartupState] = []

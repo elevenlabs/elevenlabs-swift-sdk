@@ -11,11 +11,25 @@ protocol Logging: Sendable {
 }
 
 extension Logging {
-    func trace(_ message: String) { trace(message, context: nil) }
-    func debug(_ message: String) { debug(message, context: nil) }
-    func info(_ message: String) { info(message, context: nil) }
-    func warning(_ message: String) { warning(message, context: nil) }
-    func error(_ message: String) { error(message, context: nil) }
+    func trace(_ message: String) {
+        trace(message, context: nil)
+    }
+
+    func debug(_ message: String) {
+        debug(message, context: nil)
+    }
+
+    func info(_ message: String) {
+        info(message, context: nil)
+    }
+
+    func warning(_ message: String) {
+        warning(message, context: nil)
+    }
+
+    func error(_ message: String) {
+        error(message, context: nil)
+    }
 }
 
 /// Default logger implementation
@@ -35,7 +49,7 @@ struct SDKLogger: Logging {
         self.logLevel = logLevel
     }
 
-    // Helper to log safely
+    /// Helper to log safely
     private func log(_ message: String, type: OSLogType, context: [String: String]?) {
         let prefix = "[ElevenLabs]"
         let finalMessage: String

@@ -9,7 +9,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "user_message")
         XCTAssertEqual(json["text"] as? String, "Hello agent")
@@ -19,7 +19,7 @@ final class EventSerializerTests: XCTestCase {
         let event = OutgoingEvent.userActivity
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "user_activity")
     }
@@ -34,7 +34,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "client_tool_result")
         XCTAssertEqual(json["tool_call_id"] as? String, "tool123")
@@ -54,14 +54,14 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "client_tool_result")
         XCTAssertEqual(json["tool_call_id"] as? String, "tool456")
         let resultString = json["result"] as? String
         XCTAssertNotNil(resultString)
         if let resultString {
-            let parsedResult = try JSONSerialization.jsonObject(with: resultString.data(using: .utf8)!) as? [String: String]
+            let parsedResult = try JSONSerialization.jsonObject(with: XCTUnwrap(resultString.data(using: .utf8))) as? [String: String]
             XCTAssertEqual(parsedResult?["temperature"], "25°C")
             XCTAssertEqual(parsedResult?["condition"], "Sunny")
         }
@@ -78,7 +78,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "client_tool_result")
         XCTAssertEqual(json["tool_call_id"] as? String, "tool789")
@@ -90,7 +90,7 @@ final class EventSerializerTests: XCTestCase {
         let event = OutgoingEvent.pong(PongEvent(eventId: 123))
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "pong")
         XCTAssertEqual(json["event_id"] as? Int, 123)
@@ -103,7 +103,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "conversation_initiation_client_data")
     }
@@ -114,7 +114,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "contextual_update")
         XCTAssertEqual(json["text"] as? String, "Updated context")
@@ -126,7 +126,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "feedback")
         XCTAssertEqual(json["score"] as? String, "like")
@@ -139,7 +139,7 @@ final class EventSerializerTests: XCTestCase {
         )
 
         let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["user_audio_chunk"] as? String, "base64AudioData")
     }

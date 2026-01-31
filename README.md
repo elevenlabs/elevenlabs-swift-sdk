@@ -153,23 +153,21 @@ let conversation = try await ElevenLabs.startConversation(
 You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**.
 
 ```swift
-// Observe requested tool calls
-conversation.$pendingToolCalls
-    .receive(on: DispatchQueue.main)
-    .sink { calls in
+// Observe requested tool calls with async/await
+Task {
+    for await calls in conversation.$pendingToolCalls.values {
         for call in calls {
-            Task {
-                // 1. Parse parameters
-                let params = (try? call.getParameters()) ?? [:]
+            // 1. Parse parameters
+            let params = (try? call.getParameters()) ?? [:]
 
-                // 2. Perform your local logic
-                let result = await myAppAction(params)
-                // 3. Send result back to the agent
-                try? await conversation.sendToolResult(for: call.toolCallId, result: result)
-            }
+            // 2. Perform your local logic
+            let result = await myAppAction(params)
+
+            // 3. Send result back to the agent
+            try? await conversation.sendToolResult(for: call.toolCallId, result: result)
         }
     }
-    .store(in: &cancellables)
+}
 ```
 
 > [!TIP]

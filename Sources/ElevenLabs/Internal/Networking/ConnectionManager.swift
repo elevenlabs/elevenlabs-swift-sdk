@@ -46,7 +46,9 @@ final class ConnectionManager: ConnectionManaging {
 
     private(set) var room: Room?
 
-    var shouldObserveRoomConnection: Bool { true }
+    var shouldObserveRoomConnection: Bool {
+        true
+    }
 
     // MARK: – Private
 

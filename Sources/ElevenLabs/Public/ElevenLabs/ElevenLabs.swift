@@ -1,21 +1,21 @@
 import Foundation
 import LiveKit
 
-/// Main namespace & entry point for the ElevenLabs Conversational AI SDK.
-///
-/// ```swift
-/// // Start a conversation directly - simple and clean
-/// let conversation = try await ElevenLabs.startConversation(
-///     agentId: "agent_123",
-///     config: .init(conversationOverrides: .init(textOnly: false))
-/// )
-///
-/// // Send a message
-/// try await conversation.sendMessage("Hello!")
-///
-/// // End the conversation
-/// await conversation.endConversation()
-/// ```
+// Main namespace & entry point for the ElevenLabs Conversational AI SDK.
+//
+// ```swift
+// // Start a conversation directly - simple and clean
+// let conversation = try await ElevenLabs.startConversation(
+//     agentId: "agent_123",
+//     config: .init(conversationOverrides: .init(textOnly: false))
+// )
+//
+// // Send a message
+// try await conversation.sendMessage("Hello!")
+//
+// // End the conversation
+// await conversation.endConversation()
+// ```
 
 public enum ElevenLabs {
     // MARK: - Version

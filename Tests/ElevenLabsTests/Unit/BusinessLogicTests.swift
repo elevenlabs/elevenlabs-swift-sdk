@@ -61,7 +61,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     // MARK: - Streaming Message Tests
 
-    func testAgentStreamingMessages() async throws {
+    func testAgentStreamingMessages() async {
         // 1. Start streaming
         let startEvent = AgentChatResponsePartEvent(text: "Hello", type: .start)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(startEvent))
@@ -87,7 +87,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     // MARK: - End Call Logic
 
-    func testAutomaticEndCallHandling() async throws {
+    func testAutomaticEndCallHandling() async {
         mockConnectionManager.room = Room()
         conversation._testing_setState(.active(CallInfo(agentId: "test")))
 
@@ -129,7 +129,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     // MARK: - Audio Alignment
 
-    func testAudioAlignmentUpdatesProperty() async throws {
+    func testAudioAlignmentUpdatesProperty() async {
         let alignment = AudioAlignment(
             chars: ["H", "e", "l", "l", "o"],
             charStartTimesMs: [0, 100, 200, 300, 400],

@@ -43,6 +43,8 @@ final class LocalNetworkPermissionMonitor: Sendable {
     static let shared = LocalNetworkPermissionMonitor()
     private init() {}
     func recordRelayRequested() {}
-    func shouldSuggestLocalNetworkPermission() -> Bool { false }
+    func shouldSuggestLocalNetworkPermission() -> Bool {
+        false
+    }
 }
 #endif

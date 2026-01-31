@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ConversationIntegrationTests: XCTestCase {
-    func testFullConversationFlow() async throws {
+    func testFullConversationFlow() {
         // This test would require a test environment with mock services
         // For now, we'll test the basic flow structure
 
@@ -53,7 +53,7 @@ final class ConversationIntegrationTests: XCTestCase {
         }
     }
 
-    func testMessageStreamHandling() async {
+    func testMessageStreamHandling() {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
         }
@@ -156,7 +156,7 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify feedback is recorded
     }
 
-    func testErrorRecoveryIntegration() async {
+    func testErrorRecoveryIntegration() {
         // In a real integration test:
         // - Test network interruption during conversation
         // - Test reconnection behavior

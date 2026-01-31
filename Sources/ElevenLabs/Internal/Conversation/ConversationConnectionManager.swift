@@ -28,7 +28,9 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
 
     let connectionManager: any ConnectionManaging
 
-    var room: Room? { connectionManager.room }
+    var room: Room? {
+        connectionManager.room
+    }
 
     var onAgentDisconnected: (() -> Void)? {
         get { connectionManager.onAgentDisconnected }

@@ -1,6 +1,5 @@
-import XCTest
-
 @testable import ElevenLabs
+import XCTest
 
 final class ElevenLabsSDKTests: XCTestCase {
     func testSDKVersionExists() {

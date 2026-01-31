@@ -142,14 +142,12 @@ actor TranscriptionStreamReceiver: MessageReceiver {
             partialMessages[partialID] = nil
         }
 
-        let newOrUpdatedMessage = ReceivedMessage(
+        return ReceivedMessage(
             id: segmentID,
             timestamp: timestamp,
             content: participantIdentity == room.localParticipant
                 .identity ? .userTranscript(updatedContent) : .agentTranscript(updatedContent)
         )
-
-        return newOrUpdatedMessage
     }
 
     private func cleanupPreviousTurn(_ participantID: Participant.Identity, exceptSegmentID: String) {

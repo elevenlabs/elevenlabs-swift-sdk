@@ -1,9 +1,8 @@
+@testable import ElevenLabs
 import XCTest
 
-@testable import ElevenLabs
-
 final class ConversationStartupTrackerTests: XCTestCase {
-    func testTracksTokenFetchAndTotalDurations() {
+    func testTracksTokenFetchAndTotalDurations() throws {
         let clock = TestClock(sequence: [0.0, 0.05, 0.07, 0.12])
         var tracker = ConversationStartupTracker(now: { clock.next() })
 
@@ -11,11 +10,11 @@ final class ConversationStartupTrackerTests: XCTestCase {
         tracker.markTokenFetchCompleted()
         tracker.finalizeTotal()
 
-        XCTAssertEqual(tracker.metrics.tokenFetch!, 0.02, accuracy: 1e-6)
-        XCTAssertEqual(tracker.metrics.total!, 0.12, accuracy: 1e-6)
+        XCTAssertEqual(try XCTUnwrap(tracker.metrics.tokenFetch), 0.02, accuracy: 1e-6)
+        XCTAssertEqual(try XCTUnwrap(tracker.metrics.total), 0.12, accuracy: 1e-6)
     }
 
-    func testRecordsConversationInitAttemptAndDuration() {
+    func testRecordsConversationInitAttemptAndDuration() throws {
         let clock = TestClock(sequence: [0.0, 0.2, 0.25, 0.35])
         var tracker = ConversationStartupTracker(now: { clock.next() })
 
@@ -24,7 +23,7 @@ final class ConversationStartupTrackerTests: XCTestCase {
         tracker.markConversationInitFinished()
 
         XCTAssertEqual(tracker.metrics.conversationInitAttempts, 2)
-        XCTAssertEqual(tracker.metrics.conversationInit!, 0.05, accuracy: 1e-6)
+        XCTAssertEqual(try XCTUnwrap(tracker.metrics.conversationInit), 0.05, accuracy: 1e-6)
     }
 
     func testTracksAgentReadyOutcomes() {

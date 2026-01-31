@@ -9,7 +9,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
     case localNetworkPermissionRequired
 
-    // Helper methods to create errors with Error types
+    /// Helper methods to create errors with Error types
     public static func connectionFailed(_ error: Error) -> ConversationError {
         .connectionFailed(error.localizedDescription)
     }

@@ -62,8 +62,7 @@ final class DefaultConversationStartup: ConversationStartup {
         guard let room else { return false }
         guard room.connectionState == .connected else { return false }
         guard !room.remoteParticipants.isEmpty else { return false }
-        let agentHasAudioTrack = room.remoteParticipants.values.contains { !$0.audioTracks.isEmpty }
-        return agentHasAudioTrack
+        return room.remoteParticipants.values.contains { !$0.audioTracks.isEmpty }
     }
 
     func sendConversationInit(

@@ -44,7 +44,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Latest audio event emitted by the agent.
     @Published public internal(set) var latestAudioEvent: AudioEvent?
 
-    // Device lists (optional to expose; keep `internal` if you don't want them public)
+    /// Device lists (optional to expose; keep `internal` if you don't want them public)
     @Published public internal(set) var audioDevices: [AudioDevice] = AudioManager.shared
         .inputDevices
     @Published public internal(set) var selectedAudioDeviceID: String = AudioManager.shared
@@ -68,7 +68,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Context for logging (e.g. agentId)
     private var activeContext: [String: String]?
 
-    // Audio tracks for advanced use cases
+    /// Audio tracks for advanced use cases
     public var inputTrack: LocalAudioTrack? {
         guard let connectionManager = resolvedConnectionManager(),
               let room = connectionManager.room else { return nil }

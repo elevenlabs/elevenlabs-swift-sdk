@@ -122,24 +122,72 @@ conversation.$messages
 Control the user's microphone state directly without needing to manage `AVAudioSession` yourself.
 
 ```swift
-// Toggle state
-try await conversation.toggleMute()
+class AudioControlViewModel: ObservableObject {
+    @Published var isAgentReady = false
+    @Published var isMuted = true
+    
+    private var conversation: Conversation?
+    private var cancellables = Set<AnyCancellable>()
+    
+    func startConversation(agentId: String) async throws {
+        conversation = try await ElevenLabs.startConversation(
+            agentId: agentId,
+            config: .init(
+                onAgentReady: { [weak self] in
+                    Task { @MainActor in
+                        self?.isAgentReady = true
+                        // Automatically unmute when agent is ready
+                        try? await self?.setMuted(false)
+                    }
+                }
+            )
+        )
+        
+        // Observe mute state changes from the conversation
+        conversation?.$isMuted
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$isMuted)
+    }
+    
+    func setMuted(_ muted: Bool) async {
+        guard let conversation else { return }
+        try? await conversation.setMuted(muted)
+    }
+    
+    func toggleMute() async {
+        guard let conversation else { return }
+        try? await conversation.toggleMute()
+    }
+}
 
-// Set explicitly
-try await conversation.setMuted(true)
-
-// Note: setMuted() requires an active connection. Call it after the conversation connects,
-// for example in the onAgentReady callback:
-let conversation = try await ElevenLabs.startConversation(
-    agentId: "agent_123",
-    config: .init(
-        onAgentReady: {
-            Task {
-                try? await conversation.setMuted(false) // Unmute when ready
+// SwiftUI usage
+struct AudioControlView: View {
+    @StateObject private var viewModel = AudioControlViewModel()
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            if viewModel.isAgentReady {
+                Button(action: {
+                    Task {
+                        await viewModel.toggleMute()
+                    }
+                }) {
+                    Image(systemName: viewModel.isMuted ? "mic.slash" : "mic")
+                        .font(.largeTitle)
+                }
+                .buttonStyle(.borderedProminent)
+                
+                Text(viewModel.isMuted ? "Muted" : "Unmuted")
+                    .foregroundColor(.secondary)
+            } else {
+                ProgressView("Connecting...")
             }
         }
-    )
-)
+        .task {
+            try? await viewModel.startConversation(agentId: "agent_123")
+        }
+    }
+}
 ```
 
 ### Raw Audio Tracks
@@ -166,38 +214,121 @@ if let agentTrack = conversation.agentAudioTrack as? RemoteAudioTrack {
 Client tools allow your agent to execute logic within your app. You must register the tools in the ElevenLabs Dashboard first.
 
 ```swift
-// Observe tool calls using Combine
-conversation.$pendingToolCalls
-    .receive(on: DispatchQueue.main)
-    .sink { [weak conversation] toolCalls in
-        guard let conversation else { return }
-        for toolCall in toolCalls {
-            Task {
-                // 1. Parse parameters (JSON)
-                let params = (try? toolCall.getParameters()) ?? [:]
-                
-                // 2. Execute your logic
-                let result = await myAppService.execute(toolName: toolCall.toolName, params: params)
-                
-                // 3. Send result back to agent
-                try? await conversation.sendToolResult(
-                    for: toolCall.toolCallId,
-                    result: result
-                )
+// Complete example with lifecycle management
+class ConversationViewModel: ObservableObject {
+    @Published var pendingTools: [ClientToolCallEvent] = []
+    @Published var isProcessingTool = false
+    
+    private var cancellables = Set<AnyCancellable>()
+    private let conversation: Conversation
+    private var toolObserverTask: Task<Void, Never>?
+    
+    init(conversation: Conversation) {
+        self.conversation = conversation
+        setupToolObserver()
+    }
+    
+    private func setupToolObserver() {
+        // Option 1: Using async/await pattern (recommended for automatic execution)
+        toolObserverTask = Task {
+            for await toolCalls in conversation.$pendingToolCalls.values {
+                await withTaskGroup(of: Void.self) { group in
+                    for toolCall in toolCalls {
+                        group.addTask {
+                            await self.executeTool(toolCall)
+                        }
+                    }
+                }
             }
         }
+        
+        // Option 2: Using Combine (for manual execution with UI control)
+        conversation.$pendingToolCalls
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] toolCalls in
+                self?.pendingTools = toolCalls
+            }
+            .store(in: &cancellables)
     }
-    .store(in: &cancellables)
+    
+    func executeTool(_ toolCall: ClientToolCallEvent) async {
+        await MainActor.run { isProcessingTool = true }
+        defer { Task { @MainActor in isProcessingTool = false } }
+        
+        do {
+            let params = try toolCall.getParameters()
+            
+            // Execute specific tool based on name
+            let result: String
+            switch toolCall.toolName {
+            case "get_weather":
+                let location = params["location"] as? String ?? "Unknown"
+                result = await getWeather(for: location)
+                
+            case "search_database":
+                let query = params["query"] as? String ?? ""
+                result = await searchDatabase(query: query)
+                
+            case "calculate":
+                let expression = params["expression"] as? String ?? "0"
+                result = calculateExpression(expression)
+                
+            default:
+                result = "Unknown tool: \(toolCall.toolName)"
+            }
+            
+            try await conversation.sendToolResult(for: toolCall.toolCallId, result: result)
+        } catch {
+            print("Tool execution failed: \(error)")
+            try? await conversation.sendToolResult(
+                for: toolCall.toolCallId,
+                result: "Error: \(error.localizedDescription)",
+                isError: true
+            )
+        }
+    }
+    
+    // Example tool implementations
+    private func getWeather(for location: String) async -> String {
+        // Your weather API call
+        return "Sunny, 22°C in \(location)"
+    }
+    
+    private func searchDatabase(query: String) async -> String {
+        // Your database search
+        return "Found 3 results for '\(query)'"
+    }
+    
+    private func calculateExpression(_ expression: String) -> String {
+        // Your calculation logic
+        return "Result: 42"
+    }
+    
+    deinit {
+        toolObserverTask?.cancel()
+    }
+}
 
-// Alternative: Using async/await pattern with observation
-Task {
-    for await toolCalls in conversation.$pendingToolCalls.values {
-        await withTaskGroup(of: Void.self) { group in
-            for toolCall in toolCalls {
-                group.addTask {
-                    let params = (try? toolCall.getParameters()) ?? [:]
-                    let result = await myAppService.execute(toolName: toolCall.toolName, params: params)
-                    try? await conversation.sendToolResult(for: toolCall.toolCallId, result: result)
+// SwiftUI usage
+struct ConversationView: View {
+    @StateObject private var viewModel: ConversationViewModel
+    
+    init(conversation: Conversation) {
+        _viewModel = StateObject(wrappedValue: ConversationViewModel(conversation: conversation))
+    }
+    
+    var body: some View {
+        VStack {
+            if viewModel.isProcessingTool {
+                ProgressView("Processing tool...")
+            }
+            
+            // Optional: Show pending tools for manual approval
+            ForEach(viewModel.pendingTools, id: \.toolCallId) { toolCall in
+                Button("Execute \(toolCall.toolName)") {
+                    Task {
+                        await viewModel.executeTool(toolCall)
+                    }
                 }
             }
         }
@@ -210,32 +341,124 @@ Task {
 If your agent uses MCP, you can monitor and approve sensitive operations.
 
 ```swift
-// Using Combine
-conversation.$mcpToolCalls
-    .receive(on: DispatchQueue.main)
-    .sink { [weak conversation] mcpCalls in
-        guard let conversation else { return }
-        for call in mcpCalls where call.state == .awaitingApproval {
-            Task {
-                let approved = await showApprovalUI(for: call)
-                try? await conversation.sendMCPToolApproval(
-                    toolCallId: call.toolCallId,
-                    isApproved: approved
-                )
+class MCPViewModel: ObservableObject {
+    @Published var pendingApprovals: [MCPToolCallEvent] = []
+    @Published var isProcessing = false
+    
+    private let conversation: Conversation
+    private var cancellables = Set<AnyCancellable>()
+    private var mcpObserverTask: Task<Void, Never>?
+    
+    init(conversation: Conversation) {
+        self.conversation = conversation
+        setupMCPObserver()
+    }
+    
+    private func setupMCPObserver() {
+        // Option 1: Automatic approval with custom logic
+        mcpObserverTask = Task {
+            for await mcpCalls in conversation.$mcpToolCalls.values {
+                await withTaskGroup(of: Void.self) { group in
+                    for call in mcpCalls where call.state == .awaitingApproval {
+                        group.addTask {
+                            // Auto-approve safe operations, ask for dangerous ones
+                            let approved = await self.shouldAutoApprove(call)
+                            if let approved {
+                                try? await self.conversation.sendMCPToolApproval(
+                                    toolCallId: call.toolCallId,
+                                    isApproved: approved
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
+        
+        // Option 2: Manual approval through UI
+        conversation.$mcpToolCalls
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] calls in
+                self?.pendingApprovals = calls.filter { $0.state == .awaitingApproval }
+            }
+            .store(in: &cancellables)
     }
-    .store(in: &cancellables)
+    
+    private func shouldAutoApprove(_ call: MCPToolCallEvent) async -> Bool? {
+        // Auto-approve read-only operations
+        let safeMethods = ["get", "read", "list", "search"]
+        if safeMethods.contains(where: { call.toolName.lowercased().contains($0) }) {
+            return true
+        }
+        
+        // Require user approval for write operations
+        return nil // nil means show UI prompt
+    }
+    
+    func approveTool(_ toolCallId: String, approved: Bool) async {
+        isProcessing = true
+        defer { isProcessing = false }
+        
+        try? await conversation.sendMCPToolApproval(
+            toolCallId: toolCallId,
+            isApproved: approved
+        )
+    }
+    
+    deinit {
+        mcpObserverTask?.cancel()
+    }
+}
 
-// Alternative: Using async/await pattern
-Task {
-    for await mcpCalls in conversation.$mcpToolCalls.values {
-        for call in mcpCalls where call.state == .awaitingApproval {
-            let approved = await showApprovalUI(for: call)
-            try? await conversation.sendMCPToolApproval(
-                toolCallId: call.toolCallId,
-                isApproved: approved
-            )
+// SwiftUI approval interface
+struct MCPApprovalView: View {
+    @StateObject private var viewModel: MCPViewModel
+    @State private var showingDialog = false
+    @State private var currentCall: MCPToolCallEvent?
+    
+    init(conversation: Conversation) {
+        _viewModel = StateObject(wrappedValue: MCPViewModel(conversation: conversation))
+    }
+    
+    var body: some View {
+        VStack {
+            if !viewModel.pendingApprovals.isEmpty {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.orange)
+                    Text("\(viewModel.pendingApprovals.count) operation(s) need approval")
+                    Spacer()
+                    Button("Review") {
+                        currentCall = viewModel.pendingApprovals.first
+                        showingDialog = true
+                    }
+                }
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+            }
+        }
+        .alert("Approve Operation?", isPresented: $showingDialog, presenting: currentCall) { call in
+            Button("Approve") {
+                Task {
+                    await viewModel.approveTool(call.toolCallId, approved: true)
+                }
+            }
+            Button("Deny", role: .destructive) {
+                Task {
+                    await viewModel.approveTool(call.toolCallId, approved: false)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { call in
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tool: \(call.toolName)")
+                    .font(.headline)
+                if let params = try? call.getParameters() {
+                    Text("Parameters: \(params)")
+                        .font(.caption)
+                }
+            }
         }
     }
 }
@@ -356,29 +579,91 @@ Task { try? await conversation.updateContext("user_prefers_detailed_answers=true
 A simple recovery pattern after the agent disconnects.
 
 ```swift
-conversation.$state
-    .receive(on: DispatchQueue.main)
-    .sink { state in
-        switch state {
-        case .ended(let reason):
-            if reason == .remoteDisconnected {
-                // Show a RECONNECT button or attempt automatically
-                Task {
-                    do {
-                        // Reconnecting to the same agent
-                        try await conversation.startConversation(with: "agent_123")
-                    } catch {
-                        print("Reconnect failed:", error)
+class ReconnectionManager: ObservableObject {
+    @Published var showReconnectButton = false
+    @Published var isReconnecting = false
+    @Published var reconnectAttempts = 0
+    
+    private let conversation: Conversation
+    private let agentId: String
+    private let maxRetries = 3
+    private var cancellables = Set<AnyCancellable>()
+    
+    init(conversation: Conversation, agentId: String) {
+        self.conversation = conversation
+        self.agentId = agentId
+        
+        conversation.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                
+                switch state {
+                case .ended(let reason):
+                    if reason == .remoteDisconnected {
+                        self.showReconnectButton = true
+                        self.reconnectAttempts = 0
                     }
+                case .active:
+                    self.showReconnectButton = false
+                    self.isReconnecting = false
+                    self.reconnectAttempts = 0
+                default:
+                    break
                 }
             }
-        default: break
+            .store(in: &cancellables)
+    }
+    
+    func reconnect() async {
+        isReconnecting = true
+        
+        while reconnectAttempts < maxRetries {
+            do {
+                try await conversation.startConversation(with: agentId)
+                return
+            } catch {
+                reconnectAttempts += 1
+                
+                if reconnectAttempts < maxRetries {
+                    // Exponential backoff: 1s, 2s, 4s
+                    let delay = pow(2.0, Double(reconnectAttempts - 1))
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                } else {
+                    print("Max reconnection attempts reached")
+                }
+            }
+        }
+        
+        isReconnecting = false
+    }
+}
+
+// SwiftUI usage
+struct ConversationView: View {
+    @StateObject private var reconnectionManager: ReconnectionManager
+    
+    var body: some View {
+        VStack {
+            if reconnectionManager.showReconnectButton {
+                Button(action: {
+                    Task {
+                        await reconnectionManager.reconnect()
+                    }
+                }) {
+                    if reconnectionManager.isReconnecting {
+                        ProgressView()
+                            .padding()
+                    } else {
+                        Text("Reconnect")
+                    }
+                }
+                .disabled(reconnectionManager.isReconnecting)
+            }
         }
     }
-    .store(in: &cancellables)
+}
 ```
-
-Apply your own strategy (exponential backoff, retry limits, user notifications).
 
 ---
 

@@ -42,8 +42,8 @@ public struct TokenService: Sendable {
     private let configuration: Configuration
     private let urlSession: URLSession
 
-    /// Development-only API key for testing private agents
-    /// This should only be set in debug builds for local testing
+    // Development-only API key for testing private agents
+    // This should only be set in debug builds for local testing
     #if DEBUG
     public let debugApiKey: String?
 
