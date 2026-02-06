@@ -2,7 +2,6 @@
 import Foundation
 import LiveKit
 
-@MainActor
 final class MockConnectionManager: ConnectionManaging {
     enum Error: Swift.Error {
         case connectionFailed
@@ -13,8 +12,11 @@ final class MockConnectionManager: ConnectionManaging {
     var onAgentDisconnected: (() -> Void)?
 
     var room: Room?
-    var shouldObserveRoomConnection: Bool { false }
-    var errorHandler: (Swift.Error?) -> Void = { _ in }
+    var shouldObserveRoomConnection: Bool {
+        false
+    }
+
+    var errorHandler: ((Swift.Error?) -> Void)?
 
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
@@ -33,6 +35,7 @@ final class MockConnectionManager: ConnectionManaging {
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic _: Bool,
+        throwOnMicrophoneFailure _: Bool,
         networkConfiguration: LiveKitNetworkConfiguration,
         graceTimeout: TimeInterval
     ) async throws {
@@ -42,7 +45,7 @@ final class MockConnectionManager: ConnectionManaging {
         lastNetworkConfiguration = networkConfiguration
 
         if shouldFailConnection {
-            errorHandler(connectionError)
+            errorHandler?(connectionError)
             throw connectionError
         }
 
@@ -77,7 +80,7 @@ final class MockConnectionManager: ConnectionManaging {
 
     func publish(data: Data, options _: DataPublishOptions) async throws {
         if let publishError {
-            errorHandler(publishError)
+            errorHandler?(publishError)
             throw publishError
         }
         publishedPayloads.append(data)

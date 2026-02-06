@@ -2,9 +2,9 @@
 import LiveKit
 import XCTest
 
+@MainActor
 final class ConversationIntegrationTests: XCTestCase {
-    @MainActor
-    func testFullConversationFlow() async throws {
+    func testFullConversationFlow() {
         // This test would require a test environment with mock services
         // For now, we'll test the basic flow structure
 
@@ -28,7 +28,6 @@ final class ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(config.agentOverrides?.language, .english)
     }
 
-    @MainActor
     func testConversationStateTransitions() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -44,6 +43,7 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv.sendMessage("Hello")
         }
 
+        // Mute operations also require active state
         await assertThrowsConversationError(.notConnected) {
             try await conv.toggleMute()
         }
@@ -53,8 +53,7 @@ final class ConversationIntegrationTests: XCTestCase {
         }
     }
 
-    @MainActor
-    func testMessageStreamHandling() async {
+    func testMessageStreamHandling() {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
         }
@@ -70,7 +69,6 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify message ordering
     }
 
-    @MainActor
     func testAudioIntegration() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -80,10 +78,14 @@ final class ConversationIntegrationTests: XCTestCase {
         // Test initial mute state
         XCTAssertTrue(conversation.isMuted)
 
-        // Test mute operations when not connected
-        let conv1 = conversation
-        await assertThrowsConversationError(.notConnected) {
-            try await conv1.setMuted(true)
+        // Test mute operations when not connected - should throw
+        do {
+            try await conversation.setMuted(true)
+            XCTFail("Should throw error when not connected")
+        } catch let error as ConversationError {
+            XCTAssertEqual(error, .notConnected)
+        } catch {
+            XCTFail("Unexpected error type")
         }
 
         // In a real integration test:
@@ -93,7 +95,6 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Test background/foreground transitions
     }
 
-    @MainActor
     func testToolCallIntegration() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -117,7 +118,6 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify agent receives and processes response
     }
 
-    @MainActor
     func testContextUpdateIntegration() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -137,7 +137,6 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Test context persistence across messages
     }
 
-    @MainActor
     func testFeedbackIntegration() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -157,7 +156,7 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify feedback is recorded
     }
 
-    func testErrorRecoveryIntegration() async {
+    func testErrorRecoveryIntegration() {
         // In a real integration test:
         // - Test network interruption during conversation
         // - Test reconnection behavior
@@ -169,7 +168,6 @@ final class ConversationIntegrationTests: XCTestCase {
         XCTAssertNotNil(config)
     }
 
-    @MainActor
     func testConcurrentOperations() async {
         let mockDependencies = Task<Dependencies, Never> {
             Dependencies.shared
@@ -199,9 +197,9 @@ final class ConversationIntegrationTests: XCTestCase {
 
         do {
             let mockDependencies = Task<Dependencies, Never> {
-                await Dependencies.shared
+                Dependencies.shared
             }
-            let conversation = await Conversation(dependencies: mockDependencies)
+            let conversation = Conversation(dependencies: mockDependencies)
             weakConversation = conversation
 
             // In a real test, we'd start and end conversation
@@ -219,7 +217,6 @@ final class ConversationIntegrationTests: XCTestCase {
 
     // MARK: - Helper Methods
 
-    @MainActor
     private func assertThrowsConversationError(
         _ expectedError: ConversationError,
         _ operation: @Sendable () async throws -> Void
