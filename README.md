@@ -226,7 +226,7 @@ let conversation = try await ElevenLabs.startConversation(
 
 ```swift
 // Option 1: Direct method (recommended)
-// Get a conversatoin token from your backend (never store API keys in your app)
+// Get a conversation token from your backend (never store API keys in your app)
 let token = try await fetchConversationToken()
 
 let conversation = try await ElevenLabs.startConversation(
