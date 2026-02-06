@@ -111,6 +111,28 @@ If you need to stop connecting (e.g., the user leaves the screen before the conn
 // Start connecting
 let connectTask = Task { () -> Conversation in
     try await ElevenLabs.startConversation(agentId: "your-agent-id")
+private func handleToolCall(_ toolCall: ClientToolCallEvent) async {
+    do {
+        let parameters = try toolCall.getParameters()
+
+        let result = await executeClientTool(
+            name: toolCall.toolName,
+            parameters: parameters
+        )
+
+        // Send the tool result back to the agent
+        try await conversation?.sendToolResult(
+            for: toolCall.toolCallId,
+            result: result
+        )
+    } catch {
+        // Handle tool execution errors
+        try? await conversation?.sendToolResult(
+            for: toolCall.toolCallId,
+            result: ["error": error.localizedDescription],
+            isError: true
+        )
+    }
 }
 
 // Cancel connecting
