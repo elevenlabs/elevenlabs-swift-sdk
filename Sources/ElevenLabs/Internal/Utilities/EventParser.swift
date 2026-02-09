@@ -269,8 +269,14 @@ struct EventParser: EventParsable {
             }
 
         case "error":
-            // Skip for now as requested
-            break
+            if let event = json["error_event"] as? [String: Any] {
+                let code = event["code"] as? Int ?? 1011
+                let message = event["message"] as? String
+                return .error(ErrorEvent(code: code, message: message))
+            }
+            let code = json["code"] as? Int ?? 1011
+            let message = json["message"] as? String
+            return .error(ErrorEvent(code: code, message: message))
 
         default:
             throw EventParseError.unknownEventType(type)

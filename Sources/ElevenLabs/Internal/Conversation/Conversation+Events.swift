@@ -108,9 +108,9 @@ extension Conversation {
             // ASR initiation metadata is available in the event stream
             break
 
-        case .error:
-            logger.error("Received error event from server")
-            // Error events are available in the event stream
+        case let .error(errorEvent):
+            logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")
+            options.onError?(.serverError(errorEvent))
         }
     }
 
