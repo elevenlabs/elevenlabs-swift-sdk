@@ -190,7 +190,13 @@ public struct ASRInitiationMetadataEvent: Sendable {
     }
 }
 
-/// Error event placeholder
-public struct ErrorEvent: Sendable {
-    // Placeholder for future error event fields
+//// Server error event with code and message.
+public struct ErrorEvent: Sendable, Equatable {
+    public let code: Int
+    public let message: String?
+
+    public init(code: Int, message: String? = nil) {
+        self.code = code
+        self.message = message
+    }
 }

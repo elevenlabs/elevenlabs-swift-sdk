@@ -8,6 +8,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case agentTimeout
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
     case localNetworkPermissionRequired
+    case serverError(ErrorEvent)
 
     /// Helper methods to create errors with Error types
     public static func connectionFailed(_ error: Error) -> ConversationError {
@@ -27,6 +28,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
         case .agentTimeout: "Agent did not join in time."
         case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
         case .localNetworkPermissionRequired: "Local Network permission is required."
+        case let .serverError(event): "Server error (\(event.code)): \(event.message ?? "unknown")"
         }
     }
 }
