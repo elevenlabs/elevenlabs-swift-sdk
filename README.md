@@ -1,8 +1,8 @@
-# ElevenLabs Conversational AI Swift SDK
+# ElevenAgents Swift SDK
 
 ![SwiftSDK](https://github.com/user-attachments/assets/b91ef903-ff1f-4dda-9822-a6afad3437fc)
 
-A Swift SDK for integrating ElevenLabs' conversational AI capabilities into your iOS and macOS applications. Built on top of LiveKit WebRTC for real-time audio streaming and communication.
+A Swift SDK for integrating ElevenAgents capabilities into your iOS and macOS applications. Built on top of LiveKit WebRTC for real-time audio streaming and communication.
 
 ---
 
@@ -45,7 +45,7 @@ import SwiftUI
 @MainActor
 class ChatViewModel: ObservableObject {
     @Published var conversation: Conversation?
-    
+
     func startChat() async {
         do {
             // Start session with a public agent ID
@@ -58,7 +58,7 @@ class ChatViewModel: ObservableObject {
 
 struct ChatView: View {
     @StateObject var vm = ChatViewModel()
-    
+
     var body: some View {
         VStack(spacing: 20) {
             if let conversation = vm.conversation {
@@ -73,7 +73,7 @@ struct ChatView: View {
                     }
                 }
                 .font(.caption).foregroundColor(.secondary)
-                
+
                 // Real-time transcriptions
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -87,7 +87,7 @@ struct ChatView: View {
                         proxy.scrollTo(conversation.messages.last?.id)
                     }
                 }
-                
+
                 Button("End Conversation", role: .destructive) {
                     Task { await conversation.endConversation() }
                 }
@@ -205,7 +205,7 @@ Configure logging and global behaviors at app launch:
 
 ```swift
 ElevenLabs.configure(
-    ElevenLabs.Configuration(logLevel: .info) 
+    ElevenLabs.Configuration(logLevel: .info)
 )
 ```
 
