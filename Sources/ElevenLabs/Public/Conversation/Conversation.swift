@@ -45,10 +45,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
     @Published public internal(set) var latestAudioEvent: AudioEvent?
 
     /// Device lists (optional to expose; keep `internal` if you don't want them public)
-    @Published public internal(set) var audioDevices: [AudioDevice] = AudioManager.shared
-        .inputDevices
-    @Published public internal(set) var selectedAudioDeviceID: String = AudioManager.shared
-        .inputDevice.deviceId
+    @Published public internal(set) var audioDevices: [AudioDevice] = []
+    @Published public internal(set) var selectedAudioDeviceID: String = ""
 
     /// Track the current streaming message for chat response parts
     var currentStreamingMessage: Message?
@@ -109,6 +107,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func setupAudioManager() {
+        guard !options.conversationOverrides.textOnly else { return }
         let manager = ConversationAudioManager(logger: logger)
         manager.onDevicesChanged = { [weak self] devices in
             self?.audioDevices = devices
@@ -165,6 +164,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         activeContext = ["agentId": currentAgentId]
         logger.info("Starting conversation", context: activeContext)
 
+        if audioManager == nil {
+            setupAudioManager()
+        }
         await audioManager?.configure(with: options)
         options.onCanSendFeedbackChange?(false)
 
