@@ -92,9 +92,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         self.options = options
         // Temporary logger until dependencies are resolved
         logger = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
-        if !options.conversationOverrides.textOnly {
-            setupAudioManager()
-        }
+        setupAudioManager()
     }
 
     init(
@@ -105,12 +103,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
         dependenciesTask = nil
         self.options = options
         logger = dependencyProvider.logger
-        if !options.conversationOverrides.textOnly {
-            setupAudioManager()
-        }
+        setupAudioManager()
     }
 
     private func setupAudioManager() {
+        guard !options.conversationOverrides.textOnly else { return }
         let manager = ConversationAudioManager(logger: logger)
         manager.onDevicesChanged = { [weak self] devices in
             self?.audioDevices = devices
@@ -167,12 +164,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
         activeContext = ["agentId": currentAgentId]
         logger.info("Starting conversation", context: activeContext)
 
-        if !options.conversationOverrides.textOnly {
-            if audioManager == nil {
-                setupAudioManager()
-            }
-            await audioManager?.configure(with: options)
+        if audioManager == nil {
+            setupAudioManager()
         }
+        await audioManager?.configure(with: options)
         options.onCanSendFeedbackChange?(false)
 
         connectionManager.errorHandler = provider.errorHandler
