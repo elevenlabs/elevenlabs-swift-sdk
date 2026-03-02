@@ -61,7 +61,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// Audio device management
     private var audioManager: ConversationAudioManager?
-    
+
     /// Thread-safe holder for mute state used by local speech detection
     private var muteStateHolder: MuteStateHolder?
 
@@ -747,7 +747,7 @@ extension Conversation: ParticipantDelegate {
 final class MuteStateHolder: @unchecked Sendable {
     private var _lock = os_unfair_lock()
     private var _isMuted: Bool = true
-    
+
     var isMuted: Bool {
         get {
             os_unfair_lock_lock(&_lock)
