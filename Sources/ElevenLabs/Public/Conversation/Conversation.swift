@@ -61,6 +61,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// Audio device management
     private var audioManager: ConversationAudioManager?
+    
+    /// Thread-safe holder for mute state used by local speech detection
+    private var muteStateHolder: MuteStateHolder?
 
     /// Internal logger, accessible from nonisolated contexts.
     nonisolated let logger: any Logging
@@ -116,6 +119,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
         manager.onSelectedDeviceChanged = { [weak self] deviceId in
             self?.selectedAudioDeviceID = deviceId
         }
+        let muteStateHolder = MuteStateHolder()
+        manager.isMutedProvider = { [muteStateHolder] in
+            muteStateHolder.isMuted
+        }
+        self.muteStateHolder = muteStateHolder
         audioManager = manager
         // Sync initial values
         audioDevices = manager.audioDevices
@@ -248,6 +256,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
                 do {
                     try await room.localParticipant.setMicrophone(enabled: !pendingMute)
                     isMuted = pendingMute
+                    muteStateHolder?.isMuted = pendingMute
                 } catch {
                     logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
                 }
@@ -318,6 +327,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             do {
                 try await room.localParticipant.setMicrophone(enabled: !muted)
                 isMuted = muted
+                muteStateHolder?.isMuted = muted
                 pendingMuteState = nil
             } catch {
                 throw ConversationError.microphoneToggleFailed(error)
@@ -326,6 +336,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             // Buffer the mute state to apply after connection completes
             pendingMuteState = muted
             isMuted = muted
+            muteStateHolder?.isMuted = muted
         } else {
             throw ConversationError.notConnected
         }
@@ -472,6 +483,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Reset agent state
         agentState = .listening
         isMuted = true // Start muted, will be updated based on actual room state
+        muteStateHolder?.isMuted = true
 
         startupState = .idle
         startupMetrics = nil
@@ -522,7 +534,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
 
         // Audio/Video toggles
-        isMuted = !room.localParticipant.isMicrophoneEnabled()
+        let newMuteState = !room.localParticipant.isMicrophoneEnabled()
+        isMuted = newMuteState
+        muteStateHolder?.isMuted = newMuteState
     }
 
     private func startProtocolEventLoop() {
@@ -725,6 +739,25 @@ extension Conversation: ParticipantDelegate {
                     self.scheduleBackToListening(delay: 1.0) // 1 second delay for natural gaps
                 }
             }
+        }
+    }
+}
+
+/// Thread-safe container for mute state that can be safely captured by @Sendable closures.
+final class MuteStateHolder: @unchecked Sendable {
+    private var _lock = os_unfair_lock()
+    private var _isMuted: Bool = true
+    
+    var isMuted: Bool {
+        get {
+            os_unfair_lock_lock(&_lock)
+            defer { os_unfair_lock_unlock(&_lock) }
+            return _isMuted
+        }
+        set {
+            os_unfair_lock_lock(&_lock)
+            _isMuted = newValue
+            os_unfair_lock_unlock(&_lock)
         }
     }
 }

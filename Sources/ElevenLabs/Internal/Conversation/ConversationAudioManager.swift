@@ -14,9 +14,13 @@ final class ConversationAudioManager {
     private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
+    private var rawMicTap: RawMicrophoneTap?
     private let logger: any Logging
 
     /// Callback when audio devices list changes
+    var isMutedProvider: (@Sendable () -> Bool)?
+
+    /// Callback when audio devices list changes.
     var onDevicesChanged: (([AudioDevice]) -> Void)?
 
     /// Callback when selected device changes
@@ -35,6 +39,7 @@ final class ConversationAudioManager {
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
         }
+        rawMicTap?.stop()
     }
 
     // MARK: - Configuration
@@ -68,11 +73,13 @@ final class ConversationAudioManager {
         }
 
         configureSpeechHandler(options: options)
+        configureMutedSpeechDetector(options: options)
     }
 
     /// Cleanup audio state when conversation ends.
     func cleanup() {
         cleanupSpeechHandler()
+        cleanupMutedSpeechDetector()
     }
 
     // MARK: - Private
@@ -135,6 +142,41 @@ final class ConversationAudioManager {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
             previousSpeechActivityHandler = nil
             audioSpeechHandlerInstalled = false
+        }
+    }
+    
+    private func configureMutedSpeechDetector(options: ConversationOptions) {
+        let config = options.audioConfiguration
+        guard let onMutedSpeech = config?.onMutedSpeech else { return }
+        guard let isMutedProvider = self.isMutedProvider else {
+            logger.warning("onMutedSpeech configured but isMutedProvider not set")
+            return
+        }
+        
+        let tap = RawMicrophoneTap(
+            speechThreshold: config?.mutedSpeechThreshold ?? 0.02,
+            silenceThreshold: config?.mutedSilenceThreshold ?? 0.01,
+            silenceFramesRequired: config?.mutedSilenceFramesRequired ?? 10,
+            isMutedProvider: isMutedProvider,
+            onSpeechDetected: { isSpeaking, level in
+                onMutedSpeech(MutedSpeechEvent(isSpeaking: isSpeaking, audioLevel: level))
+            }
+        )
+        
+        do {
+            try tap.start()
+            rawMicTap = tap
+            logger.info("Local muted speech detection enabled")
+        } catch {
+            logger.warning("Failed to start raw microphone tap", context: ["error": "\(error)"])
+        }
+    }
+    
+    private func cleanupMutedSpeechDetector() {
+        if let tap = rawMicTap {
+            tap.stop()
+            rawMicTap = nil
+            logger.debug("Local muted speech detection disabled")
         }
     }
 }
