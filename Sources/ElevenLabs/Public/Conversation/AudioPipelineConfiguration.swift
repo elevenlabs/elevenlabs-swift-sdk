@@ -7,7 +7,7 @@ public struct MutedSpeechEvent: Sendable {
     public let isSpeaking: Bool
     /// Audio level that triggered the event (0.0-1.0).
     public let audioLevel: Float
-    
+
     public init(isSpeaking: Bool, audioLevel: Float) {
         self.isSpeaking = isSpeaking
         self.audioLevel = audioLevel
@@ -30,20 +30,20 @@ public struct AudioPipelineConfiguration: Sendable {
 
     /// Observe LiveKit speech activity events while the microphone is muted.
     public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
-    
+
     /// Called when local speech is detected while the microphone is muted.
     /// This uses local audio processing and works reliably with `.inputMixer` mode.
     /// Use this to show "You're speaking while muted" indicators.
     public var onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
-    
+
     /// RMS audio level (0.0-1.0) above which speech is detected. Default: 0.02 (~-34 dB).
     /// Increase to require louder speech, decrease for more sensitivity.
     public var mutedSpeechThreshold: Float?
-    
+
     /// RMS audio level (0.0-1.0) below which silence is detected. Default: 0.01 (~-40 dB).
     /// The gap between this and `mutedSpeechThreshold` prevents rapid on/off flickering.
     public var mutedSilenceThreshold: Float?
-    
+
     /// Consecutive silent frames required before speech ends. Default: 10 (~210ms).
     /// Increase to require longer pauses before "stopped speaking" fires.
     public var mutedSilenceFramesRequired: Int?

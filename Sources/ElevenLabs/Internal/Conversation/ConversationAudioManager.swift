@@ -144,15 +144,15 @@ final class ConversationAudioManager {
             audioSpeechHandlerInstalled = false
         }
     }
-    
+
     private func configureMutedSpeechDetector(options: ConversationOptions) {
         let config = options.audioConfiguration
         guard let onMutedSpeech = config?.onMutedSpeech else { return }
-        guard let isMutedProvider = self.isMutedProvider else {
+        guard let isMutedProvider else {
             logger.warning("onMutedSpeech configured but isMutedProvider not set")
             return
         }
-        
+
         let tap = RawMicrophoneTap(
             speechThreshold: config?.mutedSpeechThreshold ?? 0.02,
             silenceThreshold: config?.mutedSilenceThreshold ?? 0.01,
@@ -162,7 +162,7 @@ final class ConversationAudioManager {
                 onMutedSpeech(MutedSpeechEvent(isSpeaking: isSpeaking, audioLevel: level))
             }
         )
-        
+
         do {
             try tap.start()
             rawMicTap = tap
@@ -171,7 +171,7 @@ final class ConversationAudioManager {
             logger.warning("Failed to start raw microphone tap", context: ["error": "\(error)"])
         }
     }
-    
+
     private func cleanupMutedSpeechDetector() {
         if let tap = rawMicTap {
             tap.stop()
