@@ -9,6 +9,59 @@ import AVFoundation
 import Combine
 import Foundation
 import LiveKit
+import CoreMedia
+import LiveKitWebRTC
+import Accelerate
+
+class SilenceProcessor: NSObject, AudioCustomProcessingDelegate {
+    func audioProcessingInitialize(sampleRate sampleRateHz: Int, channels: Int) {
+        
+    }
+    
+    func audioProcessingRelease() {
+        
+    }
+    
+    var isMuted: Bool = false
+    
+    private let speechThreshold: Float = 0.03 // Normalized 0.0 to 1.0
+        private var lastNotificationTime: Date = .distantPast
+    
+    func audioProcessingProcess(audioBuffer: LKAudioBuffer) {
+        let channelCount = audioBuffer.channels
+        let frameCount = audioBuffer.frames
+        let vCount = vDSP_Length(frameCount)
+
+        if !isMuted { return }
+
+        var totalRMS: Float = 0
+        for i in 0..<audioBuffer.channels {
+            let ptr = audioBuffer.rawBuffer(forChannel: i)
+            var normalized = [Float](repeating: 0, count: frameCount)
+            var divisor: Float = 32768.0
+            vDSP_vsdiv(ptr, 1, &divisor, &normalized, 1, vCount)
+            var channelRMS: Float = 0
+            vDSP_rmsqv(normalized, 1, &channelRMS, vCount)
+            totalRMS += channelRMS
+        }
+        let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
+        let db = 20 * log10(max(averageRMS, 1e-6))
+        if db > -35 {
+            let now = Date()
+            if now.timeIntervalSince(lastNotificationTime) > 3.0 {
+                lastNotificationTime = now
+                print("Speech Detected at \(db) dB")
+            }
+        }
+
+        let frameCountV = vDSP_Length(frameCount)
+        for i in 0..<channelCount {
+            let ptr = audioBuffer.rawBuffer(forChannel: i)
+            vDSP_vclr(ptr, 1, frameCountV)
+        }
+    }
+}
+
 
 @MainActor
 public final class Conversation: ObservableObject, RoomDelegate {
@@ -286,7 +339,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Wire up streams
         startRoomObservers()
         startProtocolEventLoop()
+
+        AudioManager.shared.capturePostProcessingDelegate = silenceProcessor
     }
+    
+    let silenceProcessor = SilenceProcessor()
+
 
     /// Extract agent ID from authentication configuration for state tracking
     private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
@@ -328,14 +386,16 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     public func setMuted(_ muted: Bool) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
-        guard let room = resolvedConnectionManager()?.room else { throw ConversationError.notConnected }
-        do {
-            try await room.localParticipant.setMicrophone(enabled: !muted)
-            isMuted = muted
-        } catch {
-            throw ConversationError.microphoneToggleFailed(error)
-        }
+        self.isMuted = muted
+        self.silenceProcessor.isMuted = muted
+//        guard state.isActive else { throw ConversationError.notConnected }
+//        guard let room = resolvedConnectionManager()?.room else { throw ConversationError.notConnected }
+//        do {
+//            try await room.localParticipant.setMicrophone(enabled: !muted)
+//            isMuted = muted
+//        } catch {
+//            throw ConversationError.microphoneToggleFailed(error)
+//        }
     }
 
     /// Interrupt the agent while speaking.
