@@ -331,6 +331,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
     }
 
+    public func setSoftwareMuted(_ muted: Bool) async throws {
+        guard let mutedSpeechDetector = self.audioManager?.mutedSpeechDetector else {
+            throw ConversationError.noSoftwareMuteHandlerConfigured
+        }
+        mutedSpeechDetector.setMuted(muted)
+        isMuted = muted
+    }
+
     /// Interrupt the agent while speaking.
     public func interruptAgent() async throws {
         guard state.isActive else { throw ConversationError.notConnected }

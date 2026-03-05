@@ -8,6 +8,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case agentTimeout
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
     case localNetworkPermissionRequired
+    case noSoftwareMuteHandlerConfigured
     case serverError(ErrorEvent)
 
     /// Helper methods to create errors with Error types
@@ -29,6 +30,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
         case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
         case .localNetworkPermissionRequired: "Local Network permission is required."
         case let .serverError(event): "Server error (\(event.code)): \(event.message ?? "unknown")"
+        case .noSoftwareMuteHandlerConfigured: "No software mute handler is configured."
         }
     }
 }
