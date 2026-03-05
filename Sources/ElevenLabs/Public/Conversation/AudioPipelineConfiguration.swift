@@ -44,9 +44,7 @@ public struct AudioPipelineConfiguration: Sendable {
         voiceProcessingAGCEnabled: Bool? = nil,
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
         onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)? = nil,
-        mutedSpeechThreshold: Float? = nil,
-        mutedSilenceThreshold: Float? = nil,
-        mutedSilenceFramesRequired: Int? = nil
+        mutedSpeechThreshold: Float? = nil
     ) {
         self.microphoneMuteMode = microphoneMuteMode
         self.recordingAlwaysPrepared = recordingAlwaysPrepared
