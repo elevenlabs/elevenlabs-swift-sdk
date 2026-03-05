@@ -332,10 +332,10 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     public func setSoftwareMuted(_ muted: Bool) async throws {
-        guard let mutedSpeechDetector = audioManager?.mutedSpeechDetector else {
+        guard let softwareMuteProcessor = audioManager?.softwareMuteProcessor else {
             throw ConversationError.noSoftwareMuteHandlerConfigured
         }
-        mutedSpeechDetector.setMuted(muted)
+        softwareMuteProcessor.setMuted(muted)
         isMuted = muted
     }
 

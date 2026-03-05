@@ -1,5 +1,5 @@
 //
-//  ConversationMutedSpeechDetector.swift
+//  SoftwareMuteProcessor.swift
 //  ElevenLabs
 //
 //  Created by Jackson Harper on 5/3/26.
@@ -10,10 +10,10 @@ import CoreMedia
 import LiveKit
 import LiveKitWebRTC
 
-final class ConversationMutedSpeechDetector: NSObject, @unchecked Sendable, AudioCustomProcessingDelegate {
+final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomProcessingDelegate {
     private var lock = os_unfair_lock_s()
-    private var _isMuted: Bool = false
-    private var _lastNotificationTime: Date = .distantPast
+    private var isMuted: Bool = false
+    private var lastNotificationTime: Date = .distantPast
 
     private let onMutedSpeech: @Sendable (MutedSpeechEvent) -> Void
     private let mutedSpeechThresholdInDb: Float
@@ -31,14 +31,14 @@ final class ConversationMutedSpeechDetector: NSObject, @unchecked Sendable, Audi
 
     func setMuted(_ muted: Bool) {
         os_unfair_lock_lock(&lock)
-        _isMuted = muted
+        isMuted = muted
         os_unfair_lock_unlock(&lock)
     }
 
     func audioProcessingProcess(audioBuffer: LKAudioBuffer) {
         os_unfair_lock_lock(&lock)
-        let currentlyMuted = _isMuted
-        let lastTime = _lastNotificationTime
+        let currentlyMuted = isMuted
+        let lastTime = lastNotificationTime
         os_unfair_lock_unlock(&lock)
 
         guard currentlyMuted else { return }
@@ -63,7 +63,7 @@ final class ConversationMutedSpeechDetector: NSObject, @unchecked Sendable, Audi
             let now = Date()
             if now.timeIntervalSince(lastTime) > mutedSpeechThrottleInSeconds {
                 os_unfair_lock_lock(&lock)
-                _lastNotificationTime = now
+                lastNotificationTime = now
                 os_unfair_lock_unlock(&lock)
                 DispatchQueue.main.async {
                     self.onMutedSpeech(.init(audioLevel: db))
