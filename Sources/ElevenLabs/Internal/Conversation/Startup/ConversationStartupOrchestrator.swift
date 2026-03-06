@@ -193,7 +193,11 @@ final class ConversationStartupOrchestrator {
     private func requestMicrophonePermissionIfNeeded(textOnly: Bool) async -> Bool {
         guard !textOnly else { return true }
         #if os(iOS)
-        return await AVAudioSession.sharedInstance().requestRecordPermission()
+        return await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                continuation.resume(returning: granted)
+            }
+        }
         #elseif os(macOS)
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
