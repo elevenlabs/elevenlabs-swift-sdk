@@ -12,7 +12,8 @@ final class ConversationStartupOrchestrator {
     }
 
     // swiftlint:disable:next function_body_length cyclomatic_complexity
-    /// Execute the full startup sequence
+    /// Execute the full startup sequence: resolve token, request microphone permission (if needed), connect room,
+    // wait for agent readiness, send conversation init (with retries), and return startup metrics.
     func execute(
         auth: ElevenLabsConfiguration,
         options: ConversationOptions,
@@ -20,17 +21,14 @@ final class ConversationStartupOrchestrator {
         onStateChange: @escaping (ConversationStartupState) -> Void,
         onRoomConnected: @escaping (Room) -> Void
     ) async throws -> StartupResult {
+        let connectionManager = await provider.connectionManager()
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
-
-        // Cache connection manager for synchronous access throughout startup
-        let connectionManager = await provider.connectionManager()
 
         let agentId = extractAgentId(from: auth)
         let context = ["agentId": agentId]
         logger.info("Starting conversation startup sequence", context: context)
 
-        // Step 1: Parallel Token Resolution & Mic Permission
         onStateChange(.resolvingToken)
 
         var connectionDetails: TokenService.ConnectionDetails?
@@ -43,42 +41,9 @@ final class ConversationStartupOrchestrator {
             connectionDetails = details
         }
 
-        // Step 1: Token Fetch & Permission Request in parallel
         let tokenStart = Date()
-
-        // Run both operations in parallel using async let.
-        // Note: async let is preferred over TaskGroup for exactly 2 parallel operations
-        // as it's more concise and equally performant. TaskGroup would be better for
-        // dynamic number of tasks or when collecting results iteratively.
-        async let tokenResult: Void = tokenStep.execute()
-        async let permissionResult: Bool = {
-            guard !options.conversationOverrides.textOnly else { return true }
-            return await withCheckedContinuation { continuation in
-                #if os(iOS)
-                AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
-                }
-                #elseif os(macOS)
-                switch AVCaptureDevice.authorizationStatus(for: .audio) {
-                case .authorized:
-                    continuation.resume(returning: true)
-                case .notDetermined:
-                    AVCaptureDevice.requestAccess(for: .audio) { granted in
-                        continuation.resume(returning: granted)
-                    }
-                case .denied, .restricted:
-                    continuation.resume(returning: false)
-                @unknown default:
-                    continuation.resume(returning: false)
-                }
-                #endif
-            }
-        }()
-
-        let permissionGranted: Bool
         do {
-            try await tokenResult
-            permissionGranted = await permissionResult
+            try await tokenStep.execute()
             metrics.tokenFetch = Date().timeIntervalSince(tokenStart)
         } catch is CancellationError {
             // Handle cancellation separately - don't wrap in StartupFailure
@@ -91,7 +56,8 @@ final class ConversationStartupOrchestrator {
             throw StartupFailure.token(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
 
-        // Step 2: Room Connection
+        let permissionGranted = await requestMicrophonePermissionIfNeeded(textOnly: options.conversationOverrides.textOnly)
+
         onStateChange(.connectingRoom)
         let throwOnMicFailure = options.microphoneFailureHandling == .throwError
         guard let safeDetails = connectionDetails else {
@@ -128,7 +94,6 @@ final class ConversationStartupOrchestrator {
             throw StartupFailure.room(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
 
-        // Step 3: Agent Ready
         onStateChange(
             .waitingForAgent(
                 timeout: options.startupConfiguration.agentReadyTimeout
@@ -159,7 +124,6 @@ final class ConversationStartupOrchestrator {
             throw StartupFailure.agentTimeout(metrics)
         }
 
-        // Step 3b: Process Agent Ready Result (Non-failing or Success)
         if let result = agentResult {
             switch result {
             case let .success(detail):
@@ -189,7 +153,6 @@ final class ConversationStartupOrchestrator {
             metrics.agentReady = Date().timeIntervalSince(agentStart)
         }
 
-        // Step 4: Conversation Init
         let initStep = ConversationInitStep(
             connectionManager: connectionManager,
             config: options.toConversationConfig(),
@@ -225,6 +188,24 @@ final class ConversationStartupOrchestrator {
         case .conversationToken, .customTokenProvider:
             "unknown"
         }
+    }
+
+    private func requestMicrophonePermissionIfNeeded(textOnly: Bool) async -> Bool {
+        guard !textOnly else { return true }
+        #if os(iOS)
+        return await AVAudioSession.sharedInstance().requestRecordPermission()
+        #elseif os(macOS)
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+        #endif
     }
 }
 
