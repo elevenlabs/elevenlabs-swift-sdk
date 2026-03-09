@@ -10,6 +10,7 @@ import LiveKit
 final class ConversationAudioManager {
     private(set) var audioDevices: [AudioDevice] = []
     private(set) var selectedAudioDeviceID: String = ""
+    private(set) var softwareMuteProcessor: SoftwareMuteProcessor?
 
     private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
@@ -68,11 +69,13 @@ final class ConversationAudioManager {
         }
 
         configureSpeechHandler(options: options)
+        configureSoftwareMuteProcessor(options: options)
     }
 
     /// Cleanup audio state when conversation ends.
     func cleanup() {
         cleanupSpeechHandler()
+        cleanupSoftwareMuteProcessor()
     }
 
     // MARK: - Private
@@ -130,11 +133,25 @@ final class ConversationAudioManager {
         }
     }
 
+    private func configureSoftwareMuteProcessor(options: ConversationOptions) {
+        guard options.audioConfiguration?.useSoftwareMute == true else {
+            return
+        }
+
+        softwareMuteProcessor = SoftwareMuteProcessor(onMutedSpeech: options.audioConfiguration?.onMutedSpeech)
+        AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
+    }
+
     private func cleanupSpeechHandler() {
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
             previousSpeechActivityHandler = nil
             audioSpeechHandlerInstalled = false
         }
+    }
+
+    private func cleanupSoftwareMuteProcessor() {
+        AudioManager.shared.capturePostProcessingDelegate = nil
+        softwareMuteProcessor = nil
     }
 }

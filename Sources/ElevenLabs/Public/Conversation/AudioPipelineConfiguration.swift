@@ -1,6 +1,16 @@
 import Foundation
 import LiveKit
 
+/// Event indicating the user is speaking while the microphone is muted.
+public struct MutedSpeechEvent: Sendable {
+    /// Audio level that triggered the event in Db
+    public let audioLevel: Float
+
+    public init(audioLevel: Float) {
+        self.audioLevel = audioLevel
+    }
+}
+
 /// Configures microphone pipeline and voice activity reporting exposed by the SDK.
 public struct AudioPipelineConfiguration: Sendable {
     /// Override the microphone mute strategy. Defaults to `.inputMixer` to match previous SDK behaviour.
@@ -18,18 +28,38 @@ public struct AudioPipelineConfiguration: Sendable {
     /// Observe LiveKit speech activity events while the microphone is muted.
     public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
 
+    /// Enable software mute. With software mute, the microphone will stay open when `setMuted(true(` is used, but
+    /// all captured audio data will be zeroed out. By enabling software mute you can set the `onMutedSpeech` callback
+    /// and receive callback events when users speak while the agent is muted.
+    public var useSoftwareMute: Bool?
+
+    /// Called when local speech is detected while the microphone is muted.
+    /// This uses local audio processing and works reliably with `.inputMixer` mode.
+    /// Use this to show "You're speaking while muted" indicators.
+    public var onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
+
+    /// Audio level in dB where speech is detected. Default: -30 dB.
+    /// Increase to require louder speech, decrease for more sensitivity.
+    public var mutedSpeechThreshold: Float?
+
     public init(
         microphoneMuteMode: MicrophoneMuteMode? = .inputMixer,
         recordingAlwaysPrepared: Bool? = true,
         voiceProcessingBypassed: Bool? = nil,
         voiceProcessingAGCEnabled: Bool? = nil,
-        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil
+        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        useSoftwareMute: Bool? = nil,
+        onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)? = nil,
+        mutedSpeechThreshold: Float? = nil
     ) {
         self.microphoneMuteMode = microphoneMuteMode
         self.recordingAlwaysPrepared = recordingAlwaysPrepared
         self.voiceProcessingBypassed = voiceProcessingBypassed
         self.voiceProcessingAGCEnabled = voiceProcessingAGCEnabled
         self.onSpeechActivity = onSpeechActivity
+        self.useSoftwareMute = useSoftwareMute
+        self.onMutedSpeech = onMutedSpeech
+        self.mutedSpeechThreshold = mutedSpeechThreshold
     }
 
     public static let `default` = AudioPipelineConfiguration()

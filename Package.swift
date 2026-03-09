@@ -42,6 +42,10 @@ let package = Package(
             dependencies: [
                 "ElevenLabs",
                 .product(name: "LiveKit", package: "client-sdk-swift")
+            ],
+            resources: [
+                .copy("Resources/silence.mp3"),
+                .copy("Resources/spoken-audio.mp3")
             ]
         )
     ]
