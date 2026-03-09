@@ -6,6 +6,8 @@ import LiveKitWebRTC
 import XCTest
 
 final class SoftwareMuteProcessorTests: XCTestCase {
+    class BundleLocator {}
+
     func testDoesNothingIfUnmuted() throws {
         let expectation = expectation(description: "should not fire while unmuted")
         expectation.isInverted = true
@@ -93,7 +95,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func loadBuffer(named bufferName: String) throws -> LKAudioBuffer {
         let url = try XCTUnwrap(
-            Bundle.module.url(forResource: bufferName, withExtension: "mp3", subdirectory: "Resources"),
+            Bundle.module.url(forResource: bufferName, withExtension: "mp3"),
             "Missing test resource: \(bufferName).mp3"
         )
         let file = try AVAudioFile(forReading: url)

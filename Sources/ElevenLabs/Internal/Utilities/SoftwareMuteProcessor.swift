@@ -15,12 +15,12 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
     private var isMuted: Bool = false
     private var lastNotificationTime: Date = .distantPast
 
-    private let onMutedSpeech: @Sendable (MutedSpeechEvent) -> Void
+    private let onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
     private let mutedSpeechThresholdInDb: Float
     private let mutedSpeechThrottleInSeconds: TimeInterval
 
     init(
-        onMutedSpeech: @escaping (@Sendable (MutedSpeechEvent) -> Void),
+        onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?,
         mutedSpeechThresholdInDb: Float = -35,
         mutedSpeechThrottleInSeconds: TimeInterval = 3.0
     ) {
@@ -66,7 +66,7 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
                 lastNotificationTime = now
                 os_unfair_lock_unlock(&lock)
                 DispatchQueue.main.async {
-                    self.onMutedSpeech(.init(audioLevel: db))
+                    self.onMutedSpeech?(.init(audioLevel: db))
                 }
             }
         }

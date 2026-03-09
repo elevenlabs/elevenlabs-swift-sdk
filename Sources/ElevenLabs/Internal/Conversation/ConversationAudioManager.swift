@@ -134,10 +134,11 @@ final class ConversationAudioManager {
     }
 
     private func configureSoftwareMuteProcessor(options: ConversationOptions) {
-        let config = options.audioConfiguration
-        guard let onMutedSpeech = config?.onMutedSpeech else { return }
+        guard options.audioConfiguration?.useSoftwareMute == true else {
+            return
+        }
 
-        softwareMuteProcessor = SoftwareMuteProcessor(onMutedSpeech: onMutedSpeech)
+        softwareMuteProcessor = SoftwareMuteProcessor(onMutedSpeech: options.audioConfiguration?.onMutedSpeech)
         AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
     }
 

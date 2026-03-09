@@ -28,6 +28,11 @@ public struct AudioPipelineConfiguration: Sendable {
     /// Observe LiveKit speech activity events while the microphone is muted.
     public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
 
+    /// Enable software mute. With software mute, the microphone will stay open when `setMuted(true(` is used, but
+    /// all captured audio data will be zeroed out. By enabling software mute you can set the `onMutedSpeech` callback
+    /// and receive callback events when users speak while the agent is muted.
+    public var useSoftwareMute: Bool?
+
     /// Called when local speech is detected while the microphone is muted.
     /// This uses local audio processing and works reliably with `.inputMixer` mode.
     /// Use this to show "You're speaking while muted" indicators.
@@ -43,6 +48,7 @@ public struct AudioPipelineConfiguration: Sendable {
         voiceProcessingBypassed: Bool? = nil,
         voiceProcessingAGCEnabled: Bool? = nil,
         onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        useSoftwareMute: Bool? = nil,
         onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)? = nil,
         mutedSpeechThreshold: Float? = nil
     ) {
@@ -51,6 +57,7 @@ public struct AudioPipelineConfiguration: Sendable {
         self.voiceProcessingBypassed = voiceProcessingBypassed
         self.voiceProcessingAGCEnabled = voiceProcessingAGCEnabled
         self.onSpeechActivity = onSpeechActivity
+        self.useSoftwareMute = useSoftwareMute
         self.onMutedSpeech = onMutedSpeech
         self.mutedSpeechThreshold = mutedSpeechThreshold
     }
