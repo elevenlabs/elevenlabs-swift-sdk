@@ -58,38 +58,26 @@ final class ElevenLabsSDKTests: XCTestCase {
         }
     }
 
-    func testStartConversationWithToken() async {
-        let config = ConversationConfig()
-
-        do {
-            let conversation = try await ElevenLabs.startConversation(
-                conversationToken: "test-token-123",
-                config: config
-            )
-
-            XCTAssertNotNil(conversation)
-        } catch {
-            // Expected to fail without proper API setup
-            XCTAssertTrue(error is ConversationError)
+    func testConversationTokenAuthConfiguration() {
+        let auth = ElevenLabsConfiguration.conversationToken("test-token-123")
+        switch auth.authSource {
+        case let .conversationToken(token):
+            XCTAssertEqual(token, "test-token-123")
+        default:
+            XCTFail("Expected conversationToken case")
         }
     }
 
-    func testStartConversationWithTokenProvider() async {
-        let config = ConversationConfig()
+    func testCustomTokenProviderAuthConfiguration() async throws {
         let tokenProvider: @Sendable () async throws -> String = {
             "dynamic-token-123"
         }
-
-        do {
-            let conversation = try await ElevenLabs.startConversation(
-                tokenProvider: tokenProvider,
-                config: config
-            )
-
-            XCTAssertNotNil(conversation)
-        } catch {
-            // Expected to fail without proper API setup
-            XCTAssertTrue(error is ConversationError)
+        let auth = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
+        switch auth.authSource {
+        case .customTokenProvider:
+            break // Success - provider is configured
+        default:
+            XCTFail("Expected customTokenProvider case")
         }
     }
 
