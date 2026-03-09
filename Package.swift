@@ -45,7 +45,7 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/silence.mp3"),
-                .copy("Resources/spoken-audio.mp3"),
+                .copy("Resources/spoken-audio.mp3")
             ]
         )
     ]
