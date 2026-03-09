@@ -44,7 +44,7 @@ jobs:
         run: swift build
 
       - name: Test (debug)
-        run: swift test --arch arm64
+        run: swift test --disable-sandbox
 
       - name: Build (release)
         run: swift build --configuration release
