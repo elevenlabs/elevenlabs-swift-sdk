@@ -44,7 +44,9 @@ jobs:
         run: swift build
 
       - name: Test (debug)
-        run: swift build --build-tests -c debug
+        run: |
+          swift build --build-tests -c debug
+          swift test --skip-build -c debug --disable-swift-testing --enable-xctest --no-parallel
 
       - name: Build (release)
         run: swift build --configuration release
