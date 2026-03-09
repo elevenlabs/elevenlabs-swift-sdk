@@ -68,7 +68,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         }
     }
 
-    func testCustomTokenProviderAuthConfiguration() async throws {
+    func testCustomTokenProviderAuthConfiguration() {
         let tokenProvider: @Sendable () async throws -> String = {
             "dynamic-token-123"
         }
