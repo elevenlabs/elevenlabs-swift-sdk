@@ -316,7 +316,14 @@ public final class Conversation: ObservableObject, RoomDelegate {
             isMuted = muted
             return
         }
+        try await setMicrophoneMuted(muted)
+    }
 
+    // Mute the microphone. Normally calling setMuted will mute the microphone
+    // but if software mute is enabled, the setMuted call will just toggle
+    // the software mute. If you still want to explicitly mute the microphone
+    // you can use this method.
+    public func setMicrophoneMuted(_ muted: Bool) async throws {
         if state.isActive {
             guard let room = resolvedConnectionManager()?.room else {
                 throw ConversationError.notConnected
