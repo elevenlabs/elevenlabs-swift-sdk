@@ -44,7 +44,7 @@ jobs:
         run: swift build
 
       - name: Test (debug)
-        run: swift test --skip-build
+        run: swift build --build-tests -c debug
 
       - name: Build (release)
         run: swift build --configuration release
