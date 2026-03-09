@@ -93,7 +93,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         }
     }
 
-    func loadBuffer(named bufferName: String) throws -> LKAudioBuffer {
+    private func loadBuffer(named bufferName: String) throws -> LKAudioBuffer {
         let url = try XCTUnwrap(
             Bundle.module.url(forResource: bufferName, withExtension: "mp3"),
             "Missing test resource: \(bufferName).mp3"
