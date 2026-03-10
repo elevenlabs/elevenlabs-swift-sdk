@@ -61,14 +61,14 @@ final class AgentStateManager {
         if isSpeakingNow, !wasSpeaking {
             cancelTimer(&silenceTimer)
             scheduleTimer(&speechTimer, delay: configuration.minSpeechDuration) { [weak self] in
-                guard let self, self.isUserSpeaking else { return }
-                self.transitionTo(.listening)
+                guard let self, isUserSpeaking else { return }
+                transitionTo(.listening)
             }
         } else if !isSpeakingNow, wasSpeaking {
             cancelTimer(&speechTimer)
             scheduleTimer(&silenceTimer, delay: configuration.minSilenceDuration) { [weak self] in
-                guard let self, !self.isUserSpeaking, self.currentState != .speaking else { return }
-                self.transitionTo(.thinking)
+                guard let self, !self.isUserSpeaking, currentState != .speaking else { return }
+                transitionTo(.thinking)
             }
         } else if isSpeakingNow {
             cancelTimer(&silenceTimer)
@@ -84,8 +84,8 @@ final class AgentStateManager {
     private func handleAgentStoppedSpeaking() {
         isAgentSpeaking = false
         scheduleTimer(&speakingTimer, delay: configuration.speakingToListeningDelay) { [weak self] in
-            guard let self, !self.isAgentSpeaking, self.currentState == .speaking else { return }
-            self.transitionTo(.listening)
+            guard let self, !self.isAgentSpeaking, currentState == .speaking else { return }
+            transitionTo(.listening)
         }
     }
 

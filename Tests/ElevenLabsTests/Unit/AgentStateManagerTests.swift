@@ -58,9 +58,9 @@ final class AgentStateManagerTests: XCTestCase {
 
 private final class MockLogger: Logging {
     nonisolated func log(level _: ElevenLabs.LogLevel, message _: String, context _: [String: String]?) {}
-    nonisolated func trace(_ message: String, context _: [String: String]?) {}
-    nonisolated func debug(_ message: String, context _: [String: String]?) {}
-    nonisolated func info(_ message: String, context _: [String: String]?) {}
-    nonisolated func warning(_ message: String, context _: [String: String]?) {}
-    nonisolated func error(_ message: String, context _: [String: String]?) {}
+    nonisolated func trace(_: String, context _: [String: String]?) {}
+    nonisolated func debug(_: String, context _: [String: String]?) {}
+    nonisolated func info(_: String, context _: [String: String]?) {}
+    nonisolated func warning(_: String, context _: [String: String]?) {}
+    nonisolated func error(_: String, context _: [String: String]?) {}
 }
