@@ -77,6 +77,12 @@ public struct ConversationConfig: Sendable {
     /// Called when a client tool call is received without a registered handler.
     public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
+    /// Configuration for event-based agent state management.
+    public var agentStateConfiguration: AgentStateConfiguration
+
+    /// Called whenever the agent state changes.
+    public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
+
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
@@ -103,7 +109,9 @@ public struct ConversationConfig: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
-        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        agentStateConfiguration: AgentStateConfiguration = .default,
+        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -131,6 +139,8 @@ public struct ConversationConfig: Sendable {
         self.onAudioAlignment = onAudioAlignment
         self.onCanSendFeedbackChange = onCanSendFeedbackChange
         self.onUnhandledClientToolCall = onUnhandledClientToolCall
+        self.agentStateConfiguration = agentStateConfiguration
+        self.onAgentStateChange = onAgentStateChange
     }
 }
 
@@ -216,7 +226,9 @@ extension ConversationConfig {
             onVadScore: onVadScore,
             onAudioAlignment: onAudioAlignment,
             onCanSendFeedbackChange: onCanSendFeedbackChange,
-            onUnhandledClientToolCall: onUnhandledClientToolCall
+            onUnhandledClientToolCall: onUnhandledClientToolCall,
+            agentStateConfiguration: agentStateConfiguration,
+            onAgentStateChange: onAgentStateChange
         )
     }
 }

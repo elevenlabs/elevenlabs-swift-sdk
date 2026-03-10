@@ -62,6 +62,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Audio device management
     private var audioManager: ConversationAudioManager?
 
+    /// Agent state manager for event-based state tracking
+    var agentStateManager: AgentStateManager?
+
     /// Internal logger, accessible from nonisolated contexts.
     nonisolated let logger: any Logging
 
@@ -122,6 +125,16 @@ public final class Conversation: ObservableObject, RoomDelegate {
         selectedAudioDeviceID = manager.selectedAudioDeviceID
     }
 
+    private func setupAgentStateManager() {
+        guard options.agentStateConfiguration.useEventBasedState else { return }
+        let manager = AgentStateManager(configuration: options.agentStateConfiguration, logger: logger)
+        manager.onStateChange = { [weak self] state in
+            self?.agentState = state
+            self?.options.onAgentStateChange?(state)
+        }
+        agentStateManager = manager
+    }
+
     // MARK: - Public API
 
     /// Start a conversation with an agent using agent ID.
@@ -167,6 +180,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         await audioManager?.configure(with: options)
         options.onCanSendFeedbackChange?(false)
+
+        setupAgentStateManager()
 
         connectionManager.errorHandler = provider.errorHandler
 
@@ -492,6 +507,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         lastAgentEventId = nil
         lastFeedbackSubmittedEventId = nil
         audioManager?.cleanup()
+        agentStateManager = nil
         options.onCanSendFeedbackChange?(false)
         latestAudioEvent = nil
 
@@ -673,16 +689,15 @@ extension Conversation {
     public nonisolated func room(
         _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
-        if participant is RemoteParticipant {
-            Task { @MainActor in
-                if isSpeaking {
-                    // Immediately switch to speaking and cancel any pending timeout
-                    self.speakingTimer?.cancel()
-                    self.agentState = .speaking
-                } else {
-                    // Add timeout before switching to listening to handle natural speech gaps
-                    self.scheduleBackToListening(delay: 1.0) // 1 second delay for natural gaps
-                }
+        guard participant is RemoteParticipant else { return }
+        Task { @MainActor in
+            if let manager = self.agentStateManager {
+                manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+            } else if isSpeaking {
+                self.speakingTimer?.cancel()
+                self.agentState = .speaking
+            } else {
+                self.scheduleBackToListening(delay: 1.0)
             }
         }
     }
@@ -727,16 +742,15 @@ extension Conversation: ParticipantDelegate {
     public nonisolated func participant(
         _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
-        if participant is RemoteParticipant {
-            Task { @MainActor in
-                if isSpeaking {
-                    // Immediately switch to speaking and cancel any pending timeout
-                    self.speakingTimer?.cancel()
-                    self.agentState = .speaking
-                } else {
-                    // Add timeout before switching to listening to handle natural speech gaps
-                    self.scheduleBackToListening(delay: 1.0) // 1 second delay for natural gaps
-                }
+        guard participant is RemoteParticipant else { return }
+        Task { @MainActor in
+            if let manager = self.agentStateManager {
+                manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+            } else if isSpeaking {
+                self.speakingTimer?.cancel()
+                self.agentState = .speaking
+            } else {
+                self.scheduleBackToListening(delay: 1.0)
             }
         }
     }
