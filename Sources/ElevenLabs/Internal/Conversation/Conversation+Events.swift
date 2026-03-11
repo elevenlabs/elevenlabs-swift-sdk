@@ -9,15 +9,16 @@ extension Conversation {
         switch event {
         case let .userTranscript(e):
             appendUserTranscript(e.transcript)
+            agentStateManager?.processSignal(.userTranscript)
             options.onUserTranscript?(e.transcript, e.eventId)
 
         case .tentativeAgentResponse:
-            // Don't change agent state - let voice activity detection handle it
-            break
+            agentStateManager?.processSignal(.agentResponse)
 
         case let .agentResponse(e):
             appendAgentMessage(e.response)
             lastAgentEventId = e.eventId
+            agentStateManager?.processSignal(.agentResponse)
             options.onAgentResponse?(e.response, e.eventId)
             if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
                 options.onCanSendFeedbackChange?(true)
@@ -48,9 +49,8 @@ extension Conversation {
             }
 
         case let .interruption(interruptionEvent):
-            // Only interruption should force listening state - immediately, no timeout
             speakingTimer?.cancel()
-            agentState = .listening
+            applyStateSignal(.interruption, fallback: .listening)
             options.onInterruption?(interruptionEvent.eventId)
             options.onCanSendFeedbackChange?(false)
 
@@ -70,12 +70,11 @@ extension Conversation {
             pendingToolCalls.append(toolCall)
 
         case let .vadScore(vad):
-            // VAD scores are available in the event stream
+            agentStateManager?.processSignal(.vadScore(vad.vadScore))
             options.onVadScore?(vad.vadScore)
 
         case let .agentToolResponse(toolResponse):
-            // Agent tool response is available in the event stream
-            agentState = .listening
+            applyStateSignal(.agentToolResponse, fallback: .listening)
 
             if toolResponse.toolName == "end_call" {
                 await endConversation()
@@ -83,9 +82,7 @@ extension Conversation {
             options.onAgentToolResponse?(toolResponse)
 
         case let .agentToolRequest(toolRequest):
-            // Forward agent tool request to consumer
-            // Switch to thinking while the agent performs the tool call
-            agentState = .thinking
+            applyStateSignal(.agentToolRequest, fallback: .thinking)
             options.onAgentToolRequest?(toolRequest)
 
         case .tentativeUserTranscript:
