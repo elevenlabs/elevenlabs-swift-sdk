@@ -7,12 +7,11 @@ final class AgentStateManagerTests: XCTestCase {
 
     override func setUp() async throws {
         let config = AgentStateConfiguration(
-            useEventBasedState: true,
             minSpeechDuration: 0.05,
             minSilenceDuration: 0.05,
             speakingToListeningDelay: 0.05
         )
-        manager = AgentStateManager(configuration: config, logger: MockLogger())
+        manager = AgentStateManager(configuration: config)
     }
 
     func testUserTranscriptTransitionsToThinking() {
@@ -56,11 +55,3 @@ final class AgentStateManagerTests: XCTestCase {
     }
 }
 
-private final class MockLogger: Logging {
-    nonisolated func log(level _: ElevenLabs.LogLevel, message _: String, context _: [String: String]?) {}
-    nonisolated func trace(_: String, context _: [String: String]?) {}
-    nonisolated func debug(_: String, context _: [String: String]?) {}
-    nonisolated func info(_: String, context _: [String: String]?) {}
-    nonisolated func warning(_: String, context _: [String: String]?) {}
-    nonisolated func error(_: String, context _: [String: String]?) {}
-}

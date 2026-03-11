@@ -65,6 +65,26 @@ public final class Conversation: ObservableObject, RoomDelegate {
     /// Agent state manager for event-based state tracking
     var agentStateManager: AgentStateManager?
 
+    /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
+    func applyStateSignal(_ signal: AgentStateSignal, fallback: ElevenLabs.AgentState) {
+        if let manager = agentStateManager {
+            manager.processSignal(signal)
+        } else {
+            agentState = fallback
+        }
+    }
+
+    func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
+        if let manager = agentStateManager {
+            manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+        } else if isSpeaking {
+            speakingTimer?.cancel()
+            agentState = .speaking
+        } else {
+            scheduleBackToListening(delay: 1.0)
+        }
+    }
+
     /// Internal logger, accessible from nonisolated contexts.
     nonisolated let logger: any Logging
 
@@ -126,8 +146,8 @@ public final class Conversation: ObservableObject, RoomDelegate {
     }
 
     private func setupAgentStateManager() {
-        guard options.agentStateConfiguration.useEventBasedState else { return }
-        let manager = AgentStateManager(configuration: options.agentStateConfiguration, logger: logger)
+        guard let configuration = options.agentStateConfiguration else { return }
+        let manager = AgentStateManager(configuration: configuration)
         manager.onStateChange = { [weak self] state in
             self?.agentState = state
             self?.options.onAgentStateChange?(state)
@@ -690,16 +710,7 @@ extension Conversation {
         _: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
         guard participant is RemoteParticipant else { return }
-        Task { @MainActor in
-            if let manager = self.agentStateManager {
-                manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
-            } else if isSpeaking {
-                self.speakingTimer?.cancel()
-                self.agentState = .speaking
-            } else {
-                self.scheduleBackToListening(delay: 1.0)
-            }
-        }
+        Task { @MainActor in self.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking) }
     }
 
     public nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
@@ -743,15 +754,6 @@ extension Conversation: ParticipantDelegate {
         _ participant: Participant, didUpdateIsSpeaking isSpeaking: Bool
     ) {
         guard participant is RemoteParticipant else { return }
-        Task { @MainActor in
-            if let manager = self.agentStateManager {
-                manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
-            } else if isSpeaking {
-                self.speakingTimer?.cancel()
-                self.agentState = .speaking
-            } else {
-                self.scheduleBackToListening(delay: 1.0)
-            }
-        }
+        Task { @MainActor in self.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking) }
     }
 }

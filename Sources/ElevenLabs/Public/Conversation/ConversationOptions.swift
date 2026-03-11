@@ -80,11 +80,11 @@ public struct ConversationOptions: Sendable {
     /// Called when an unhandled client tool call is received.
     public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
-    /// When enabled, agent state is computed from VAD scores and protocol events
+    /// When provided, agent state is computed from VAD scores and protocol events
     /// instead of relying on LiveKit's isSpeaking detection.
-    public var agentStateConfiguration: AgentStateConfiguration
+    public var agentStateConfiguration: AgentStateConfiguration?
 
-    /// Called whenever the agent state changes.
+    /// Called whenever the agent state changes (event-based mode only).
     public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
 
     public init(
@@ -115,7 +115,7 @@ public struct ConversationOptions: Sendable {
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
         onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
-        agentStateConfiguration: AgentStateConfiguration = .default,
+        agentStateConfiguration: AgentStateConfiguration? = nil,
         onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
     ) {
         self.conversationOverrides = conversationOverrides

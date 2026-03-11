@@ -13,8 +13,7 @@ extension Conversation {
             options.onUserTranscript?(e.transcript, e.eventId)
 
         case .tentativeAgentResponse:
-            // Don't change agent state - let voice activity detection handle it
-            break
+            agentStateManager?.processSignal(.agentResponse)
 
         case let .agentResponse(e):
             appendAgentMessage(e.response)
@@ -51,11 +50,7 @@ extension Conversation {
 
         case let .interruption(interruptionEvent):
             speakingTimer?.cancel()
-            if let manager = agentStateManager {
-                manager.processSignal(.interruption)
-            } else {
-                agentState = .listening
-            }
+            applyStateSignal(.interruption, fallback: .listening)
             options.onInterruption?(interruptionEvent.eventId)
             options.onCanSendFeedbackChange?(false)
 
@@ -79,11 +74,7 @@ extension Conversation {
             options.onVadScore?(vad.vadScore)
 
         case let .agentToolResponse(toolResponse):
-            if let manager = agentStateManager {
-                manager.processSignal(.agentToolResponse)
-            } else {
-                agentState = .listening
-            }
+            applyStateSignal(.agentToolResponse, fallback: .listening)
 
             if toolResponse.toolName == "end_call" {
                 await endConversation()
@@ -91,11 +82,7 @@ extension Conversation {
             options.onAgentToolResponse?(toolResponse)
 
         case let .agentToolRequest(toolRequest):
-            if let manager = agentStateManager {
-                manager.processSignal(.agentToolRequest)
-            } else {
-                agentState = .thinking
-            }
+            applyStateSignal(.agentToolRequest, fallback: .thinking)
             options.onAgentToolRequest?(toolRequest)
 
         case .tentativeUserTranscript:

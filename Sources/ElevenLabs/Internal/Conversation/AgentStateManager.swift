@@ -19,7 +19,6 @@ final class AgentStateManager {
     var onStateChange: ((ElevenLabs.AgentState) -> Void)?
 
     private let configuration: AgentStateConfiguration
-    private let logger: any Logging
 
     private var isUserSpeaking = false
     private var isAgentSpeaking = false
@@ -28,29 +27,45 @@ final class AgentStateManager {
     private var silenceTimer: TimerTask?
     private var speakingTimer: TimerTask?
 
-    init(configuration: AgentStateConfiguration, logger: any Logging) {
+    init(configuration: AgentStateConfiguration) {
         self.configuration = configuration
-        self.logger = logger
     }
 
     func processSignal(_ signal: AgentStateSignal) {
         switch signal {
-        case let .vadScore(score): handleVadScore(score)
-        case .agentStartedSpeaking: handleAgentStartedSpeaking()
-        case .agentStoppedSpeaking: handleAgentStoppedSpeaking()
-        case .agentResponse: handleAgentResponse()
-        case .userTranscript: if currentState != .speaking { transitionTo(.thinking) }
-        case .interruption: handleInterruption()
-        case .agentToolRequest: transitionTo(.thinking)
-        case .agentToolResponse: transitionTo(.listening)
-        }
-    }
+        case let .vadScore(score):
+            handleVadScore(score)
 
-    func reset() {
-        cancelAllTimers()
-        isUserSpeaking = false
-        isAgentSpeaking = false
-        transitionTo(.listening)
+        case .agentStartedSpeaking:
+            isAgentSpeaking = true
+            cancelTimer(&speakingTimer)
+            transitionTo(.speaking)
+
+        case .agentStoppedSpeaking:
+            isAgentSpeaking = false
+            scheduleTimer(&speakingTimer, delay: configuration.speakingToListeningDelay) { [weak self] in
+                guard let self, !self.isAgentSpeaking, currentState == .speaking else { return }
+                transitionTo(.listening)
+            }
+
+        case .agentResponse:
+            cancelTimer(&speakingTimer)
+            transitionTo(.speaking)
+
+        case .userTranscript:
+            if currentState != .speaking { transitionTo(.thinking) }
+
+        case .interruption:
+            cancelAllTimers()
+            isAgentSpeaking = false
+            transitionTo(.listening)
+
+        case .agentToolRequest:
+            transitionTo(.thinking)
+
+        case .agentToolResponse:
+            transitionTo(.listening)
+        }
     }
 
     private func handleVadScore(_ score: Double) {
@@ -75,34 +90,8 @@ final class AgentStateManager {
         }
     }
 
-    private func handleAgentStartedSpeaking() {
-        isAgentSpeaking = true
-        cancelTimer(&speakingTimer)
-        transitionTo(.speaking)
-    }
-
-    private func handleAgentStoppedSpeaking() {
-        isAgentSpeaking = false
-        scheduleTimer(&speakingTimer, delay: configuration.speakingToListeningDelay) { [weak self] in
-            guard let self, !self.isAgentSpeaking, currentState == .speaking else { return }
-            transitionTo(.listening)
-        }
-    }
-
-    private func handleAgentResponse() {
-        cancelTimer(&speakingTimer)
-        transitionTo(.speaking)
-    }
-
-    private func handleInterruption() {
-        cancelAllTimers()
-        isAgentSpeaking = false
-        transitionTo(.listening)
-    }
-
     private func transitionTo(_ newState: ElevenLabs.AgentState) {
         guard newState != currentState else { return }
-        logger.debug("AgentState: \(currentState) → \(newState)", context: nil)
         currentState = newState
         onStateChange?(newState)
     }
