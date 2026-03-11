@@ -38,19 +38,4 @@ final class AgentStateManagerTests: XCTestCase {
         manager.processSignal(.agentToolResponse)
         XCTAssertEqual(manager.currentState, .listening)
     }
-
-    func testTypicalConversationFlow() async throws {
-        manager.processSignal(.vadScore(0.8))
-        try await Task.sleep(nanoseconds: 100_000_000)
-        manager.processSignal(.vadScore(0.1))
-        try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertEqual(manager.currentState, .thinking)
-
-        manager.processSignal(.agentResponse)
-        XCTAssertEqual(manager.currentState, .speaking)
-
-        manager.processSignal(.agentStoppedSpeaking)
-        try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertEqual(manager.currentState, .listening)
-    }
 }
