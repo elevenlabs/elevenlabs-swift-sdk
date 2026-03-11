@@ -54,4 +54,3 @@ final class AgentStateManagerTests: XCTestCase {
         XCTAssertEqual(manager.currentState, .listening)
     }
 }
-
