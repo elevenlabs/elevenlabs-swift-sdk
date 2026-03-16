@@ -99,7 +99,7 @@ public struct TokenService: Sendable {
         var queryItems = [
             URLQueryItem(name: "agent_id", value: agentId),
             URLQueryItem(name: "source", value: "swift_sdk"),
-            URLQueryItem(name: "version", value: SDKVersion.version),
+            URLQueryItem(name: "version", value: SDKVersion.version)
         ]
         if let environment {
             queryItems.append(URLQueryItem(name: "environment", value: environment))
