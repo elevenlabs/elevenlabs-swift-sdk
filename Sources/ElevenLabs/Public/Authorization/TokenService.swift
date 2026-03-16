@@ -70,7 +70,7 @@ public struct TokenService: Sendable {
     public func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> ConnectionDetails {
         let token: String = switch configuration.authSource {
         case let .publicAgentId(agentId):
-            try await fetchTokenFromAPI(agentId: agentId)
+            try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
         case let .conversationToken(conversationToken):
             conversationToken
         case let .customTokenProvider(provider):
@@ -89,18 +89,22 @@ public struct TokenService: Sendable {
         )
     }
 
-    private func fetchTokenFromAPI(agentId: String) async throws -> String {
+    private func fetchTokenFromAPI(agentId: String, environment: String? = nil) async throws -> String {
         // Build URL with agent ID as query parameter
         let apiUrl = configuration.apiEndpoint ?? ConnectionConstants.tokenUrl
 
         guard var components = URLComponents(string: apiUrl) else {
             throw TokenError.invalidURL
         }
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "agent_id", value: agentId),
             URLQueryItem(name: "source", value: "swift_sdk"),
             URLQueryItem(name: "version", value: SDKVersion.version)
         ]
+        if let environment {
+            queryItems.append(URLQueryItem(name: "environment", value: environment))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw TokenError.invalidURL
