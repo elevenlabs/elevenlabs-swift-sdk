@@ -165,7 +165,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         with agentId: String,
         options: ConversationOptions = .default
     ) async throws {
-        let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId)
+        let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId, environment: options.environment)
         try await startConversation(auth: authConfig, options: options)
     }
 

@@ -14,22 +14,25 @@ public struct ElevenLabsConfiguration: Sendable {
 
     public let authSource: AuthSource
     public let participantName: String
+    /// Optional environment for the agent (defaults to production when nil)
+    public let environment: String?
 
     /// Initialize with a public agent ID
-    public static func publicAgent(id: String, participantName: String = "user") -> Self {
-        .init(authSource: .publicAgentId(id), participantName: participantName)
+    public static func publicAgent(id: String, participantName: String = "user", environment: String? = nil) -> Self {
+        .init(authSource: .publicAgentId(id), participantName: participantName, environment: environment)
     }
 
     /// Initialize with a conversation token
-    public static func conversationToken(_ token: String, participantName: String = "user") -> Self {
-        .init(authSource: .conversationToken(token), participantName: participantName)
+    public static func conversationToken(_ token: String, participantName: String = "user", environment: String? = nil) -> Self {
+        .init(authSource: .conversationToken(token), participantName: participantName, environment: environment)
     }
 
     /// Initialize with a custom token provider
     public static func customTokenProvider(
         _ provider: @escaping @Sendable () async throws -> String,
-        participantName: String = "user"
+        participantName: String = "user",
+        environment: String? = nil
     ) -> Self {
-        .init(authSource: .customTokenProvider(provider), participantName: participantName)
+        .init(authSource: .customTokenProvider(provider), participantName: participantName, environment: environment)
     }
 }

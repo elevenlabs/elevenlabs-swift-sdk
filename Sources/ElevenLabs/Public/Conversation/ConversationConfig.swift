@@ -16,6 +16,8 @@ public struct ConversationConfig: Sendable {
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
     public var userId: String?
+    /// Optional environment for the agent (defaults to production when nil)
+    public var environment: String?
 
     /// Called when the agent is ready and the conversation can begin
     public var onAgentReady: (@Sendable () -> Void)?
@@ -91,6 +93,7 @@ public struct ConversationConfig: Sendable {
         customLlmExtraBody: [String: String]? = nil,
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
+        environment: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
@@ -120,6 +123,7 @@ public struct ConversationConfig: Sendable {
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
         self.userId = userId
+        self.environment = environment
         self.onAgentReady = onAgentReady
         self.onDisconnect = onDisconnect
         self.onStartupStateChange = onStartupStateChange
@@ -208,6 +212,7 @@ extension ConversationConfig {
             customLlmExtraBody: customLlmExtraBody,
             dynamicVariables: dynamicVariables,
             userId: userId,
+            environment: environment,
             onAgentReady: onAgentReady,
             onDisconnect: onDisconnect,
             onStartupStateChange: onStartupStateChange,
