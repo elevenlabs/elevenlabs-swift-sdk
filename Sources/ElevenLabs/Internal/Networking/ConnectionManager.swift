@@ -3,12 +3,12 @@ import LiveKit
 
 // swiftlint:disable file_length
 
-struct AgentReadyDetail: Equatable, Sendable {
+struct AgentReadyDetail: Equatable {
     let elapsed: TimeInterval
     let viaGraceTimeout: Bool
 }
 
-enum AgentReadyWaitResult: Equatable, Sendable {
+enum AgentReadyWaitResult: Equatable {
     case success(AgentReadyDetail)
     case timedOut(elapsed: TimeInterval)
 }
@@ -282,7 +282,7 @@ extension ConnectionManager {
         private var stage: Stage = .idle
         private var timeoutTask: Task<Void, Never>?
 
-        enum ReadySource: CustomStringConvertible, Sendable {
+        enum ReadySource: CustomStringConvertible {
             case trackSubscribed
             case graceTimeout
 

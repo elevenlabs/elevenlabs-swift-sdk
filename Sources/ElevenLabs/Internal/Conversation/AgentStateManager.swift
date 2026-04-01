@@ -1,6 +1,6 @@
 import Foundation
 
-enum AgentStateSignal: Sendable {
+enum AgentStateSignal {
     case vadScore(Double)
     case agentStartedSpeaking
     case agentStoppedSpeaking
