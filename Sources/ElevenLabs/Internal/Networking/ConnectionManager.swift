@@ -202,7 +202,7 @@ final class ConnectionManager: ConnectionManaging {
             }
         )
         readyDelegate = rd
-        room.add(delegate: rd)
+        room.delegates.add(delegate: rd)
 
         let connectStart = Date()
         do {
@@ -256,13 +256,13 @@ final class ConnectionManager: ConnectionManaging {
 
         return AsyncStream { continuation in
             let delegate = DataChannelDelegate(continuation: continuation, logger: logger)
-            room.add(delegate: delegate)
+            room.delegates.add(delegate: delegate)
 
             continuation.onTermination = { @Sendable [weak room, weak delegate] _ in
                 // Clean up the delegate when stream terminates
                 guard let room, let delegate else { return }
                 Task { @MainActor in
-                    room.remove(delegate: delegate)
+                    room.delegates.remove(delegate: delegate)
                 }
             }
         }

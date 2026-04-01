@@ -58,9 +58,9 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
         )
 
         if let room = connectionManager.room {
-            room.add(delegate: self)
+            room.delegates.add(delegate: self)
             for participant in room.remoteParticipants.values {
-                participant.add(delegate: self)
+                participant.delegates.add(delegate: self)
             }
         }
     }
@@ -89,7 +89,7 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
     nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            participant.add(delegate: self)
+            participant.delegates.add(delegate: self)
             delegate?.connectionManager(self, participantDidJoin: participant)
         }
     }
