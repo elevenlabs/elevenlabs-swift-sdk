@@ -1,7 +1,7 @@
 import Foundation
 
 /// Error types for token-related issues
-enum TokenError: LocalizedError, Sendable {
+enum TokenError: LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(statusCode: Int)

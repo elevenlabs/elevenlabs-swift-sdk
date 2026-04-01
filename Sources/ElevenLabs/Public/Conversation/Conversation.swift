@@ -543,11 +543,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
             guard let self else { return }
 
             // Add ourselves as room delegate to monitor speaking state
-            room.add(delegate: self)
+            room.delegates.add(delegate: self)
 
             // Monitor existing remote participants
             for participant in room.remoteParticipants.values {
-                participant.add(delegate: self)
+                participant.delegates.add(delegate: self)
             }
 
             updateFromRoom(room)
@@ -587,7 +587,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
             self?.handleIncomingData(data)
         }
         protocolEventsDelegate = delegate
-        room.add(delegate: delegate)
+        room.delegates.add(delegate: delegate)
     }
 
     // MARK: - Testing Hooks
@@ -714,7 +714,7 @@ extension Conversation {
     }
 
     public nonisolated func room(_: Room, participantDidJoin participant: RemoteParticipant) {
-        participant.add(delegate: self)
+        participant.delegates.add(delegate: self)
     }
 }
 

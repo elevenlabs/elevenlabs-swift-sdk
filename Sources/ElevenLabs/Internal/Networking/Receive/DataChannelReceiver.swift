@@ -18,11 +18,11 @@ actor DataChannelReceiver: MessageReceiver {
     init(room: Room, logger: Logging) {
         self.room = room
         self.logger = logger
-        room.add(delegate: self)
+        room.delegates.add(delegate: self)
     }
 
     deinit {
-        room.remove(delegate: self)
+        room.delegates.remove(delegate: self)
     }
 
     // MARK: - Public API
