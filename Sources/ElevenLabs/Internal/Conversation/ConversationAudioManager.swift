@@ -138,7 +138,12 @@ final class ConversationAudioManager {
             return
         }
 
-        softwareMuteProcessor = SoftwareMuteProcessor(onMutedSpeech: options.audioConfiguration?.onMutedSpeech)
+        let audioConfig = options.audioConfiguration
+        softwareMuteProcessor = SoftwareMuteProcessor(
+            onMutedSpeech: audioConfig?.onMutedSpeech,
+            mutedSpeechThresholdInDb: audioConfig?.mutedSpeechThreshold ?? -35,
+            mutedSpeechThrottleInSeconds: 3.0
+        )
         AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
     }
 

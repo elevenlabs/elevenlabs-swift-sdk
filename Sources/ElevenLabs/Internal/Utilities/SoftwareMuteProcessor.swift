@@ -7,13 +7,23 @@
 
 import Accelerate
 import CoreMedia
+import Foundation
 import LiveKit
 import LiveKitWebRTC
 
 final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomProcessingDelegate {
+    private enum Hangover {
+        static let buffersAboveToConfirm = 4
+        static let buffersBelowToClear = 3
+    }
+
     private var lock = os_unfair_lock_s()
     private var isMuted: Bool = false
     private var lastNotificationTime: Date = .distantPast
+
+    private var consecutiveAboveCount: Int = 0
+    private var consecutiveBelowCount: Int = 0
+    private var hangoverLatched: Bool = false
 
     private let onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
     private let mutedSpeechThresholdInDb: Float
@@ -31,6 +41,11 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
 
     func setMuted(_ muted: Bool) {
         os_unfair_lock_lock(&lock)
+        if isMuted != muted {
+            consecutiveAboveCount = 0
+            consecutiveBelowCount = 0
+            hangoverLatched = false
+        }
         isMuted = muted
         os_unfair_lock_unlock(&lock)
     }
@@ -38,7 +53,6 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
     func audioProcessingProcess(audioBuffer: LKAudioBuffer) {
         os_unfair_lock_lock(&lock)
         let currentlyMuted = isMuted
-        let lastTime = lastNotificationTime
         os_unfair_lock_unlock(&lock)
 
         guard currentlyMuted else { return }
@@ -59,15 +73,40 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         }
         let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
         let db = 20 * log10(max(averageRMS, 1e-6))
-        if db > mutedSpeechThresholdInDb {
+
+        let levelActive = db > mutedSpeechThresholdInDb
+
+        var shouldFire = false
+        var fireLevel: Float = 0
+        os_unfair_lock_lock(&lock)
+        if levelActive {
+            consecutiveBelowCount = 0
+            consecutiveAboveCount += 1
+            if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
+                hangoverLatched = true
+            }
+        } else {
+            consecutiveAboveCount = 0
+            consecutiveBelowCount += 1
+            if consecutiveBelowCount >= Hangover.buffersBelowToClear {
+                hangoverLatched = false
+                consecutiveBelowCount = 0
+            }
+        }
+
+        if hangoverLatched, levelActive {
             let now = Date()
-            if now.timeIntervalSince(lastTime) > mutedSpeechThrottleInSeconds {
-                os_unfair_lock_lock(&lock)
+            if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
                 lastNotificationTime = now
-                os_unfair_lock_unlock(&lock)
-                DispatchQueue.main.async {
-                    self.onMutedSpeech?(.init(audioLevel: db))
-                }
+                shouldFire = true
+                fireLevel = db
+            }
+        }
+        os_unfair_lock_unlock(&lock)
+
+        if shouldFire {
+            DispatchQueue.main.async {
+                self.onMutedSpeech?(.init(audioLevel: fireLevel))
             }
         }
 
