@@ -50,8 +50,44 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         )
 
         processor.setMuted(true)
-        try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        for _ in 0 ..< 4 {
+            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        }
         wait(for: [expectation], timeout: 2.0)
+    }
+
+    func testSingleLoudBufferDoesNotFireWithDefaultHangover() throws {
+        let expectation = expectation(description: "should not fire on single buffer")
+        expectation.isInverted = true
+
+        let processor = SoftwareMuteProcessor(
+            onMutedSpeech: { _ in
+                expectation.fulfill()
+            },
+            mutedSpeechThrottleInSeconds: 0
+        )
+
+        processor.setMuted(true)
+        try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        wait(for: [expectation], timeout: 0.5)
+    }
+
+    func testThreeLoudBuffersDoNotFireWithDefaultHangover() throws {
+        let expectation = expectation(description: "should not fire until 4 consecutive loud buffers")
+        expectation.isInverted = true
+
+        let processor = SoftwareMuteProcessor(
+            onMutedSpeech: { _ in
+                expectation.fulfill()
+            },
+            mutedSpeechThrottleInSeconds: 0
+        )
+
+        processor.setMuted(true)
+        for _ in 0 ..< 3 {
+            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        }
+        wait(for: [expectation], timeout: 0.5)
     }
 
     func testDoesNotChangeBufferedDataIfUnmuted() throws {
