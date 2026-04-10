@@ -38,7 +38,7 @@ public struct AudioPipelineConfiguration: Sendable {
     /// Use this to show "You're speaking while muted" indicators.
     public var onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
 
-    /// Audio level in dB where speech is detected. Default: -30 dB.
+    /// Audio level in dB where speech is detected. Default: -35 dB (see `SoftwareMuteProcessor`).
     /// Increase to require louder speech, decrease for more sensitivity.
     public var mutedSpeechThreshold: Float?
 
