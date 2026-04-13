@@ -3,5 +3,5 @@
 import Foundation
 
 enum SDKVersion {
-    static let version = "3.1.2"
+    static let version = "3.1.3"
 }
