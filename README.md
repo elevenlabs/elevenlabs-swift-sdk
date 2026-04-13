@@ -248,3 +248,15 @@ We love contributions!
 - **Patterns**: Adhere to Swift Concurrency best practices (Actors/MainActor).
 
 Explore our [Usage Documentation](Documentation/Usage.md) for more depth.
+
+---
+
+## Releasing
+
+To release a new version of the SDK, use the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) release command:
+
+```bash
+claude /release <version>
+```
+
+This will update version strings, lint, run checks, open a PR, and (after merge) tag the release to make it available via [Swift Package Manager](https://www.swift.org/documentation/package-manager/).
