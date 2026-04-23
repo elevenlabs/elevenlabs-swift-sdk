@@ -453,6 +453,40 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(FeedbackEvent.Score.dislike.rawValue, "dislike")
         XCTAssertNotEqual(FeedbackEvent.Score.like, FeedbackEvent.Score.dislike)
     }
+
+    func testAgentDisconnectEndsConversation() async throws {
+        let disconnectReasons = ValueRecorder<DisconnectionReason>()
+        let options = makeOptions(configure: { opts in
+            opts.onDisconnect = { reason in
+                Task { await disconnectReasons.append(reason) }
+            }
+        })
+
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(
+                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                options: options
+            )
+        }
+        await Task.yield()
+        mockConnectionManager.succeedAgentReady()
+        try await startTask.value
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        // capture call counts before the disconnect event.
+        let disconnectsBefore = mockConnectionManager.disconnectCallCount
+        // Simulate agent disconnect
+        await mockConnectionManager.onAgentDisconnected?()
+        // assert disconnect was handled with correct reasons
+        XCTAssertEqual(
+            mockConnectionManager.disconnectCallCount,
+            disconnectsBefore + 1,
+            "Agent disconnect should trigger connectionManager.disconnect()"
+        )
+        let reasons = await disconnectReasons.values(waitingFor: 1)
+        XCTAssertEqual(reasons, [.agent])
+        XCTAssertEqual(conversation.state, .ended(reason: .remoteDisconnected))
+    }
 }
 
 // swiftlint:enable file_length type_body_length

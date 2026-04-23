@@ -3,7 +3,7 @@ import LiveKit
 
 protocol ConnectionManaging: AnyObject {
     var onAgentReady: (() -> Void)? { get set }
-    var onAgentDisconnected: (() -> Void)? { get set }
+    var onAgentDisconnected: (() async -> Void)? { get set }
     var room: Room? { get }
     var shouldObserveRoomConnection: Bool { get }
     var errorHandler: ((Swift.Error?) -> Void)? { get set }

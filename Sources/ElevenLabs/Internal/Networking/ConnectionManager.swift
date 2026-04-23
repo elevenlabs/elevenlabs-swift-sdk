@@ -40,7 +40,7 @@ final class ConnectionManager: ConnectionManaging {
     var onAgentReady: (() -> Void)?
 
     /// Fired when all remote participants have left or the room disconnects.
-    var onAgentDisconnected: (() -> Void)?
+    var onAgentDisconnected: (() async -> Void)?
 
     // MARK: – Public state accessors
 
@@ -198,7 +198,7 @@ final class ConnectionManager: ConnectionManaging {
                 self?.handleAgentReady(source: source)
             },
             onDisconnected: { [weak self] in
-                self?.onAgentDisconnected?()
+                await self?.onAgentDisconnected?()
             }
         )
         readyDelegate = rd
@@ -302,7 +302,7 @@ extension ConnectionManager {
         // MARK: – Callbacks
 
         private let onReady: @MainActor @Sendable (ReadySource) -> Void
-        private let onDisconnected: @MainActor @Sendable () -> Void
+        private let onDisconnected: @MainActor @Sendable () async -> Void
 
         // MARK: – Init
 
@@ -310,7 +310,7 @@ extension ConnectionManager {
             graceTimeout: TimeInterval,
             logger: any Logging,
             onReady: @escaping @MainActor @Sendable (ReadySource) -> Void,
-            onDisconnected: @escaping @MainActor @Sendable () -> Void
+            onDisconnected: @escaping @MainActor @Sendable () async -> Void
         ) {
             self.graceTimeout = graceTimeout
             self.logger = logger
@@ -393,12 +393,12 @@ extension ConnectionManager {
             }
         }
 
-        func handleParticipantDidDisconnect(room: Room, identityString: String) {
+        func handleParticipantDidDisconnect(room: Room, identityString: String) async {
             let isAgent = identityString.hasPrefix("agent")
 
             if isAgent || room.remoteParticipants.isEmpty {
                 reset()
-                onDisconnected()
+                await onDisconnected()
             }
         }
 
