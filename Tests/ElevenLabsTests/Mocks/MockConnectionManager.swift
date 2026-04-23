@@ -54,11 +54,7 @@ final class MockConnectionManager: ConnectionManaging {
 
     func disconnect() async {
         disconnectCallCount += 1
-        let hadRoom = room != nil
         room = nil
-        if hadRoom {
-            await onAgentDisconnected?()
-        }
     }
 
     func dataEventsStream() -> AsyncStream<Data> {
