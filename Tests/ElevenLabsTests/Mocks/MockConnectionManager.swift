@@ -9,7 +9,7 @@ final class MockConnectionManager: ConnectionManaging {
     }
 
     var onAgentReady: (() -> Void)?
-    var onAgentDisconnected: (() -> Void)?
+    var onAgentDisconnected: (() async -> Void)?
 
     var room: Room?
     var shouldObserveRoomConnection: Bool {
@@ -57,7 +57,7 @@ final class MockConnectionManager: ConnectionManaging {
         let hadRoom = room != nil
         room = nil
         if hadRoom {
-            onAgentDisconnected?()
+            await onAgentDisconnected?()
         }
     }
 

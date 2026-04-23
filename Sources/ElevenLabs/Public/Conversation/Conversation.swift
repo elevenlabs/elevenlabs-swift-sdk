@@ -213,11 +213,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         // Set up agent disconnect callback
         connectionManager.onAgentDisconnected = { [weak self] in
             guard let self else { return }
-            if state.isActive {
-                state = .ended(reason: .remoteDisconnected)
-                cleanupPreviousConversation()
-                self.options.onDisconnect?(.agent)
-            }
+            await self.endConversation(disconnectReason: .agent, endReason: .remoteDisconnected)
         }
 
         // Execute startup sequence using orchestrator
@@ -307,7 +303,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during active conversation to end.
-    public func endConversation() async {
+    public func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
         // Allow ending during both active and connecting states
         guard state.isActive || state == .connecting else { return }
         guard let connectionManager = resolvedConnectionManager() else {
@@ -321,12 +317,12 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         // Disconnect synchronously to ensure clean state
         await connectionManager.disconnect()
-
-        state = .ended(reason: .userEnded)
+        
+        state = .ended(reason: endReason)
         cleanupPreviousConversation()
 
         // Call user's onDisconnect callback if provided
-        options.onDisconnect?(.user)
+        options.onDisconnect?(disconnectReason)
         options.onCanSendFeedbackChange?(false)
     }
 

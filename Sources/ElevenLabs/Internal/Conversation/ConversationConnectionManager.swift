@@ -32,7 +32,7 @@ final class ConversationConnectionManager: NSObject, RoomDelegate, ParticipantDe
         connectionManager.room
     }
 
-    var onAgentDisconnected: (() -> Void)? {
+    var onAgentDisconnected: (() async -> Void)? {
         get { connectionManager.onAgentDisconnected }
         set { connectionManager.onAgentDisconnected = newValue }
     }
