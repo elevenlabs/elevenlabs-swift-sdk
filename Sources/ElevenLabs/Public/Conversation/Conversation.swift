@@ -303,7 +303,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during active conversation to end.
-    public func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
+    public func endConversation() async {
+        await endConversation(disconnectReason: .user, endReason: .userEnded)
+    }
+
+    private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
         // Allow ending during both active and connecting states
         guard state.isActive || state == .connecting else { return }
         guard let connectionManager = resolvedConnectionManager() else {
@@ -314,11 +318,11 @@ public final class Conversation: ObservableObject, RoomDelegate {
             }
             return
         }
+        state = .ended(reason: endReason)
 
         // Disconnect synchronously to ensure clean state
         await connectionManager.disconnect()
 
-        state = .ended(reason: endReason)
         cleanupPreviousConversation()
 
         // Call user's onDisconnect callback if provided
