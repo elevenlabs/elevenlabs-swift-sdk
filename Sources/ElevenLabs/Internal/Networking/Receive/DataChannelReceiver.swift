@@ -51,7 +51,7 @@ actor DataChannelReceiver: MessageReceiver {
 
         continuation.onTermination = { [weak self] _ in
             Task { [weak self] in
-                await self?.handleMessageStreamTermination()
+                await self?.handleEventStreamTermination()
             }
         }
 
