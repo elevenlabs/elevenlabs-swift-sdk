@@ -471,31 +471,9 @@ public final class Conversation: ObservableObject, RoomDelegate {
         return dependencyProvider
     }
 
-    private func normalizeConversationError(
-        _ error: Error,
-        default defaultError: (Error) -> ConversationError
-    ) -> ConversationError {
-        if let conversationError = error as? ConversationError {
-            return conversationError
-        }
-        return defaultError(error)
-    }
-
     private func updateStartupState(_ newState: ConversationStartupState) {
         startupState = newState
         options.onStartupStateChange?(newState)
-    }
-
-    private func resetFlags() {
-        // Don't reset isMuted - it should reflect actual room state
-        agentState = .listening
-        pendingToolCalls.removeAll()
-        mcpToolCalls.removeAll()
-        mcpConnectionStatus = nil
-        conversationMetadata = nil
-        startupMetrics = nil
-        latestAudioAlignment = nil
-        latestAudioEvent = nil
     }
 
     /// Clean up state from any previous conversation to ensure a fresh start.
@@ -685,17 +663,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
             Message(
                 id: UUID().uuidString,
                 role: .user,
-                content: text,
-                timestamp: Date()
-            )
-        )
-    }
-
-    private func appendTentativeAgent(_ text: String) {
-        messages.append(
-            Message(
-                id: UUID().uuidString,
-                role: .agent,
                 content: text,
                 timestamp: Date()
             )

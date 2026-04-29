@@ -5,11 +5,7 @@ enum EventParseError: Error {
     case invalidEventData
 }
 
-protocol EventParsable: Sendable {
-    static func parseIncomingEvent(from data: Data) throws -> IncomingEvent?
-}
-
-struct EventParser: EventParsable {
+enum EventParser {
     // swiftlint:disable:next cyclomatic_complexity function_body_length
     // Parse incoming JSON data into an IncomingEvent
     static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? {

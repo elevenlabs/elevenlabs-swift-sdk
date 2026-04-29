@@ -57,12 +57,6 @@ final class MockConnectionManager: ConnectionManaging {
         room = nil
     }
 
-    func dataEventsStream() -> AsyncStream<Data> {
-        AsyncStream { continuation in
-            continuation.finish()
-        }
-    }
-
     func waitForAgentReady(timeout _: TimeInterval) async -> AgentReadyWaitResult {
         if let pending = pendingWaitResult {
             pendingWaitResult = nil

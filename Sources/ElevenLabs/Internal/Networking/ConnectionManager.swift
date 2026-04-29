@@ -248,25 +248,6 @@ final class ConnectionManager: ConnectionManaging {
         readyStartTime = nil
         lastReadyDetail = nil
     }
-
-    /// Convenience helper returning a typed `AsyncStream` for incoming
-    /// data‑channel messages.
-    func dataEventsStream() -> AsyncStream<Data> {
-        guard let room else { return AsyncStream { $0.finish() } }
-
-        return AsyncStream { continuation in
-            let delegate = DataChannelDelegate(continuation: continuation, logger: logger)
-            room.delegates.add(delegate: delegate)
-
-            continuation.onTermination = { @Sendable [weak room, weak delegate] _ in
-                // Clean up the delegate when stream terminates
-                guard let room, let delegate else { return }
-                Task { @MainActor in
-                    room.delegates.remove(delegate: delegate)
-                }
-            }
-        }
-    }
 }
 
 // MARK: – Ready‑detection delegate
@@ -469,84 +450,6 @@ extension ConnectionManager {
         func reset() {
             cancelTimeout()
             stage = .idle
-        }
-    }
-}
-
-// MARK: – Data‑channel delegate
-
-/// Thread-safe delegate for handling data channel events.
-/// Uses an actor to safely manage the AsyncStream continuation without @unchecked Sendable.
-private actor DataChannelActor {
-    private let continuation: AsyncStream<Data>.Continuation
-    private let logger: any Logging
-
-    init(continuation: AsyncStream<Data>.Continuation, logger: any Logging) {
-        self.continuation = continuation
-        self.logger = logger
-    }
-
-    func handleData(_ data: Data, from participant: RemoteParticipant?) {
-        guard participant != nil else {
-            logger.warning("Received data but no participant, ignoring")
-            return
-        }
-        continuation.yield(data)
-    }
-
-    func handleConnectionStateChange(_ connectionState: ConnectionState) {
-        if connectionState == .disconnected {
-            continuation.finish()
-        }
-    }
-
-    func handleParticipantConnected(identity: String) {
-        logger.debug("Remote participant connected", context: ["identity": identity])
-    }
-
-    func handleParticipantDisconnected(identity: String) {
-        logger.debug("Remote participant disconnected", context: ["identity": identity])
-    }
-}
-
-private final class DataChannelDelegate: RoomDelegate {
-    private let actor: DataChannelActor
-
-    init(continuation: AsyncStream<Data>.Continuation, logger: any Logging) {
-        actor = DataChannelActor(continuation: continuation, logger: logger)
-    }
-
-    // MARK: – Delegate
-
-    nonisolated func room(
-        _: Room,
-        participant: RemoteParticipant?,
-        didReceiveData data: Data,
-        forTopic _: String,
-        encryptionType _: EncryptionType
-    ) {
-        Task {
-            await actor.handleData(data, from: participant)
-        }
-    }
-
-    nonisolated func room(_: Room, didUpdateConnectionState connectionState: ConnectionState, from _: ConnectionState) {
-        Task {
-            await actor.handleConnectionStateChange(connectionState)
-        }
-    }
-
-    nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
-        let identity = participant.identity != nil ? String(describing: participant.identity!) : "unknown"
-        Task {
-            await actor.handleParticipantConnected(identity: identity)
-        }
-    }
-
-    nonisolated func room(_: Room, participantDidDisconnect participant: RemoteParticipant) {
-        let identity = participant.identity != nil ? String(describing: participant.identity!) : "unknown"
-        Task {
-            await actor.handleParticipantDisconnected(identity: identity)
         }
     }
 }
