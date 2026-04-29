@@ -17,7 +17,6 @@ protocol ConnectionManaging: AnyObject {
     ) async throws
 
     func disconnect() async
-    func dataEventsStream() -> AsyncStream<Data>
     func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult
     func publish(data: Data, options: DataPublishOptions) async throws
 }

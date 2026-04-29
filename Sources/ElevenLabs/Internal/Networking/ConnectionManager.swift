@@ -248,25 +248,6 @@ final class ConnectionManager: ConnectionManaging {
         readyStartTime = nil
         lastReadyDetail = nil
     }
-
-    /// Convenience helper returning a typed `AsyncStream` for incoming
-    /// data‑channel messages.
-    func dataEventsStream() -> AsyncStream<Data> {
-        guard let room else { return AsyncStream { $0.finish() } }
-
-        return AsyncStream { continuation in
-            let delegate = DataChannelDelegate(continuation: continuation, logger: logger)
-            room.delegates.add(delegate: delegate)
-
-            continuation.onTermination = { @Sendable [weak room, weak delegate] _ in
-                // Clean up the delegate when stream terminates
-                guard let room, let delegate else { return }
-                Task { @MainActor in
-                    room.delegates.remove(delegate: delegate)
-                }
-            }
-        }
-    }
 }
 
 // MARK: – Ready‑detection delegate
