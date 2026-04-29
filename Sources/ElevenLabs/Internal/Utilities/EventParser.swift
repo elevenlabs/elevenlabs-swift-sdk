@@ -5,7 +5,7 @@ enum EventParseError: Error {
     case invalidEventData
 }
 
-struct EventParser {
+enum EventParser {
     // swiftlint:disable:next cyclomatic_complexity function_body_length
     // Parse incoming JSON data into an IncomingEvent
     static func parseIncomingEvent(from data: Data) throws -> IncomingEvent? {
