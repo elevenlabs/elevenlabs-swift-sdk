@@ -26,7 +26,6 @@ protocol ConnectionManaging: AnyObject {
 protocol ConversationDependencyProvider: AnyObject {
     var tokenService: any TokenServicing { get async }
     var logger: any Logging { get }
-    var conversationStartup: any ConversationStartup { get async }
     var errorHandler: ((Swift.Error?) -> Void)? { get }
 
     func connectionManager() async -> any ConnectionManaging
@@ -79,19 +78,6 @@ final class Dependencies: ConversationDependencyProvider {
 
     var logger: any Logging {
         SDKLogger(logLevel: .warning)
-    }
-
-    private var _conversationStartup: (any ConversationStartup)?
-    var conversationStartup: any ConversationStartup {
-        get async {
-            if let existing = _conversationStartup {
-                return existing
-            }
-            let loggerInstance = logger
-            let startup = DefaultConversationStartup(logger: loggerInstance)
-            _conversationStartup = startup
-            return startup
-        }
     }
 
     var errorHandler: ((Swift.Error?) -> Void)? {
