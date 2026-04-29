@@ -453,11 +453,3 @@ extension ConnectionManager {
         }
     }
 }
-
-// swiftlint:enable file_length
-
-// MARK: – Convenience error extension
-
-extension ConversationError {
-    static let notImplemented = ConversationError.authenticationFailed("Not implemented yet")
-}
