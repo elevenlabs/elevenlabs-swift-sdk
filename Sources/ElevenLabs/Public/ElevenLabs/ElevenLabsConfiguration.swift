@@ -16,6 +16,14 @@ public struct ElevenLabsConfiguration: Sendable {
     public let participantName: String
     /// Optional environment for the agent (defaults to production when nil)
     public let environment: String?
+    public var agentId: String {
+        switch authSource {
+        case let .publicAgentId(id):
+            id
+        case .conversationToken, .customTokenProvider:
+            "unknown"
+        }
+    }
 
     /// Initialize with a public agent ID
     public static func publicAgent(id: String, participantName: String = "user", environment: String? = nil) -> Self {

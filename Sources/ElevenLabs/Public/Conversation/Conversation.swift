@@ -193,8 +193,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         cleanupPreviousConversation()
         self.options = options
 
-        let currentAgentId = extractAgentId(from: auth)
-        activeContext = ["agentId": currentAgentId]
+        activeContext = ["agentId": auth.agentId]
         logger.info("Starting conversation", context: activeContext)
 
         if audioManager == nil {
@@ -291,16 +290,6 @@ public final class Conversation: ObservableObject, RoomDelegate {
 
         startRoomObservers()
         startProtocolEventLoop()
-    }
-
-    /// Extract agent ID from authentication configuration for state tracking
-    private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
-        switch auth.authSource {
-        case let .publicAgentId(id):
-            id
-        case .conversationToken, .customTokenProvider:
-            "unknown" // We don't have access to the agent ID in these cases
-        }
     }
 
     /// End and clean up.

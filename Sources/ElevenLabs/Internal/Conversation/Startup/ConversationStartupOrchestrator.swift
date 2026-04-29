@@ -25,8 +25,7 @@ final class ConversationStartupOrchestrator {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
-        let agentId = extractAgentId(from: auth)
-        let context = ["agentId": agentId]
+        let context = ["agentId": auth.agentId]
         logger.info("Starting conversation startup sequence", context: context)
 
         onStateChange(.resolvingToken)
@@ -176,18 +175,9 @@ final class ConversationStartupOrchestrator {
         metrics.total = Date().timeIntervalSince(startTime)
 
         return StartupResult(
-            agentId: extractAgentId(from: auth),
+            agentId: auth.agentId,
             metrics: metrics
         )
-    }
-
-    private func extractAgentId(from auth: ElevenLabsConfiguration) -> String {
-        switch auth.authSource {
-        case let .publicAgentId(id):
-            id
-        case .conversationToken, .customTokenProvider:
-            "unknown"
-        }
     }
 
     private func requestMicrophonePermissionIfNeeded(textOnly: Bool) async -> Bool {
