@@ -5,7 +5,7 @@ import os.log
 /// Receives and processes ElevenLabs messages from the data channel
 /// Provides AsyncStreams for different event types, following modern Swift concurrency patterns
 @available(macOS 11.0, iOS 14.0, *)
-actor DataChannelReceiver: MessageReceiver {
+actor DataChannelReceiver {
     private let room: Room
     private let logger: Logging
 
