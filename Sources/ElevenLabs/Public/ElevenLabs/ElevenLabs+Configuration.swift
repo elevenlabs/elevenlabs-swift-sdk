@@ -21,5 +21,20 @@ extension ElevenLabs {
         }
 
         public static let `default` = Configuration()
+
+        /// Create a new configuration with updated values (builder pattern)
+        public func with(
+            apiEndpoint: URL? = nil,
+            websocketUrl: String? = nil,
+            logLevel: LogLevel? = nil,
+            debugMode: Bool? = nil
+        ) -> Configuration {
+            Configuration(
+                apiEndpoint: apiEndpoint ?? self.apiEndpoint,
+                websocketUrl: websocketUrl ?? self.websocketUrl,
+                logLevel: logLevel ?? self.logLevel,
+                debugMode: debugMode ?? self.debugMode
+            )
+        }
     }
 }
