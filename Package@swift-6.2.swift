@@ -1,5 +1,5 @@
-// swift-tools-version:5.9
-// Swift 5.9+ (Xcode 15.0+)
+// swift-tools-version:6.2
+// Swift 6.2+ (Xcode 26.0+)
 
 import PackageDescription
 
@@ -9,7 +9,7 @@ let package = Package(
         .iOS(.v13),
         .macOS(.v10_15),
         .macCatalyst(.v14),
-        .visionOS(.v1),
+        .visionOS(.v26),
         .tvOS(.v17)
     ],
     products: [
@@ -49,7 +49,5 @@ let package = Package(
             ]
         )
     ],
-    swiftLanguageVersions: [
-        .v5
-    ]
+    swiftLanguageModes: [.v5]
 )
