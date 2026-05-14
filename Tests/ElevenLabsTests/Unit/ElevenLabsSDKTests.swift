@@ -138,7 +138,5 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertNotNil(ConversationError.self)
         XCTAssertNotNil(ConversationState.self)
         XCTAssertNotNil(Language.self)
-        XCTAssertNotNil(ReceivedMessage.self)
-        XCTAssertNotNil(SentMessage.self)
     }
 }
