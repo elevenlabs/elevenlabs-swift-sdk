@@ -1,8 +1,7 @@
 import AVFoundation
 import Foundation
-import LiveKit
 
-/// Orchestrates the conversation startup sequence using individual steps
+/// Orchestrates the WebRTC conversation startup sequence using individual steps
 @MainActor
 final class WebRTCConversationStartup {
     private let logger: any Logging
@@ -18,10 +17,9 @@ final class WebRTCConversationStartup {
         auth: ElevenLabsConfiguration,
         options: ConversationOptions,
         provider: any ConversationDependencyProvider,
-        onStateChange: @escaping (ConversationStartupState) -> Void,
-        onRoomConnected: @escaping (Room) -> Void
+        onStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {
-        let connectionManager = await provider.connectionManager()
+        let webRTCConnectionManager = await provider.webRTCConnectionManager()
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -55,7 +53,7 @@ final class WebRTCConversationStartup {
             throw StartupFailure.token(error as? ConversationError ?? .connectionFailed(error), metrics)
         }
 
-        let permissionGranted = await requestMicrophonePermissionIfNeeded(textOnly: options.conversationOverrides.textOnly)
+        let permissionGranted = await requestMicrophonePermission()
 
         onStateChange(.connectingRoom)
         let throwOnMicFailure = options.microphoneFailureHandling == .throwError
@@ -65,12 +63,11 @@ final class WebRTCConversationStartup {
         }
 
         let roomStep = RoomConnectionStep(
-            connectionManager: connectionManager,
+            webRTCConnectionManager: webRTCConnectionManager,
             details: safeDetails,
-            enableMic: !options.conversationOverrides.textOnly && permissionGranted,
+            enableMic: permissionGranted,
             throwOnMicrophoneFailure: throwOnMicFailure,
             networkConfiguration: options.networkConfiguration,
-            graceTimeout: options.startupConfiguration.agentReadyTimeout,
             logger: logger
         )
 
@@ -78,10 +75,6 @@ final class WebRTCConversationStartup {
         do {
             try await roomStep.execute()
             metrics.roomConnect = Date().timeIntervalSince(roomStart)
-
-            if let room = connectionManager.room {
-                onRoomConnected(room)
-            }
         } catch is CancellationError {
             // Handle cancellation separately - don't wrap in StartupFailure
             metrics.roomConnect = Date().timeIntervalSince(roomStart)
@@ -100,7 +93,7 @@ final class WebRTCConversationStartup {
         )
         var agentResult: AgentReadyWaitResult?
         let agentStep = AgentReadyStep(
-            connectionManager: connectionManager,
+            webRTCConnectionManager: webRTCConnectionManager,
             timeout: options.startupConfiguration.agentReadyTimeout,
             failIfNotReady: options.startupConfiguration.failIfAgentNotReady,
             logger: logger
@@ -153,7 +146,7 @@ final class WebRTCConversationStartup {
         }
 
         let initStep = ConversationInitStep(
-            connectionManager: connectionManager,
+            connectionManager: webRTCConnectionManager,
             config: options.toConversationConfig(),
             retryDelays: options.startupConfiguration.initRetryDelays,
             logger: logger
@@ -180,8 +173,7 @@ final class WebRTCConversationStartup {
         )
     }
 
-    private func requestMicrophonePermissionIfNeeded(textOnly: Bool) async -> Bool {
-        guard !textOnly else { return true }
+    private func requestMicrophonePermission() async -> Bool {
         #if os(macOS)
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
@@ -214,9 +206,24 @@ struct StartupResult {
     let metrics: ConversationStartupMetrics
 }
 
-enum StartupFailure: Error {
-    case token(ConversationError, ConversationStartupMetrics)
-    case room(ConversationError, ConversationStartupMetrics)
-    case agentTimeout(ConversationStartupMetrics)
-    case conversationInit(ConversationError, ConversationStartupMetrics)
+struct StartupFailure: Error {
+    let reason: ConversationStartupFailure
+    let error: ConversationError
+    let metrics: ConversationStartupMetrics
+
+    static func token(_ error: ConversationError, _ metrics: ConversationStartupMetrics) -> Self {
+        .init(reason: .token(error), error: error, metrics: metrics)
+    }
+
+    static func room(_ error: ConversationError, _ metrics: ConversationStartupMetrics) -> Self {
+        .init(reason: .room(error), error: error, metrics: metrics)
+    }
+
+    static func agentTimeout(_ metrics: ConversationStartupMetrics) -> Self {
+        .init(reason: .agentTimeout, error: .agentTimeout, metrics: metrics)
+    }
+
+    static func conversationInit(_ error: ConversationError, _ metrics: ConversationStartupMetrics) -> Self {
+        .init(reason: .conversationInit(error), error: error, metrics: metrics)
+    }
 }

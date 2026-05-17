@@ -1,5 +1,4 @@
 import Foundation
-import LiveKit
 
 /// Step responsible for sending conversation initialization with retry logic
 final class ConversationInitStep: RetryableStartupStep {
@@ -34,10 +33,7 @@ final class ConversationInitStep: RetryableStartupStep {
 
         do {
             let initEvent = ConversationInitEvent(config: config)
-            let data = try EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent))
-
-            let options = DataPublishOptions(reliable: true)
-            try await connectionManager.publish(data: data, options: options)
+            try await connectionManager.send(event: .conversationInit(initEvent))
 
             logger.debug("Conversation init attempt \(attemptsMade) sent")
         } catch let error as ConversationError {

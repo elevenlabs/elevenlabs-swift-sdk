@@ -5,29 +5,26 @@ import LiveKit
 final class RoomConnectionStep: StartupStep {
     let stepName = "Room Connection"
 
-    private let connectionManager: any ConnectionManaging
+    private let webRTCConnectionManager: any WebRTCConnectionManaging
     private let details: TokenService.ConnectionDetails
     private let enableMic: Bool
     private let throwOnMicrophoneFailure: Bool
     private let networkConfiguration: LiveKitNetworkConfiguration
-    private let graceTimeout: TimeInterval
     private let logger: any Logging
 
     init(
-        connectionManager: any ConnectionManaging,
+        webRTCConnectionManager: any WebRTCConnectionManaging,
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool = true,
         networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval,
         logger: any Logging
     ) {
-        self.connectionManager = connectionManager
+        self.webRTCConnectionManager = webRTCConnectionManager
         self.details = details
         self.enableMic = enableMic
         self.throwOnMicrophoneFailure = throwOnMicrophoneFailure
         self.networkConfiguration = networkConfiguration
-        self.graceTimeout = graceTimeout
         self.logger = logger
     }
 
@@ -35,12 +32,11 @@ final class RoomConnectionStep: StartupStep {
         logger.debug("Starting room connection...")
 
         do {
-            try await connectionManager.connect(
+            try await webRTCConnectionManager.connect(
                 details: details,
                 enableMic: enableMic,
                 throwOnMicrophoneFailure: throwOnMicrophoneFailure,
-                networkConfiguration: networkConfiguration,
-                graceTimeout: graceTimeout
+                networkConfiguration: networkConfiguration
             )
             logger.debug("Room connection successful")
         } catch let error as ConversationError {

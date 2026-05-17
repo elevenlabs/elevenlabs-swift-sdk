@@ -1,8 +1,6 @@
 import Foundation
 import LiveKit
 
-// swiftlint:disable file_length
-
 struct AgentReadyDetail: Equatable {
     let elapsed: TimeInterval
     let viaGraceTimeout: Bool
@@ -13,58 +11,59 @@ enum AgentReadyWaitResult: Equatable {
     case timedOut(elapsed: TimeInterval)
 }
 
-enum ConnectionManagerError: Error {
+enum WebRTCConnectionManagerError: Error {
     case roomUnavailable
 }
 
-/// **WebRTCConnectionManager**
+/// Façade around `LiveKit.Room`.
 ///
-/// A small façade around `LiveKit.Room` that emits **exactly one**
-/// *agent‑ready* signal at the precise moment the remote agent is
-/// reachable **and** at least one of its audio tracks is subscribed.
+/// Owns the room lifecycle, microphone control, data publish/receive, and
+/// surfaces a small set of typed callbacks (connection state, remote speaking,
+/// remote disconnect) plus an async readiness API.
 ///
-/// ▶︎ *Never too early*: we wait for both the participant *and* its track subscription.
-/// ▶︎ *Never too late*: a short, configurable grace‑timeout prevents
-///   indefinite waiting on networks where track subscription events can
-///   be lost or delayed.
+/// LiveKit observation is split across two `RoomDelegate` instances:
+/// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect
+/// - `LiveKitReadinessDelegate` — signals when the agent's audio track subscribes
 ///
-/// after the ready event fires you can safely send client‑initiation
-/// metadata—​the remote side will be present and able to receive it.
-///
-/// **Architecture Note:**
-/// This class isolates LiveKit dependency from the rest of the SDK. It uses an internal `ReadyDelegate`
-/// actor to manage the complex state machine of connection + subscription + grace periods, converting
-/// them into simple linear `async/await` flows for the consumer.
-final class WebRTCConnectionManager: ConnectionManaging {
-    /// Fired **once** when the remote agent is considered ready.
-    var onAgentReady: (() -> Void)?
+/// Note: `Room`, `LocalAudioTrack`, and `RemoteAudioTrack` are intentionally
+/// exposed on the public SDK surface (e.g. `Conversation.inputTrack`), so this
+/// type does not fully hide LiveKit from callers. It does centralize the
+/// dependency in one place.
+final class WebRTCConnectionManager: WebRTCConnectionManaging {
+    /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
+    var onDisconnected: (() async -> Void)?
 
-    /// Fired when all remote participants have left or the room disconnects.
-    var onAgentDisconnected: (() async -> Void)?
+    /// Fired when LiveKit receives and parses a protocol event from the room.
+    var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
+
+    /// Fired when a remote participant starts or stops speaking.
+    var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
+
+    var errorHandler: ((Swift.Error?) -> Void)?
 
     // MARK: – Public state accessors
 
     private(set) var room: Room?
 
-    var shouldObserveRoomConnection: Bool {
-        true
+    var inputTrack: LocalAudioTrack? {
+        room?.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
+    }
+
+    var agentAudioTrack: RemoteAudioTrack? {
+        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? RemoteAudioTrack
+    }
+
+    var isMicrophoneMuted: Bool {
+        guard let room else { return true }
+        return !room.localParticipant.isMicrophoneEnabled()
     }
 
     // MARK: – Private
 
-    private var readyDelegate: ReadyDelegate?
-    private var readyStartTime: Date?
-    private var lastReadyDetail: AgentReadyDetail?
-    var errorHandler: ((Swift.Error?) -> Void)?
+    private var eventDelegate: LiveKitRoomEventDelegate?
+    private var readinessDelegate: LiveKitReadinessDelegate?
 
-    private struct ReadyAwaiter {
-        let id: UUID
-        let continuation: CheckedContinuation<AgentReadyWaitResult, Never>
-        let timeoutTask: Task<Void, Never>
-    }
-
-    private var readyAwaiters: [ReadyAwaiter] = []
-    private let stateQueue = DispatchQueue(label: "com.elevenlabs.sdk.connection.state")
+    private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
     private let logger: any Logging
 
@@ -72,93 +71,56 @@ final class WebRTCConnectionManager: ConnectionManaging {
         self.logger = logger
     }
 
-    // MARK: – Lifecycle
+    // MARK: – Public API
 
-    private func resolveReadyAwaiters(with result: AgentReadyWaitResult) {
-        var awaiters: [ReadyAwaiter] = []
-        stateQueue.sync {
-            guard !readyAwaiters.isEmpty else { return }
-            awaiters = readyAwaiters
-            readyAwaiters.removeAll()
-        }
-        for awaiter in awaiters {
-            awaiter.timeoutTask.cancel()
-            awaiter.continuation.resume(returning: result)
-        }
-    }
-
-    private func resolveReadyAwaitersOnTimeout() {
-        guard lastReadyDetail == nil else { return }
-        let elapsed = Date().timeIntervalSince(readyStartTime ?? Date())
-        resolveReadyAwaiters(with: .timedOut(elapsed: elapsed))
-    }
-
-    private func handleAgentReady(source: ReadyDelegate.ReadySource) {
-        let elapsed = Date().timeIntervalSince(readyStartTime ?? Date())
-        let detail = AgentReadyDetail(
-            elapsed: elapsed,
-            viaGraceTimeout: source == .graceTimeout
-        )
-
-        // cache for future waiters
-        stateQueue.sync {
-            if lastReadyDetail == nil {
-                lastReadyDetail = detail
-            }
-        }
-
-        resolveReadyAwaiters(with: .success(detail))
-        readyStartTime = nil
-        onAgentReady?()
-    }
-
+    /// Race the delegate's "agent audio track subscribed" signal against `timeout`.
+    /// The caller (`AgentReadyStep`) decides whether `.timedOut` should throw or
+    /// be promoted to `.success(viaGraceTimeout: true)`.
     func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
-        if let detail = lastReadyDetail {
-            return .success(detail)
+        guard let delegate = readinessDelegate else {
+            return .timedOut(elapsed: 0)
         }
-
-        let start = readyStartTime ?? Date()
-        if timeout <= 0 {
-            return .timedOut(elapsed: Date().timeIntervalSince(start))
-        }
-
-        return await withCheckedContinuation { continuation in
-            let id = UUID()
-            let timeoutTask = Task { [weak self] in
-                guard timeout > 0 else { return }
+        let start = Date()
+        return await withTaskGroup(of: AgentReadyWaitResult.self) { group in
+            group.addTask {
                 do {
-                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    try await delegate.awaitSubscription()
+                    return .success(AgentReadyDetail(
+                        elapsed: Date().timeIntervalSince(start),
+                        viaGraceTimeout: false
+                    ))
                 } catch {
-                    // Task was cancelled, exit gracefully
-                    return
+                    return .timedOut(elapsed: Date().timeIntervalSince(start))
                 }
-                guard let self else { return }
-                var awaiter: ReadyAwaiter?
-                var elapsed: TimeInterval = 0
-                stateQueue.sync {
-                    guard self.lastReadyDetail == nil,
-                          let index = self.readyAwaiters.firstIndex(where: { $0.id == id })
-                    else { return }
-
-                    elapsed = Date().timeIntervalSince(start)
-                    awaiter = self.readyAwaiters.remove(at: index)
-                }
-                guard let awaiter else { return }
-                awaiter.timeoutTask.cancel()
-                awaiter.continuation.resume(returning: .timedOut(elapsed: elapsed))
             }
-            stateQueue.sync {
-                readyAwaiters.append(ReadyAwaiter(id: id, continuation: continuation, timeoutTask: timeoutTask))
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return .timedOut(elapsed: Date().timeIntervalSince(start))
             }
+            let first = await group.next()!
+            group.cancelAll()
+            return first
         }
     }
 
-    func publish(data: Data, options: DataPublishOptions) async throws {
+    func send(data: Data) async throws {
         guard let room else {
-            throw ConnectionManagerError.roomUnavailable
+            throw ConnectionManagerError.notConnected
         }
         do {
-            try await room.localParticipant.publish(data: data, options: options)
+            try await room.localParticipant.publish(data: data, options: Self.reliableDataPublishOptions)
+        } catch {
+            errorHandler?(error)
+            throw error
+        }
+    }
+
+    func setMicrophoneMuted(_ muted: Bool) async throws {
+        guard let room else {
+            throw WebRTCConnectionManagerError.roomUnavailable
+        }
+        do {
+            try await room.localParticipant.setMicrophone(enabled: !muted)
         } catch {
             errorHandler?(error)
             throw error
@@ -168,41 +130,35 @@ final class WebRTCConnectionManager: ConnectionManaging {
     /// Establish a LiveKit connection.
     ///
     /// - Parameters:
-    ///   - details: Token‑service credentials (URL + participant token).
+    ///   - details: Token-service credentials (URL + participant token).
     ///   - enableMic: Whether to enable the local microphone immediately.
-    ///   - throwOnMicrophoneFailure: If true, throws error when microphone setup fails. If false, logs warning and continues.
-    ///   - graceTimeout: Fallback (in seconds) before we assume the agent is
-    ///     ready even if no audio‑track subscription event is observed.
+    ///   - throwOnMicrophoneFailure: If true, throws error when microphone setup fails.
+    ///     If false, logs warning and continues.
     func connect(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool = true,
-        networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval = 0.5 // Reduced to 500ms based on test results showing consistent timeouts
+        networkConfiguration: LiveKitNetworkConfiguration
     ) async throws {
-        resolveReadyAwaiters(with: .timedOut(elapsed: 0))
-        readyStartTime = Date()
-        lastReadyDetail = nil
+        await readinessDelegate?.release()
+
+        let readinessDelegate = await LiveKitReadinessDelegate(logger: logger)
+        self.readinessDelegate = readinessDelegate
+
+        let logger = logger
+        let eventDelegate = LiveKitRoomEventDelegate(
+            onData: { [weak self] data in self?.handleIncomingData(data, logger: logger) },
+            onRemoteSpeaking: { [weak self] isSpeaking in self?.onRemoteSpeakingChanged?(isSpeaking) },
+            onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() }
+        )
+        self.eventDelegate = eventDelegate
 
         let room = Room()
         self.room = room
+        room.delegates.add(delegate: eventDelegate)
+        room.delegates.add(delegate: readinessDelegate)
 
         let connectOptions = await networkConfiguration.makeConnectOptions()
-
-        // Delegate encapsulates all readiness logic.
-        let rd = await ReadyDelegate(
-            graceTimeout: graceTimeout,
-            logger: logger,
-            onReady: { [weak self] source in
-                self?.logger.debug("Ready delegate fired onReady callback", context: ["source": "\(source)"])
-                self?.handleAgentReady(source: source)
-            },
-            onDisconnected: { [weak self] in
-                await self?.onAgentDisconnected?()
-            }
-        )
-        readyDelegate = rd
-        room.delegates.add(delegate: rd)
 
         let connectStart = Date()
         do {
@@ -222,7 +178,6 @@ final class WebRTCConnectionManager: ConnectionManaging {
         }
 
         if enableMic {
-            // Await microphone enabling to ensure it's ready before proceeding
             do {
                 try await room.localParticipant.setMicrophone(enabled: true)
                 logger.info("Microphone enabled successfully")
@@ -241,215 +196,164 @@ final class WebRTCConnectionManager: ConnectionManaging {
 
     /// Disconnect and tear down.
     func disconnect() async {
+        onEventReceived = nil
+        onDisconnected = nil
+        errorHandler = nil
+        onRemoteSpeakingChanged = nil
+
+        await readinessDelegate?.release()
+        readinessDelegate = nil
+
         await room?.disconnect()
         room = nil
-        readyDelegate = nil
-        resolveReadyAwaitersOnTimeout()
-        readyStartTime = nil
-        lastReadyDetail = nil
+        eventDelegate = nil
     }
 }
 
-// MARK: – Ready‑detection delegate
+// MARK: – Room event delegate
 
-extension WebRTCConnectionManager {
-    /// Internal delegate that guards the *agent‑ready* handshake.
-    @MainActor
-    fileprivate final class ReadyDelegate: RoomDelegate {
-        // MARK: – FSM
+/// `RoomDelegate` that forwards data, remote speaking, and remote-disconnect events
+/// (agent leaving or room disconnect) to manager-supplied closures.
+private final class LiveKitRoomEventDelegate: RoomDelegate {
+    private let onData: @Sendable (Data) -> Void
+    private let onRemoteSpeaking: @Sendable (Bool) -> Void
+    private let onRemoteDisconnect: @Sendable () async -> Void
 
-        private enum Stage { case idle, waitingForSubscription, ready }
+    init(
+        onData: @escaping @Sendable (Data) -> Void,
+        onRemoteSpeaking: @escaping @Sendable (Bool) -> Void,
+        onRemoteDisconnect: @escaping @Sendable () async -> Void
+    ) {
+        self.onData = onData
+        self.onRemoteSpeaking = onRemoteSpeaking
+        self.onRemoteDisconnect = onRemoteDisconnect
+    }
 
-        private var stage: Stage = .idle
-        private var timeoutTask: Task<Void, Never>?
+    nonisolated func room(
+        _: Room, participant _: RemoteParticipant?, didReceiveData data: Data,
+        forTopic _: String, encryptionType _: EncryptionType
+    ) {
+        onData(data)
+    }
 
-        enum ReadySource: CustomStringConvertible {
-            case trackSubscribed
-            case graceTimeout
+    nonisolated func room(_: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
+        guard participant is RemoteParticipant else { return }
+        onRemoteSpeaking(isSpeaking)
+    }
 
-            var description: String {
-                switch self {
-                case .trackSubscribed: "trackSubscribed"
-                case .graceTimeout: "graceTimeout"
-                }
-            }
+    nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
+        let identityString = participant.identity.map { String(describing: $0) } ?? ""
+        guard identityString.hasPrefix("agent") || room.remoteParticipants.isEmpty else { return }
+        Task { [onRemoteDisconnect] in
+            await onRemoteDisconnect()
         }
+    }
 
-        // MARK: – Timing
-
-        private let graceTimeout: TimeInterval
-        private let logger: any Logging
-
-        // MARK: – Callbacks
-
-        private let onReady: @MainActor @Sendable (ReadySource) -> Void
-        private let onDisconnected: @MainActor @Sendable () async -> Void
-
-        // MARK: – Init
-
-        init(
-            graceTimeout: TimeInterval,
-            logger: any Logging,
-            onReady: @escaping @MainActor @Sendable (ReadySource) -> Void,
-            onDisconnected: @escaping @MainActor @Sendable () async -> Void
-        ) {
-            self.graceTimeout = graceTimeout
-            self.logger = logger
-            self.onReady = onReady
-            self.onDisconnected = onDisconnected
+    nonisolated func room(_: Room, didUpdateConnectionState state: ConnectionState, from _: ConnectionState) {
+        guard state == .disconnected else { return }
+        Task { [onRemoteDisconnect] in
+            await onRemoteDisconnect()
         }
+    }
+}
 
-        deinit {
-            // Safety net: cancel timeout when delegate is deallocated without
-            // going through reset() (e.g. Conversation deallocated directly).
-            timeoutTask?.cancel()
+// MARK: – Readiness delegate
+
+/// Observes LiveKit and signals exactly one event: the agent's audio track is
+/// subscribed (the real "safe to send" signal). Holds no timing policy; callers
+/// race `awaitSubscription()` against their own timeout.
+@MainActor
+private final class LiveKitReadinessDelegate: RoomDelegate {
+    private enum Stage { case waiting, ready, released }
+
+    private let logger: any Logging
+    private var stage: Stage = .waiting
+    private var awaiter: CheckedContinuation<Void, Error>?
+
+    init(logger: any Logging) {
+        self.logger = logger
+    }
+
+    /// Suspend until the agent's audio track is subscribed. Throws `CancellationError`
+    /// if the awaiting task is cancelled or `release()` is called (e.g. on disconnect).
+    /// Single-caller — there's exactly one `waitForAgentReady` per connection lifetime.
+    func awaitSubscription() async throws {
+        switch stage {
+        case .ready: return
+        case .released: throw CancellationError()
+        case .waiting: break
         }
-
-        // MARK: – RoomDelegate
-
-        nonisolated func roomDidConnect(_ room: Room) {
-            Task {
-                await self.handleRoomDidConnect(room: room)
-            }
-        }
-
-        private func handleRoomDidConnect(room: Room) {
-            guard stage == .idle else { return }
-
-            // Check if we can go ready immediately (fast path)
-            var foundReadyAgent = false
-            for participant in room.remoteParticipants.values {
-                if hasSubscribedAudioTrack(participant) {
-                    markReady(source: .trackSubscribed)
-                    foundReadyAgent = true
-                    break
-                }
-            }
-
-            if !foundReadyAgent {
-                stage = .waitingForSubscription
-                startTimeout()
-            }
-        }
-
-        nonisolated func room(_ room: Room, participantDidConnect _: RemoteParticipant) {
-            Task {
-                await self.handleParticipantDidConnect(room: room)
-            }
-        }
-
-        private func handleParticipantDidConnect(room: Room) {
-            if stage == .idle {
-                stage = .waitingForSubscription
-                startTimeout()
-            } else if stage != .waitingForSubscription {
-                return
-            }
-
-            evaluateExistingSubscriptions(in: room)
-        }
-
-        nonisolated func room(
-            _: Room,
-            participant _: RemoteParticipant,
-            didSubscribeTrack publication: RemoteTrackPublication
-        ) {
-            Task {
-                await self.handleDidSubscribeTrack(publication: publication)
-            }
-        }
-
-        private func handleDidSubscribeTrack(publication: RemoteTrackPublication) {
-            guard stage == .waitingForSubscription else { return }
-
-            if publication.kind == .audio {
-                logger.debug("Audio track subscribed - marking ready!")
-                markReady(source: .trackSubscribed)
-            }
-        }
-
-        nonisolated func room(
-            _ room: Room,
-            participantDidDisconnect participant: RemoteParticipant
-        ) {
-            let identityString = participant.identity.map { String(describing: $0) } ?? ""
-            // Capture needed logic before Task to be safe, though participant is reference type so strict concurrency might warn.
-            // String creation is safe.
-            Task {
-                await self.handleParticipantDidDisconnect(room: room, identityString: identityString)
-            }
-        }
-
-        func handleParticipantDidDisconnect(room: Room, identityString: String) async {
-            let isAgent = identityString.hasPrefix("agent")
-
-            if isAgent || room.remoteParticipants.isEmpty {
-                reset()
-                await onDisconnected()
-            }
-        }
-
-        nonisolated func room(_: Room, didUpdateConnectionState _: ConnectionState, from _: ConnectionState) { /* unused */ }
-
-        // MARK: – Private helpers
-
-        private func evaluateExistingSubscriptions(in room: Room) {
-            for participant in room.remoteParticipants.values {
-                if hasSubscribedAudioTrack(participant) {
-                    logger.debug("Found existing subscribed audio track!")
-                    markReady(source: .trackSubscribed)
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled {
+                    cont.resume(throwing: CancellationError())
                     return
                 }
+                switch stage {
+                case .ready: cont.resume()
+                case .released: cont.resume(throwing: CancellationError())
+                case .waiting: awaiter = cont
+                }
             }
-            logger.debug("No subscribed audio tracks found yet, waiting...")
-        }
-
-        private func hasSubscribedAudioTrack(_ participant: RemoteParticipant) -> Bool {
-            participant.audioTracks.contains { publication in
-                publication.isSubscribed && publication.track != nil
-            }
-        }
-
-        private func markReady(source: ReadySource) {
-            guard stage != .ready else { return }
-            stage = .ready
-            cancelTimeout()
-            onReady(source)
-        }
-
-        private func startTimeout() {
-            logger.debug("Starting grace timeout", context: ["seconds": "\(graceTimeout)"])
-
-            // Cancel previous if any (though shouldn't happen in valid flow)
-            timeoutTask?.cancel()
-
-            timeoutTask = Task<Void, Never> { [weak self, graceTimeout] in
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(graceTimeout * 1_000_000_000))
-                    guard let self, !Task.isCancelled else { return }
-                    handleTimeout()
-                } catch {
-                    // Task was cancelled or failed, exit gracefully without throwing
-                    return
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                if let cont = self?.awaiter {
+                    self?.awaiter = nil
+                    cont.resume(throwing: CancellationError())
                 }
             }
         }
+    }
 
-        private func handleTimeout() {
-            if stage == .waitingForSubscription {
-                logger.warning("Grace timeout reached! Marking ready anyway.")
-                markReady(source: .graceTimeout)
-            }
+    /// Resolve the in-flight awaiter (if any) with `CancellationError`. Called by
+    /// the manager on disconnect (or before swapping in a fresh delegate on reconnect).
+    func release() {
+        guard stage != .released else { return }
+        stage = .released
+        if let cont = awaiter {
+            awaiter = nil
+            cont.resume(throwing: CancellationError())
         }
+    }
 
-        private func cancelTimeout() {
-            timeoutTask?.cancel()
-            timeoutTask = nil
+    // MARK: - RoomDelegate
+
+    nonisolated func roomDidConnect(_ room: Room) {
+        Task { @MainActor in self.checkForSubscribedAudio(in: room) }
+    }
+
+    nonisolated func room(_ room: Room, participantDidConnect _: RemoteParticipant) {
+        Task { @MainActor in self.checkForSubscribedAudio(in: room) }
+    }
+
+    nonisolated func room(
+        _: Room,
+        participant _: RemoteParticipant,
+        didSubscribeTrack publication: RemoteTrackPublication
+    ) {
+        Task { @MainActor in
+            guard publication.kind == .audio else { return }
+            self.markReady()
         }
+    }
 
-        func reset() {
-            cancelTimeout()
-            stage = .idle
+    // MARK: - Private
+
+    private func checkForSubscribedAudio(in room: Room) {
+        guard stage == .waiting else { return }
+        let hasSubscribed = room.remoteParticipants.values.contains { participant in
+            participant.audioTracks.contains { $0.isSubscribed && $0.track != nil }
+        }
+        if hasSubscribed { markReady() }
+    }
+
+    private func markReady() {
+        guard stage == .waiting else { return }
+        stage = .ready
+        logger.debug("Agent audio track subscribed")
+        if let cont = awaiter {
+            awaiter = nil
+            cont.resume()
         }
     }
 }

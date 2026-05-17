@@ -1,25 +1,4 @@
 import Foundation
-import LiveKit
-
-protocol ConnectionManaging: AnyObject {
-    var onAgentReady: (() -> Void)? { get set }
-    var onAgentDisconnected: (() async -> Void)? { get set }
-    var room: Room? { get }
-    var shouldObserveRoomConnection: Bool { get }
-    var errorHandler: ((Swift.Error?) -> Void)? { get set }
-
-    func connect(
-        details: TokenService.ConnectionDetails,
-        enableMic: Bool,
-        throwOnMicrophoneFailure: Bool,
-        networkConfiguration: LiveKitNetworkConfiguration,
-        graceTimeout: TimeInterval
-    ) async throws
-
-    func disconnect() async
-    func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult
-    func publish(data: Data, options: DataPublishOptions) async throws
-}
 
 @MainActor
 protocol ConversationDependencyProvider: AnyObject {
@@ -27,7 +6,7 @@ protocol ConversationDependencyProvider: AnyObject {
     var logger: any Logging { get }
     var errorHandler: ((Swift.Error?) -> Void)? { get }
 
-    func connectionManager() async -> any ConnectionManaging
+    func webRTCConnectionManager() async -> any WebRTCConnectionManaging
 }
 
 /// A minimalistic dependency injection container for internal SDK use.
@@ -63,15 +42,14 @@ final class Dependencies: ConversationDependencyProvider {
         }
     }
 
-    private var _connectionManager: (any ConnectionManaging)?
+    private var _webRTCConnectionManager: (any WebRTCConnectionManaging)?
 
-    func connectionManager() async -> any ConnectionManaging {
-        if let existing = _connectionManager {
+    func webRTCConnectionManager() async -> any WebRTCConnectionManaging {
+        if let existing = _webRTCConnectionManager {
             return existing
         }
-        let loggerInstance = logger
-        let manager = WebRTCConnectionManager(logger: loggerInstance)
-        _connectionManager = manager
+        let manager = WebRTCConnectionManager(logger: logger)
+        _webRTCConnectionManager = manager
         return manager
     }
 

@@ -7,18 +7,18 @@ import XCTest
 @MainActor
 final class ConversationTests: XCTestCase {
     private var conversation: Conversation!
-    private var mockConnectionManager: MockWebRTCConnectionManager!
+    private var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
     private var mockTokenService: MockTokenService!
     private var dependencyProvider: TestDependencyProvider!
     private let capturedErrors = ValueRecorder<ConversationError>()
 
     override func setUp() async throws {
-        mockConnectionManager = MockWebRTCConnectionManager()
-        mockConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
+        mockWebRTCConnectionManager = MockWebRTCConnectionManager()
+        mockWebRTCConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
         mockTokenService = MockTokenService()
         dependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
-            connectionManager: mockConnectionManager
+            webRTCConnectionManager: mockWebRTCConnectionManager
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
         await capturedErrors.reset()
@@ -26,7 +26,7 @@ final class ConversationTests: XCTestCase {
 
     override func tearDown() async throws {
         conversation = nil
-        mockConnectionManager = nil
+        mockWebRTCConnectionManager = nil
         mockTokenService = nil
         dependencyProvider = nil
         await capturedErrors.reset()
@@ -42,7 +42,7 @@ final class ConversationTests: XCTestCase {
     func testStartConversationSuccessUpdatesStartupState() async throws {
         let stateExpectation = expectation(description: "startup becomes active")
 
-        let options = makeOptions(
+        let options = makeConfig(
             onStartupStateChange: { state in
                 if case .active = state {
                     stateExpectation.fulfill()
@@ -59,13 +59,13 @@ final class ConversationTests: XCTestCase {
         }
 
         await Task.yield()
-        mockConnectionManager.succeedAgentReady()
+        mockWebRTCConnectionManager.succeedAgentReady()
 
         await fulfillment(of: [stateExpectation], timeout: 1.0)
         try await startTask.value
 
-        XCTAssertEqual(mockConnectionManager.connectCallCount, 1)
-        XCTAssertFalse(mockConnectionManager.publishedPayloads.isEmpty)
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
+        XCTAssertFalse(mockWebRTCConnectionManager.publishedPayloads.isEmpty)
         XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
         guard case let .active(callInfo, metrics) = conversation.startupState else {
             return XCTFail("Expected active startup state")
@@ -77,6 +77,123 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.startupMetrics?.total, metrics.total)
         let errorsAfterSuccess = await capturedErrors.values()
         XCTAssertTrue(errorsAfterSuccess.isEmpty)
+    }
+
+    func testStartConversationConfiguresIncomingEventHandler() async throws {
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(
+                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                options: makeConfig()
+            )
+        }
+
+        await Task.yield()
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+
+        XCTAssertNotNil(mockWebRTCConnectionManager.onEventReceived)
+
+        let payload: [String: Any] = [
+            "type": "user_transcript",
+            "user_transcription_event": [
+                "user_transcript": "Hello from raw data",
+                "event_id": 99
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        mockWebRTCConnectionManager.receive(data: data)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(conversation.messages.last?.content, "Hello from raw data")
+        XCTAssertEqual(conversation.messages.last?.role, .user)
+    }
+
+    func testStartConversationHandlesIncomingDataBeforeAgentReady() async throws {
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(
+                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                options: makeConfig()
+            )
+        }
+
+        await Task.yield()
+        for _ in 0 ..< 10 where mockWebRTCConnectionManager.onEventReceived == nil {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        guard mockWebRTCConnectionManager.onEventReceived != nil else {
+            mockWebRTCConnectionManager.succeedAgentReady()
+            try await startTask.value
+            return XCTFail("Expected incoming event handler to be installed before agent ready")
+        }
+
+        let payload: [String: Any] = [
+            "type": "conversation_initiation_metadata",
+            "conversation_initiation_metadata_event": [
+                "conversation_id": "conversation-before-ready",
+                "agent_output_audio_format": "pcm_16000",
+                "user_input_audio_format": "pcm_16000"
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        mockWebRTCConnectionManager.receive(data: data)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(conversation.conversationMetadata?.conversationId, "conversation-before-ready")
+
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+    }
+
+    func testStaleProtocolDataHandlerDoesNotMutateEndedConversation() async throws {
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(
+                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                options: makeConfig()
+            )
+        }
+
+        await Task.yield()
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+
+        let staleHandler = try XCTUnwrap(mockWebRTCConnectionManager.onEventReceived)
+
+        await conversation.endConversation()
+
+        staleHandler(.agentResponse(AgentResponseEvent(response: "This should be ignored", eventId: 101)))
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(conversation.messages.isEmpty)
+    }
+
+    func testStartConversationConfiguresRoomObservationHandlers() async throws {
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(
+                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                options: makeConfig()
+            )
+        }
+
+        await Task.yield()
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+
+        XCTAssertNotNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
+        XCTAssertFalse(conversation.isMuted)
+
+        mockWebRTCConnectionManager.onRemoteSpeakingChanged?(true)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(conversation.agentState, .speaking)
     }
 
     @MainActor
@@ -114,6 +231,19 @@ final class ConversationTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error type")
         }
+    }
+
+    @MainActor
+    func testSetMicrophoneMutedUsesConnectionManagerAudioControl() async throws {
+        mockWebRTCConnectionManager.room = Room()
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.active(.init(agentId: "test-agent")))
+
+        try await conversation.setMicrophoneMuted(true)
+
+        XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
+        XCTAssertTrue(conversation.isMuted)
     }
 
     @MainActor
@@ -155,7 +285,7 @@ final class ConversationTests: XCTestCase {
     func testStartConversationTokenFailure() async {
         mockTokenService.scenario = .authenticationFailed("Mock authentication failed")
 
-        let options = makeOptions()
+        let options = makeConfig()
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
@@ -179,9 +309,9 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationConnectionFailure() async {
-        mockConnectionManager.shouldFailConnection = true
+        mockWebRTCConnectionManager.shouldFailConnection = true
 
-        let options = makeOptions()
+        let options = makeConfig()
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
@@ -205,24 +335,26 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationAgentTimeoutFailure() async {
-        let config = ConversationStartupConfiguration(
+        let options = ConversationStartupConfiguration(
             agentReadyTimeout: 0.05,
             initRetryDelays: [0],
             failIfAgentNotReady: true
         )
 
-        let options = makeOptions(startupConfiguration: config)
+        let conversationConfig = makeConfig(startupConfiguration: options)
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                options: conversationConfig
             )
         }
 
         await Task.yield()
-        mockConnectionManager.timeoutAgentReady()
+        try? await conversation.setMuted(false)
+        XCTAssertFalse(conversation.isMuted)
+        mockWebRTCConnectionManager.timeoutAgentReady()
 
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
@@ -235,12 +367,18 @@ final class ConversationTests: XCTestCase {
         }
         XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertEqual(conversation.state, .idle)
+        XCTAssertTrue(conversation.isMuted)
+        XCTAssertNil(mockWebRTCConnectionManager.room)
+        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
+        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
+        XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
+        XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterAgentTimeout = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
 
     func testStartConversationAgentTimeoutAllowedToProceed() async throws {
-        let options = makeOptions()
+        let options = makeConfig()
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
@@ -252,7 +390,7 @@ final class ConversationTests: XCTestCase {
 
         await Task.yield()
         // Agent succeeds via grace timeout - this is a success case, not a timeout
-        mockConnectionManager.succeedAgentReady(elapsed: 0.25, viaGraceTimeout: true)
+        mockWebRTCConnectionManager.succeedAgentReady(elapsed: 0.25, viaGraceTimeout: true)
 
         try await startTask.value
 
@@ -270,9 +408,9 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationConversationInitFailure() async {
-        mockConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
+        mockWebRTCConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
 
-        let options = makeOptions()
+        let options = makeConfig()
 
         guard let conversation else { return }
 
@@ -285,7 +423,7 @@ final class ConversationTests: XCTestCase {
 
         // Wait for agent ready, THEN publish will fail
         await Task.yield()
-        mockConnectionManager.succeedAgentReady()
+        mockWebRTCConnectionManager.succeedAgentReady()
 
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
@@ -298,6 +436,11 @@ final class ConversationTests: XCTestCase {
         }
 
         XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
+        XCTAssertNil(mockWebRTCConnectionManager.room)
+        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
+        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
+        XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
+        XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterInitFailure = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
@@ -306,11 +449,11 @@ final class ConversationTests: XCTestCase {
         let receivedResponses = ValueRecorder<(String, Int)>()
         let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeOptions(configure: { opts in
-            opts.onAgentResponse = { text, eventId in
+        let options = makeConfig(configure: { options in
+            options.onAgentResponse = { text, eventId in
                 Task { await receivedResponses.append((text, eventId)) }
             }
-            opts.onCanSendFeedbackChange = { canSend in
+            options.onCanSendFeedbackChange = { canSend in
                 Task { await feedbackStates.append(canSend) }
             }
         })
@@ -318,8 +461,8 @@ final class ConversationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
 
         // Set up mock connection manager with a room and active state so sendFeedback can publish
-        mockConnectionManager.room = Room()
-        conversation._testing_setConnectionManager(mockConnectionManager)
+        mockWebRTCConnectionManager.room = Room()
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
         conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
 
         await conversation._testing_handleIncomingEvent(
@@ -347,8 +490,8 @@ final class ConversationTests: XCTestCase {
 
     func testVadScoreCallbackReceivesScores() async {
         let vadScores = ValueRecorder<Double>()
-        let options = makeOptions(configure: { opts in
-            opts.onVadScore = { score in
+        let options = makeConfig(configure: { options in
+            options.onVadScore = { score in
                 Task { await vadScores.append(score) }
             }
         })
@@ -365,8 +508,8 @@ final class ConversationTests: XCTestCase {
 
     func testAgentToolResponseCallbackReceivesEvent() async {
         let capturedToolNames = ValueRecorder<String>()
-        let options = makeOptions(configure: { opts in
-            opts.onAgentToolResponse = { (event: AgentToolResponseEvent) in
+        let options = makeConfig(configure: { options in
+            options.onAgentToolResponse = { (event: AgentToolResponseEvent) in
                 Task { await capturedToolNames.append(event.toolName) }
             }
         })
@@ -387,11 +530,11 @@ final class ConversationTests: XCTestCase {
         let interruptionIds = ValueRecorder<Int>()
         let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeOptions(configure: { opts in
-            opts.onInterruption = { id in
+        let options = makeConfig(configure: { options in
+            options.onInterruption = { id in
                 Task { await interruptionIds.append(id) }
             }
-            opts.onCanSendFeedbackChange = { canSend in
+            options.onCanSendFeedbackChange = { canSend in
                 Task { await feedbackStates.append(canSend) }
             }
         })
@@ -456,8 +599,8 @@ final class ConversationTests: XCTestCase {
 
     func testAgentDisconnectEndsConversation() async throws {
         let disconnectReasons = ValueRecorder<DisconnectionReason>()
-        let options = makeOptions(configure: { opts in
-            opts.onDisconnect = { reason in
+        let options = makeConfig(configure: { options in
+            options.onDisconnect = { reason in
                 Task { await disconnectReasons.append(reason) }
             }
         })
@@ -470,18 +613,18 @@ final class ConversationTests: XCTestCase {
             )
         }
         await Task.yield()
-        mockConnectionManager.succeedAgentReady()
+        mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
         XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
         // capture call counts before the disconnect event.
-        let disconnectsBefore = mockConnectionManager.disconnectCallCount
+        let disconnectsBefore = mockWebRTCConnectionManager.disconnectCallCount
         // Simulate agent disconnect
-        await mockConnectionManager.onAgentDisconnected?()
+        await mockWebRTCConnectionManager.onDisconnected?()
         // assert disconnect was handled with correct reasons
         XCTAssertEqual(
-            mockConnectionManager.disconnectCallCount,
+            mockWebRTCConnectionManager.disconnectCallCount,
             disconnectsBefore + 1,
-            "Agent disconnect should trigger connectionManager.disconnect()"
+            "Agent disconnect should trigger webRTCConnectionManager.disconnect()"
         )
         let reasons = await disconnectReasons.values(waitingFor: 1)
         XCTAssertEqual(reasons, [.agent])
@@ -550,7 +693,7 @@ actor ValueRecorder<Value> {
 }
 
 extension ConversationTests {
-    private func makeOptions(
+    private func makeConfig(
         startupConfiguration: ConversationStartupConfiguration = .default,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         configure: ((inout ConversationOptions) -> Void)? = nil
@@ -567,4 +710,19 @@ extension ConversationTests {
         configure?(&options)
         return options
     }
+}
+
+extension URL {
+    private var queryItems: [String: String] {
+        URLComponents(url: self, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .reduce(into: [String: String]()) { result, item in
+                result[item.name] = item.value
+            } ?? [:]
+    }
+}
+
+private func sentEventType(from data: Data) throws -> String? {
+    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    return json?["type"] as? String
 }

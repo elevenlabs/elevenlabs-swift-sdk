@@ -39,7 +39,8 @@ final class LocalNetworkPermissionMonitor {
     }
 }
 #else
-final class LocalNetworkPermissionMonitor: Sendable {
+@MainActor
+final class LocalNetworkPermissionMonitor {
     static let shared = LocalNetworkPermissionMonitor()
     private init() {}
     func recordRelayRequested() {}

@@ -6,21 +6,21 @@ import XCTest
 @MainActor
 final class ElevenLabsBusinessLogicTests: XCTestCase {
     private var conversation: Conversation!
-    private var mockConnectionManager: MockWebRTCConnectionManager!
+    private var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
     private var dependencyProvider: TestDependencyProvider!
 
     override func setUp() async throws {
-        mockConnectionManager = MockWebRTCConnectionManager()
+        mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         dependencyProvider = TestDependencyProvider(
             tokenService: MockTokenService(),
-            connectionManager: mockConnectionManager
+            webRTCConnectionManager: mockWebRTCConnectionManager
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
     }
 
     override func tearDown() async throws {
         conversation = nil
-        mockConnectionManager = nil
+        mockWebRTCConnectionManager = nil
         dependencyProvider = nil
     }
 
@@ -28,8 +28,8 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     func testToolCallLifecycle() async throws {
         // Set up active state with room first
-        mockConnectionManager.room = Room()
-        conversation._testing_setConnectionManager(mockConnectionManager)
+        mockWebRTCConnectionManager.room = Room()
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
         conversation._testing_setState(.active(CallInfo(agentId: "test")))
 
         // 1. Receive a tool call
@@ -52,8 +52,8 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
 
         // 4. Verify result was published
-        XCTAssertEqual(mockConnectionManager.publishedPayloads.count, 1)
-        let lastPayload = mockConnectionManager.publishedPayloads.last ?? Data()
+        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, 1)
+        let lastPayload = mockWebRTCConnectionManager.publishedPayloads.last ?? Data()
         let lastPayloadString = String(data: lastPayload, encoding: .utf8) ?? ""
         XCTAssertTrue(lastPayloadString.contains("call_123"))
         XCTAssertTrue(lastPayloadString.contains("success"))
@@ -88,7 +88,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - End Call Logic
 
     func testAutomaticEndCallHandling() async {
-        mockConnectionManager.room = Room()
+        mockWebRTCConnectionManager.room = Room()
         conversation._testing_setState(.active(CallInfo(agentId: "test")))
 
         let toolResponse = AgentToolResponseEvent(
@@ -121,7 +121,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertEqual(conversation.state, .connecting, "Should be connecting immediately, even if disconnect() is slow")
 
         // Complete the start
-        mockConnectionManager.succeedAgentReady()
+        mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
 
         XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "new-agent")))
@@ -140,5 +140,27 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         await conversation._testing_handleIncomingEvent(.audio(audioEvent))
 
         XCTAssertEqual(conversation.latestAudioAlignment?.chars, ["H", "e", "l", "l", "o"])
+    }
+
+    func testEndConversationClearsLatestAudioState() async {
+        mockWebRTCConnectionManager.room = Room()
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+
+        let alignment = AudioAlignment(
+            chars: ["H"],
+            charStartTimesMs: [0],
+            charDurationsMs: [100]
+        )
+        let audioEvent = AudioEvent(audioBase64: "base64", eventId: 1, alignment: alignment)
+
+        await conversation._testing_handleIncomingEvent(.audio(audioEvent))
+        XCTAssertNotNil(conversation.latestAudioEvent)
+        XCTAssertNotNil(conversation.latestAudioAlignment)
+
+        await conversation.endConversation()
+
+        XCTAssertNil(conversation.latestAudioEvent)
+        XCTAssertNil(conversation.latestAudioAlignment)
     }
 }
