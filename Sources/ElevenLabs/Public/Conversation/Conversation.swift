@@ -179,7 +179,7 @@ public final class Conversation: ObservableObject {
         options: ConversationOptions,
         provider: any ConversationDependencyProvider
     ) async throws -> StartupResult {
-        let webRTCConnectionManager = await provider.webRTCConnectionManager()
+        let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
             connectionManager: webRTCConnectionManager, provider: provider
@@ -233,7 +233,7 @@ public final class Conversation: ObservableObject {
         options: ConversationOptions,
         provider: ConversationDependencyProvider
     ) async throws -> StartupResult {
-        let connectionManager = await provider.webSocketConnectionManager()
+        let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
             connectionManager: connectionManager, provider: provider

@@ -19,7 +19,7 @@ final class WebRTCConversationStartup {
         provider: any ConversationDependencyProvider,
         onStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {
-        let webRTCConnectionManager = await provider.webRTCConnectionManager()
+        let webRTCConnectionManager = provider.webRTCConnectionManager
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -29,7 +29,7 @@ final class WebRTCConversationStartup {
         onStateChange(.resolvingToken)
 
         var connectionDetails: TokenService.ConnectionDetails?
-        let tokenService = await provider.tokenService
+        let tokenService = provider.tokenService
         let tokenStep = TokenResolutionStep(
             tokenService: tokenService,
             auth: auth,
