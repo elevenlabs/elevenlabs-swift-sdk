@@ -64,9 +64,9 @@ final class Dependencies: ConversationDependencyProvider {
         return transport
     }
 
-    var logger: any Logging {
-        SDKLogger(logLevel: .warning)
-    }
+    let logger: any Logging = SDKLogger(
+        logLevel: ElevenLabs.Global.shared.configuration.logLevel
+    )
 
     var errorHandler: ((Swift.Error?) -> Void)? {
         nil
