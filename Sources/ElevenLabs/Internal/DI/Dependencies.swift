@@ -7,6 +7,7 @@ protocol ConversationDependencyProvider: AnyObject {
     var errorHandler: ((Swift.Error?) -> Void)? { get }
 
     func webRTCConnectionManager() async -> any WebRTCConnectionManaging
+    func webSocketConnectionManager() async -> any WebSocketConnectionManaging
 }
 
 /// A minimalistic dependency injection container for internal SDK use.
@@ -43,6 +44,7 @@ final class Dependencies: ConversationDependencyProvider {
     }
 
     private var _webRTCConnectionManager: (any WebRTCConnectionManaging)?
+    private var _webSocketConnectionManager: (any WebSocketConnectionManaging)?
 
     func webRTCConnectionManager() async -> any WebRTCConnectionManaging {
         if let existing = _webRTCConnectionManager {
@@ -51,6 +53,15 @@ final class Dependencies: ConversationDependencyProvider {
         let manager = WebRTCConnectionManager(logger: logger)
         _webRTCConnectionManager = manager
         return manager
+    }
+
+    func webSocketConnectionManager() async -> any WebSocketConnectionManaging {
+        if let existing = _webSocketConnectionManager {
+            return existing
+        }
+        let transport = WebSocketConnectionManager(logger: logger)
+        _webSocketConnectionManager = transport
+        return transport
     }
 
     var logger: any Logging {

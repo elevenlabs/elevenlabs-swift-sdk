@@ -73,11 +73,13 @@ public struct TokenService: Sendable {
             try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
         case let .conversationToken(conversationToken):
             conversationToken
+        case .signedWebSocketURL:
+            throw ConversationError.authenticationFailed("Signed WebSocket URLs are only supported for text-only conversations.")
         case let .customTokenProvider(provider):
             try await provider()
         }
 
-        let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.wssUrl
+        let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.voiceConversationUrl
 
         // ElevenLabs tokens contain room name and participant identity in the JWT
         // LiveKit will extract these automatically, so we provide empty values

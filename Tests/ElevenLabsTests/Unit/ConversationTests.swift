@@ -8,6 +8,7 @@ import XCTest
 final class ConversationTests: XCTestCase {
     private var conversation: Conversation!
     private var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
+    private var mockWebSocketConnectionManager: MockWebSocketConnectionManager!
     private var mockTokenService: MockTokenService!
     private var dependencyProvider: TestDependencyProvider!
     private let capturedErrors = ValueRecorder<ConversationError>()
@@ -15,10 +16,12 @@ final class ConversationTests: XCTestCase {
     override func setUp() async throws {
         mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         mockWebRTCConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
+        mockWebSocketConnectionManager = MockWebSocketConnectionManager()
         mockTokenService = MockTokenService()
         dependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
-            webRTCConnectionManager: mockWebRTCConnectionManager
+            webRTCConnectionManager: mockWebRTCConnectionManager,
+            webSocketConnectionManager: mockWebSocketConnectionManager
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
         await capturedErrors.reset()
@@ -27,6 +30,7 @@ final class ConversationTests: XCTestCase {
     override func tearDown() async throws {
         conversation = nil
         mockWebRTCConnectionManager = nil
+        mockWebSocketConnectionManager = nil
         mockTokenService = nil
         dependencyProvider = nil
         await capturedErrors.reset()
@@ -194,6 +198,116 @@ final class ConversationTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(conversation.agentState, .speaking)
+    }
+
+    func testStartTextOnlyPublicAgentUsesWebSocketConnectionManager() async throws {
+        let options = makeConfig(configure: { options in
+            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        })
+
+        try await conversation.startConversation(
+            auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+            options: options
+        )
+
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 0)
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
+        XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.scheme, "wss")
+        XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.host, "api.elevenlabs.io")
+        XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.queryItems.count, 1)
+        XCTAssertEqual(
+            mockWebSocketConnectionManager.lastConnectedURL?.queryItems["agent_id"],
+            "test-agent-id"
+        )
+        XCTAssertFalse(mockWebSocketConnectionManager.sentPayloads.isEmpty)
+        XCTAssertEqual(try sentEventType(from: mockWebSocketConnectionManager.sentPayloads[0]), "conversation_initiation_client_data")
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+
+        let payload: [String: Any] = [
+            "type": "agent_response",
+            "agent_response_event": [
+                "agent_response": "Hello over WebSocket",
+                "event_id": 101
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        mockWebSocketConnectionManager.receive(data: data)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(conversation.messages.last?.content, "Hello over WebSocket")
+        XCTAssertEqual(conversation.messages.last?.role, .agent)
+    }
+
+    func testTextOnlyStartDisconnectsPreviousActiveManagerBeforeSwitchingTransports() async throws {
+        mockWebRTCConnectionManager.room = Room()
+        mockWebRTCConnectionManager.onEventReceived = { _ in }
+        mockWebRTCConnectionManager.onDisconnected = {}
+        mockWebRTCConnectionManager.onRemoteSpeakingChanged = { _ in }
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.ended(reason: .userEnded))
+
+        let options = makeConfig(configure: { options in
+            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        })
+
+        try await conversation.startConversation(
+            auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+            options: options
+        )
+
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
+        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
+        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
+        XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+    }
+
+    func testStartTextOnlySignedURLUsesProvidedWebSocketURL() async throws {
+        let signedURL = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-private&conversation_signature=sig"
+        let options = makeConfig(configure: { options in
+            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        })
+
+        try await conversation.startConversation(
+            auth: .signedWebSocketURL(signedURL),
+            options: options
+        )
+
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 0)
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
+        XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.absoluteString, signedURL)
+        XCTAssertFalse(mockWebSocketConnectionManager.sentPayloads.isEmpty)
+        XCTAssertEqual(conversation.state, .active(.init(agentId: "agent-private")))
+    }
+
+    func testSignedWebSocketURLRejectsURLWithoutAgentId() {
+        let urlMissingAgent = "wss://api.elevenlabs.io/v1/convai/conversation?conversation_signature=sig"
+        XCTAssertThrowsError(try ElevenLabsConfiguration.signedWebSocketURL(urlMissingAgent)) { error in
+            guard let convError = error as? ConversationError,
+                  case .authenticationFailed = convError
+            else {
+                return XCTFail("Expected authenticationFailed, got \(error)")
+            }
+        }
+    }
+
+    func testStartTextOnlyRejectsConversationTokenAuth() async throws {
+        let options = makeConfig(configure: { options in
+            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        })
+
+        do {
+            try await conversation.startConversation(
+                auth: .conversationToken("livekit-token"),
+                options: options
+            )
+            XCTFail("Expected text-only startup to reject LiveKit token auth")
+        } catch let error as ConversationError {
+            guard case .authenticationFailed = error else {
+                return XCTFail("Expected authenticationFailed, got \(error)")
+            }
+        }
     }
 
     @MainActor
@@ -713,7 +827,7 @@ extension ConversationTests {
 }
 
 extension URL {
-    private var queryItems: [String: String] {
+    fileprivate var queryItems: [String: String] {
         URLComponents(url: self, resolvingAgainstBaseURL: false)?
             .queryItems?
             .reduce(into: [String: String]()) { result, item in

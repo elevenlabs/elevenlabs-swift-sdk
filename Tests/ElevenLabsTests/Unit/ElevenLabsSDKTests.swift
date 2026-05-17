@@ -68,6 +68,20 @@ final class ElevenLabsSDKTests: XCTestCase {
         }
     }
 
+    func testSignedWebSocketURLAuthConfiguration() throws {
+        let url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&conversation_signature=sig"
+        let auth = try ElevenLabsConfiguration.signedWebSocketURL(url)
+
+        switch auth.authSource {
+        case let .signedWebSocketURL(signedURL, agentId):
+            XCTAssertEqual(signedURL, url)
+            XCTAssertEqual(agentId, "agent-123")
+            XCTAssertEqual(auth.agentId, "agent-123")
+        default:
+            XCTFail("Expected signedWebSocketURL case")
+        }
+    }
+
     func testCustomTokenProviderAuthConfiguration() {
         let tokenProvider: @Sendable () async throws -> String = {
             "dynamic-token-123"

@@ -14,6 +14,10 @@ protocol ConnectionManaging: AnyObject {
     func send(data: Data) async throws
 }
 
+protocol WebSocketConnectionManaging: ConnectionManaging {
+    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult
+}
+
 protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     var inputTrack: LocalAudioTrack? { get }

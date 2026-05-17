@@ -9,8 +9,8 @@ import LiveKit
 ///
 /// **Role:**
 /// - Manages the lifecycle of a single conversation session.
-/// - Coordinates state between the network layer (`WebRTCConnectionManager`), protocol parser (`EventParser`), and the UI
-/// (`ObservableObject`).
+/// - Coordinates state between the network layer (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
+/// (`EventParser`), and the UI (`ObservableObject`).
 /// - Handles audio device management and permission checks.
 ///
 /// **Usage:**
@@ -177,7 +177,11 @@ public final class Conversation: ObservableObject {
 
         let provider = await resolveDependencyProvider()
 
-        let result = try await startVoiceConversation(auth: auth, options: options, provider: provider)
+        let result: StartupResult = if options.conversationOverrides.textOnly {
+            try await startTextOnlyConversation(auth: auth, options: options, provider: provider)
+        } else {
+            try await startVoiceConversation(auth: auth, options: options, provider: provider)
+        }
 
         state = .active(.init(agentId: result.agentId))
         startupMetrics = result.metrics
@@ -237,6 +241,30 @@ public final class Conversation: ObservableObject {
 
         isMuted = webRTCConnectionManager.isMicrophoneMuted
         return result
+    }
+
+    private func startTextOnlyConversation(
+        auth: ElevenLabsConfiguration,
+        options: ConversationOptions,
+        provider: ConversationDependencyProvider
+    ) async throws -> StartupResult {
+        let connectionManager = await provider.webSocketConnectionManager()
+        await prepareConversationStart(
+            auth: auth, options: options,
+            connectionManager: connectionManager, provider: provider
+        )
+
+        updateStartupState(.connectingRoom)
+
+        do {
+            return try await connectionManager.connect(auth: auth, options: options)
+        } catch let failure as StartupFailure {
+            await handleStartupFailure(failure, disconnecting: connectionManager, suggestLocalNetworkPermission: false)
+            throw failure.error
+        } catch is CancellationError {
+            await handleStartupCancellation(disconnecting: connectionManager)
+            throw CancellationError()
+        }
     }
 
     /// End and clean up.
@@ -412,6 +440,7 @@ public final class Conversation: ObservableObject {
         options.onStartupStateChange?(newState)
     }
 
+    /// Common preparation shared by voice and text-only startup paths.
     private func prepareConversationStart(
         auth: ElevenLabsConfiguration,
         options: ConversationOptions,
@@ -432,7 +461,8 @@ public final class Conversation: ObservableObject {
         self.options = options
 
         activeContext = ["agentId": auth.agentId]
-        logger.info("Starting conversation", context: activeContext)
+        let mode = options.conversationOverrides.textOnly ? "text-only" : "voice"
+        logger.info("Starting \(mode) conversation", context: activeContext)
 
         options.onCanSendFeedbackChange?(false)
         setupAgentStateManager()
