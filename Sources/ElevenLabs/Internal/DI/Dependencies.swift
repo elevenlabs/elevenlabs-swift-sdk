@@ -4,7 +4,6 @@ import Foundation
 protocol ConversationDependencyProvider: AnyObject {
     var tokenService: any TokenServicing { get }
     var logger: any Logging { get }
-    var errorHandler: ((Swift.Error?) -> Void)? { get }
     var webRTCConnectionManager: any WebRTCConnectionManaging { get }
     var webSocketConnectionManager: any WebSocketConnectionManaging { get }
 }
@@ -23,8 +22,6 @@ final class Dependencies: ConversationDependencyProvider {
     let tokenService: any TokenServicing
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
-
-    var errorHandler: ((Swift.Error?) -> Void)? { nil }
 
     private init() {
         let globalConfig = ElevenLabs.Global.shared.configuration

@@ -182,7 +182,7 @@ public final class Conversation: ObservableObject {
         let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
-            connectionManager: webRTCConnectionManager, provider: provider
+            connectionManager: webRTCConnectionManager
         )
 
         webRTCConnectionManager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
@@ -236,7 +236,7 @@ public final class Conversation: ObservableObject {
         let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
-            connectionManager: connectionManager, provider: provider
+            connectionManager: connectionManager
         )
 
         updateStartupState(.connectingRoom)
@@ -409,8 +409,7 @@ public final class Conversation: ObservableObject {
     private func prepareConversationStart(
         auth: ElevenLabsConfiguration,
         options: ConversationOptions,
-        connectionManager: any ConnectionManaging,
-        provider: any ConversationDependencyProvider
+        connectionManager: any ConnectionManaging
     ) async {
         let previousConnectionManager = activeConnectionManager
         state = .connecting
@@ -445,7 +444,6 @@ public final class Conversation: ObservableObject {
                 await handleIncomingEvent(event)
             }
         }
-        connectionManager.errorHandler = provider.errorHandler
         connectionManager.onDisconnected = { [weak self] in
             guard let self else { return }
             await endConversation(disconnectReason: .agent, endReason: .remoteDisconnected)

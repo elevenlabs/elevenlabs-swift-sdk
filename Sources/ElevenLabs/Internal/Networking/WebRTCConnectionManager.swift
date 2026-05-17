@@ -39,8 +39,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when a remote participant starts or stops speaking.
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
 
-    var errorHandler: ((Swift.Error?) -> Void)?
-
     // MARK: – Public state accessors
 
     private(set) var room: Room?
@@ -107,24 +105,14 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         guard let room else {
             throw ConnectionManagerError.notConnected
         }
-        do {
-            try await room.localParticipant.publish(data: data, options: Self.reliableDataPublishOptions)
-        } catch {
-            errorHandler?(error)
-            throw error
-        }
+        try await room.localParticipant.publish(data: data, options: Self.reliableDataPublishOptions)
     }
 
     func setMicrophoneMuted(_ muted: Bool) async throws {
         guard let room else {
             throw WebRTCConnectionManagerError.roomUnavailable
         }
-        do {
-            try await room.localParticipant.setMicrophone(enabled: !muted)
-        } catch {
-            errorHandler?(error)
-            throw error
-        }
+        try await room.localParticipant.setMicrophone(enabled: !muted)
     }
 
     /// Establish a LiveKit connection.
@@ -170,10 +158,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             logger.info("LiveKit room.connect completed", context: ["duration": "\(Date().timeIntervalSince(connectStart))"])
         } catch {
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
-            errorHandler?(error)
-            if await LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
-                errorHandler?(ConversationError.localNetworkPermissionRequired)
-            }
             throw error
         }
 
@@ -183,7 +167,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 logger.info("Microphone enabled successfully")
             } catch {
                 logger.error("Failed to enable microphone", context: ["error": "\(error)"])
-                errorHandler?(error)
 
                 if throwOnMicrophoneFailure {
                     throw ConversationError.microphoneToggleFailed(error)
@@ -198,7 +181,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     func disconnect() async {
         onEventReceived = nil
         onDisconnected = nil
-        errorHandler = nil
         onRemoteSpeakingChanged = nil
 
         await readinessDelegate?.release()

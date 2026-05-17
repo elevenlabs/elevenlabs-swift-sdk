@@ -4,7 +4,6 @@ import Foundation
 final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
-    var errorHandler: ((Swift.Error?) -> Void)?
 
     var connectError: Error?
     var sendError: Error?
@@ -29,7 +28,6 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         }
 
         if let connectError {
-            errorHandler?(connectError)
             metrics.total = Date().timeIntervalSince(startTime)
             let convError = connectError as? ConversationError ?? .connectionFailed(connectError)
             throw StartupFailure.conversationInit(convError, metrics)
@@ -57,7 +55,6 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         disconnectCallCount += 1
         onEventReceived = nil
         onDisconnected = nil
-        errorHandler = nil
         isConnected = false
     }
 
@@ -66,7 +63,6 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             throw ConnectionManagerError.notConnected
         }
         if let sendError {
-            errorHandler?(sendError)
             throw sendError
         }
         sentPayloads.append(data)

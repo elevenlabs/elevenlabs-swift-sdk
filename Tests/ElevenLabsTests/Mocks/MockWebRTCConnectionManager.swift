@@ -18,8 +18,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     var agentAudioTrack: RemoteAudioTrack?
     var isMicrophoneMuted = true
 
-    var errorHandler: ((Swift.Error?) -> Void)?
-
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
     var publishError: Swift.Error?
@@ -46,7 +44,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         lastNetworkConfiguration = networkConfiguration
 
         if shouldFailConnection {
-            errorHandler?(connectionError)
             throw connectionError
         }
 
@@ -57,7 +54,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         disconnectCallCount += 1
         onEventReceived = nil
         onDisconnected = nil
-        errorHandler = nil
         onRemoteSpeakingChanged = nil
         room = nil
     }
@@ -79,7 +75,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             throw ConnectionManagerError.notConnected
         }
         if let publishError {
-            errorHandler?(publishError)
             throw publishError
         }
         publishedPayloads.append(data)
@@ -90,7 +85,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             throw WebRTCConnectionManagerError.roomUnavailable
         }
         if let microphoneError {
-            errorHandler?(microphoneError)
             throw microphoneError
         }
         isMicrophoneMuted = muted

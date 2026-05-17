@@ -13,7 +13,6 @@ import Foundation
 final class WebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
-    var errorHandler: ((Swift.Error?) -> Void)?
 
     private let urlSession: URLSession
     private let logger: any Logging
@@ -82,7 +81,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     func disconnect() async {
         onEventReceived = nil
         onDisconnected = nil
-        errorHandler = nil
 
         receiveTask?.cancel()
         receiveTask = nil
@@ -112,7 +110,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             } catch {
                 guard !Task.isCancelled else { return }
                 self.task = nil
-                errorHandler?(error)
                 await onDisconnected?()
                 return
             }
