@@ -70,7 +70,7 @@ final class Dependencies: ConversationDependencyProvider {
             return existing
         }
         let loggerInstance = logger
-        let manager = ConnectionManager(logger: loggerInstance)
+        let manager = WebRTCConnectionManager(logger: loggerInstance)
         _connectionManager = manager
         return manager
     }

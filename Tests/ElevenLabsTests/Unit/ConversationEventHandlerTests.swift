@@ -6,11 +6,11 @@ final class ConversationEventHandlerTests: XCTestCase {
     var conversation: Conversation!
     var mockDependencyProvider: TestDependencyProvider!
     var mockTokenService: MockTokenService!
-    var mockConnectionManager: MockConnectionManager!
+    var mockConnectionManager: MockWebRTCConnectionManager!
 
     override func setUp() async throws {
         mockTokenService = MockTokenService()
-        mockConnectionManager = MockConnectionManager()
+        mockConnectionManager = MockWebRTCConnectionManager()
         mockDependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
             connectionManager: mockConnectionManager

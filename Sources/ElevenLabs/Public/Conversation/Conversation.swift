@@ -9,7 +9,8 @@ import LiveKit
 ///
 /// **Role:**
 /// - Manages the lifecycle of a single conversation session.
-/// - Coordinates state between the network layer (`ConnectionManager`), protocol parser (`EventParser`), and the UI (`ObservableObject`).
+/// - Coordinates state between the network layer (`WebRTCConnectionManager`), protocol parser (`EventParser`), and the UI
+/// (`ObservableObject`).
 /// - Handles audio device management and permission checks.
 ///
 /// **Usage:**
@@ -188,7 +189,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         state = .connecting
 
         // Disconnect previous session before starting new one.
-        // This ensures clean state and prevents race conditions with ConnectionManager.
+        // This ensures clean state and prevents race conditions with WebRTCConnectionManager.
         await connectionManager.disconnect()
         cleanupPreviousConversation()
         self.options = options
@@ -218,7 +219,7 @@ public final class Conversation: ObservableObject, RoomDelegate {
         }
 
         // Execute startup sequence using orchestrator
-        let orchestrator = ConversationStartupOrchestrator(logger: logger)
+        let orchestrator = WebRTCConversationStartup(logger: logger)
         let result: StartupResult
 
         do {

@@ -3,21 +3,21 @@ import XCTest
 
 @MainActor
 final class ConversationStartupOrchestratorTests: XCTestCase {
-    var orchestrator: ConversationStartupOrchestrator!
+    var orchestrator: WebRTCConversationStartup!
     var mockDependencyProvider: TestDependencyProvider!
     var mockTokenService: MockTokenService!
-    var mockConnectionManager: MockConnectionManager!
+    var mockConnectionManager: MockWebRTCConnectionManager!
     var logger: SDKLogger!
 
     override func setUp() async throws {
         mockTokenService = MockTokenService()
-        mockConnectionManager = MockConnectionManager()
+        mockConnectionManager = MockWebRTCConnectionManager()
         mockDependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
             connectionManager: mockConnectionManager
         )
         logger = SDKLogger(logLevel: .error)
-        orchestrator = ConversationStartupOrchestrator(logger: logger)
+        orchestrator = WebRTCConversationStartup(logger: logger)
     }
 
     override func tearDown() {

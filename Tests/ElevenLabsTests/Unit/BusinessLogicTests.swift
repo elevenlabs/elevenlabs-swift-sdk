@@ -6,11 +6,11 @@ import XCTest
 @MainActor
 final class ElevenLabsBusinessLogicTests: XCTestCase {
     private var conversation: Conversation!
-    private var mockConnectionManager: MockConnectionManager!
+    private var mockConnectionManager: MockWebRTCConnectionManager!
     private var dependencyProvider: TestDependencyProvider!
 
     override func setUp() async throws {
-        mockConnectionManager = MockConnectionManager()
+        mockConnectionManager = MockWebRTCConnectionManager()
         dependencyProvider = TestDependencyProvider(
             tokenService: MockTokenService(),
             connectionManager: mockConnectionManager

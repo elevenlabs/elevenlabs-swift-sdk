@@ -7,13 +7,13 @@ import XCTest
 @MainActor
 final class ConversationTests: XCTestCase {
     private var conversation: Conversation!
-    private var mockConnectionManager: MockConnectionManager!
+    private var mockConnectionManager: MockWebRTCConnectionManager!
     private var mockTokenService: MockTokenService!
     private var dependencyProvider: TestDependencyProvider!
     private let capturedErrors = ValueRecorder<ConversationError>()
 
     override func setUp() async throws {
-        mockConnectionManager = MockConnectionManager()
+        mockConnectionManager = MockWebRTCConnectionManager()
         mockConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
         mockTokenService = MockTokenService()
         dependencyProvider = TestDependencyProvider(

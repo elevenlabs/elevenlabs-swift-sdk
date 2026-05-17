@@ -4,7 +4,7 @@ import LiveKit
 
 /// Orchestrates the conversation startup sequence using individual steps
 @MainActor
-final class ConversationStartupOrchestrator {
+final class WebRTCConversationStartup {
     private let logger: any Logging
 
     init(logger: any Logging) {

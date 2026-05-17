@@ -17,7 +17,7 @@ enum ConnectionManagerError: Error {
     case roomUnavailable
 }
 
-/// **ConnectionManager**
+/// **WebRTCConnectionManager**
 ///
 /// A small façade around `LiveKit.Room` that emits **exactly one**
 /// *agent‑ready* signal at the precise moment the remote agent is
@@ -35,7 +35,7 @@ enum ConnectionManagerError: Error {
 /// This class isolates LiveKit dependency from the rest of the SDK. It uses an internal `ReadyDelegate`
 /// actor to manage the complex state machine of connection + subscription + grace periods, converting
 /// them into simple linear `async/await` flows for the consumer.
-final class ConnectionManager: ConnectionManaging {
+final class WebRTCConnectionManager: ConnectionManaging {
     /// Fired **once** when the remote agent is considered ready.
     var onAgentReady: (() -> Void)?
 
@@ -252,7 +252,7 @@ final class ConnectionManager: ConnectionManaging {
 
 // MARK: – Ready‑detection delegate
 
-extension ConnectionManager {
+extension WebRTCConnectionManager {
     /// Internal delegate that guards the *agent‑ready* handshake.
     @MainActor
     fileprivate final class ReadyDelegate: RoomDelegate {

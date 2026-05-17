@@ -2,7 +2,7 @@
 import Foundation
 import LiveKit
 
-final class MockConnectionManager: ConnectionManaging {
+final class MockWebRTCConnectionManager: ConnectionManaging {
     enum Error: Swift.Error {
         case connectionFailed
         case publishFailed
