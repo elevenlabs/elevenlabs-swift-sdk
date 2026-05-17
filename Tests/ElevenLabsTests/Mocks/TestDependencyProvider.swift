@@ -6,26 +6,15 @@ final class TestDependencyProvider: ConversationDependencyProvider {
     let tokenService: any TokenServicing
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
-    let errorHandler: ((Swift.Error?) -> Void)?
 
     init(
         tokenService: any TokenServicing,
         webRTCConnectionManager: any WebRTCConnectionManaging,
-        webSocketConnectionManager: any WebSocketConnectionManaging = MockWebSocketConnectionManager(),
-        errorHandler: (@Sendable (Swift.Error?) -> Void)? = nil
+        webSocketConnectionManager: any WebSocketConnectionManaging = MockWebSocketConnectionManager()
     ) {
         self.tokenService = tokenService
         self.webRTCConnectionManager = webRTCConnectionManager
         self.webSocketConnectionManager = webSocketConnectionManager
-        self.errorHandler = errorHandler
-
         logger = SDKLogger(logLevel: .error)
-
-        self.webRTCConnectionManager.errorHandler = { [weak self] error in
-            self?.errorHandler?(error)
-        }
-        self.webSocketConnectionManager.errorHandler = { [weak self] error in
-            self?.errorHandler?(error)
-        }
     }
 }
