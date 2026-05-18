@@ -82,7 +82,118 @@ final class ConversationEventHandlerTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         XCTAssertEqual(conversation.messages.last?.content, "I am an AI")
         XCTAssertEqual(conversation.messages.last?.role, .agent)
+        XCTAssertEqual(conversation.messages.last?.eventId, 456)
         XCTAssertEqual(conversation.lastAgentEventId, 456)
+    }
+
+    func testAgentResponseFinalizesStreamedMessageInsteadOfDuplicating() async {
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 42)
+        ))
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: " World", type: .stop, eventId: 42)
+        ))
+        XCTAssertEqual(conversation.messages.count, 1)
+        XCTAssertEqual(
+            conversation.messages.last?.eventId,
+            42,
+            "Streamed message should already carry the turn's eventId"
+        )
+
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "Hello World", eventId: 42)
+        ))
+
+        XCTAssertEqual(
+            conversation.messages.count,
+            1,
+            "agent_response must not duplicate the streamed message"
+        )
+        XCTAssertEqual(conversation.messages.last?.content, "Hello World")
+        XCTAssertEqual(conversation.messages.last?.eventId, 42)
+    }
+
+    func testAgentResponseAppendsWhenNoStreamedMessagePending() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "First", eventId: 1)
+        ))
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "Second", eventId: 2)
+        ))
+
+        XCTAssertEqual(conversation.messages.count, 2)
+        XCTAssertEqual(conversation.messages[0].eventId, 1)
+        XCTAssertEqual(conversation.messages[1].eventId, 2)
+    }
+
+    // MARK: - Agent Response Correction Tests
+
+    func testAgentResponseCorrectionUpdatesStoredMessage() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "the answr is 41", eventId: 7)
+        ))
+        XCTAssertEqual(conversation.messages.last?.content, "the answr is 41")
+
+        await conversation.handleIncomingEvent(.agentResponseCorrection(
+            AgentResponseCorrectionEvent(
+                originalAgentResponse: "the answr is 41",
+                correctedAgentResponse: "the answer is 42",
+                eventId: 7
+            )
+        ))
+
+        XCTAssertEqual(
+            conversation.messages.count,
+            1,
+            "Correction should update in place, not append"
+        )
+        XCTAssertEqual(conversation.messages.last?.content, "the answer is 42")
+        XCTAssertEqual(conversation.messages.last?.eventId, 7)
+    }
+
+    func testAgentResponseCorrectionWithUnknownEventIdAppends() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "kept as-is", eventId: 100)
+        ))
+
+        await conversation.handleIncomingEvent(.agentResponseCorrection(
+            AgentResponseCorrectionEvent(
+                originalAgentResponse: "x",
+                correctedAgentResponse: "y",
+                eventId: 999
+            )
+        ))
+
+        XCTAssertEqual(conversation.messages.count, 2)
+        XCTAssertEqual(conversation.messages[0].content, "kept as-is")
+        XCTAssertEqual(conversation.messages[0].eventId, 100)
+        XCTAssertEqual(conversation.messages[1].content, "y")
+        XCTAssertEqual(conversation.messages[1].eventId, 999)
+    }
+
+    // MARK: - User Transcript eventId
+
+    func testUserTranscriptCarriesEventId() async {
+        await conversation.handleIncomingEvent(.userTranscript(
+            UserTranscriptEvent(transcript: "hi", eventId: 11)
+        ))
+        XCTAssertEqual(conversation.messages.last?.eventId, 11)
+        XCTAssertEqual(conversation.messages.last?.role, .user)
+    }
+
+    func testUserTranscriptInsertedBeforeAgentMessageWithSameEventId() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "agent reply", eventId: 5)
+        ))
+        await conversation.handleIncomingEvent(.userTranscript(
+            UserTranscriptEvent(transcript: "user said this", eventId: 5)
+        ))
+
+        XCTAssertEqual(conversation.messages.count, 2)
+        XCTAssertEqual(conversation.messages[0].role, .user)
+        XCTAssertEqual(conversation.messages[0].content, "user said this")
+        XCTAssertEqual(conversation.messages[1].role, .agent)
+        XCTAssertEqual(conversation.messages[1].content, "agent reply")
     }
 
     // MARK: - Interruption Tests
@@ -112,30 +223,25 @@ final class ConversationEventHandlerTests: XCTestCase {
 
     func testHandleAgentChatResponseStream() async {
         // 1. Start
-        let startEvent = IncomingEvent.agentChatResponsePart(AgentChatResponsePartEvent(
-            text: "Hello",
-            type: .start
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 13)
         ))
-        await conversation.handleIncomingEvent(startEvent)
-        XCTAssertEqual(conversation.currentStreamingMessage?.content, "Hello")
         XCTAssertEqual(conversation.messages.count, 1)
+        XCTAssertEqual(conversation.messages.last?.content, "Hello")
+        XCTAssertEqual(conversation.messages.last?.eventId, 13)
 
         // 2. Delta
-        let deltaEvent = IncomingEvent.agentChatResponsePart(AgentChatResponsePartEvent(
-            text: " World",
-            type: .delta
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: " World", type: .delta, eventId: 13)
         ))
-        await conversation.handleIncomingEvent(deltaEvent)
-        XCTAssertEqual(conversation.currentStreamingMessage?.content, "Hello World")
         XCTAssertEqual(conversation.messages.count, 1, "Should update existing message")
+        XCTAssertEqual(conversation.messages.last?.content, "Hello World")
 
         // 3. Stop
-        let stopEvent = IncomingEvent.agentChatResponsePart(AgentChatResponsePartEvent(
-            text: "!",
-            type: .stop
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: "!", type: .stop, eventId: 13)
         ))
-        await conversation.handleIncomingEvent(stopEvent)
-        XCTAssertNil(conversation.currentStreamingMessage)
         XCTAssertEqual(conversation.messages.last?.content, "Hello World!")
+        XCTAssertEqual(conversation.messages.last?.eventId, 13)
     }
 }

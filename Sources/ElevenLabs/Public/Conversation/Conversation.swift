@@ -49,8 +49,6 @@ public final class Conversation: ObservableObject {
     @Published public internal(set) var audioDevices: [AudioDevice] = []
     @Published public internal(set) var selectedAudioDeviceID: String = ""
 
-    /// Track the current streaming message for chat response parts
-    var currentStreamingMessage: Message?
     var lastAgentEventId: Int?
     var lastFeedbackSubmittedEventId: Int?
 
@@ -280,7 +278,7 @@ public final class Conversation: ObservableObject {
             // No connection manager yet, just reset state
             if state == .connecting {
                 state = .idle
-                cleanupPreviousConversation()
+                tearDownActiveSession()
             }
             return
         }
@@ -289,7 +287,7 @@ public final class Conversation: ObservableObject {
         // Disconnect synchronously to ensure clean state
         await connectionManager.disconnect()
 
-        cleanupPreviousConversation()
+        tearDownActiveSession()
 
         // Call user's onDisconnect callback if provided
         options.onDisconnect?(disconnectReason)
@@ -303,7 +301,7 @@ public final class Conversation: ObservableObject {
         }
         let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
         try await publish(event)
-        appendLocalMessage(text)
+        appendMessage(role: .user, content: text)
     }
 
     /// Toggle / set microphone
@@ -517,29 +515,35 @@ public final class Conversation: ObservableObject {
     }
 
     /// Clean up state from any previous conversation to ensure a fresh start.
-    /// This method ensures that each new conversation starts with a clean slate,
-    /// preventing any state leakage between conversations when using new Room objects.
+    /// Called when starting a new session; wipes both operational and display state.
     private func cleanupPreviousConversation() {
-        cleanupTransientResources()
+        tearDownActiveSession()
 
-        // Clear conversation state
         messages.removeAll()
-        pendingToolCalls.removeAll()
         mcpToolCalls.removeAll()
         mcpConnectionStatus = nil
         conversationMetadata = nil
-        currentStreamingMessage = nil
 
         startupState = .idle
         startupMetrics = nil
+
+        logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
+    }
+
+    /// Tear down operational state when an active session ends.
+    /// Preserves user-visible display state (messages, MCP activity, conversation
+    /// metadata, startup metrics) so the transcript remains visible until a new
+    /// conversation is started.
+    private func tearDownActiveSession() {
+        cleanupTransientResources()
+
+        pendingToolCalls.removeAll()
 
         lastAgentEventId = nil
         lastFeedbackSubmittedEventId = nil
         options.onCanSendFeedbackChange?(false)
         latestAudioEvent = nil
         latestAudioAlignment = nil
-
-        logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
     }
 
     private func cleanupTransientResources() {
@@ -593,36 +597,14 @@ public final class Conversation: ObservableObject {
 
     // MARK: - Message Helpers
 
-    func appendLocalMessage(_ text: String) {
+    func appendMessage(role: Message.Role, content: String, eventId: Int? = nil) {
         messages.append(
             Message(
                 id: UUID().uuidString,
-                role: .user,
-                content: text,
-                timestamp: Date()
-            )
-        )
-    }
-
-    func appendAgentMessage(_ text: String) {
-        messages.append(
-            Message(
-                id: UUID().uuidString,
-                role: .agent,
-                content: text,
-                timestamp: Date()
-            )
-        )
-    }
-
-    func appendUserTranscript(_ text: String) {
-        // If you want partial transcript merging, do it here
-        messages.append(
-            Message(
-                id: UUID().uuidString,
-                role: .user,
-                content: text,
-                timestamp: Date()
+                role: role,
+                content: content,
+                timestamp: Date(),
+                eventId: eventId
             )
         )
     }

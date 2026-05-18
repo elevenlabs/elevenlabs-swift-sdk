@@ -63,7 +63,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     func testAgentStreamingMessages() async {
         // 1. Start streaming
-        let startEvent = AgentChatResponsePartEvent(text: "Hello", type: .start)
+        let startEvent = AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 1)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(startEvent))
 
         XCTAssertEqual(conversation.messages.count, 1)
@@ -71,14 +71,14 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertEqual(conversation.messages.first?.role, .agent)
 
         // 2. Delta update
-        let deltaEvent = AgentChatResponsePartEvent(text: " world", type: .delta)
+        let deltaEvent = AgentChatResponsePartEvent(text: " world", type: .delta, eventId: 1)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(deltaEvent))
 
         XCTAssertEqual(conversation.messages.count, 1, "Should still have only 1 message, just updated")
         XCTAssertEqual(conversation.messages.first?.content, "Hello world")
 
         // 3. Stop streaming
-        let stopEvent = AgentChatResponsePartEvent(text: "!", type: .stop)
+        let stopEvent = AgentChatResponsePartEvent(text: "!", type: .stop, eventId: 1)
         await conversation._testing_handleIncomingEvent(.agentChatResponsePart(stopEvent))
 
         XCTAssertEqual(conversation.messages.count, 1)

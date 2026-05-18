@@ -257,11 +257,14 @@ enum EventParser {
 
         case "agent_chat_response_part":
             if let event = json["text_response_part"] as? [String: Any],
-               let text = event["text"] as? String
+               let text = event["text"] as? String,
+               let eventId = event["event_id"] as? Int
             {
                 let partTypeStr = event["type"] as? String ?? "delta"
                 let partType = AgentChatResponsePartType(rawValue: partTypeStr) ?? .delta
-                return .agentChatResponsePart(AgentChatResponsePartEvent(text: text, type: partType))
+                return .agentChatResponsePart(
+                    AgentChatResponsePartEvent(text: text, type: partType, eventId: eventId)
+                )
             }
 
         case "error":
