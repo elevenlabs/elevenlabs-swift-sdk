@@ -170,6 +170,26 @@ let conversation = try await ElevenLabs.startConversation(
 
 ---
 
+## Text-Only Conversations
+
+Skip the microphone entirely and run a chat-style conversation over WebSocket. The `Conversation` API is identical — `sendMessage`, `messages`, `endConversation` all work the same.
+
+```swift
+// Public agent
+let conversation = try await ElevenLabs.startConversation(
+    agentId: "your-agent-id",
+    config: .init(conversationOverrides: .init(textOnly: true))
+)
+
+try await conversation.sendMessage("Hello!")
+
+// Private agent: backend generates a signed WebSocket URL
+let signedURL = try await myBackend.fetchSignedWebSocketURL(agentId: "my-private-id")
+let conversation = try await ElevenLabs.startConversation(signedWebSocketURL: signedURL)
+```
+
+---
+
 ## Empower Your Agent with Tools
 
 You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**.
@@ -232,10 +252,10 @@ The SDK handles all the heavy lifting of WebRTC coordination and protocol parsin
 ```mermaid
 graph TD
     App[Your App] --> Conversation[Conversation Object]
-    Conversation --> StartupOrchestrator[Startup Orchestrator]
-    Conversation --> ConnectionManager[Connection Manager / WebRTC]
-    ConnectionManager --> LiveKit[LiveKit SDK]
-    StartupOrchestrator --> TokenService[Token Service]
+    Conversation --> WebRTCConnectionManager[WebRTC Connection Manager]
+    Conversation --> WebSocketConnectionManager[WebSocket Connection Manager]
+    WebRTCConnectionManager --> LiveKit[LiveKit SDK]
+    WebRTCConnectionManager --> TokenService[Token Service]
 ```
 
 ---

@@ -6,14 +6,14 @@ final class ConversationEventHandlerTests: XCTestCase {
     var conversation: Conversation!
     var mockDependencyProvider: TestDependencyProvider!
     var mockTokenService: MockTokenService!
-    var mockConnectionManager: MockConnectionManager!
+    var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
 
     override func setUp() async throws {
         mockTokenService = MockTokenService()
-        mockConnectionManager = MockConnectionManager()
+        mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         mockDependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
-            connectionManager: mockConnectionManager
+            webRTCConnectionManager: mockWebRTCConnectionManager
         )
         conversation = Conversation(dependencyProvider: mockDependencyProvider)
     }
@@ -22,21 +22,24 @@ final class ConversationEventHandlerTests: XCTestCase {
         conversation = nil
         mockDependencyProvider = nil
         mockTokenService = nil
-        mockConnectionManager = nil
+        mockWebRTCConnectionManager = nil
     }
 
     // MARK: - Transcript Tests
 
     func testHandleUserTranscript() async {
         let expectation = XCTestExpectation(description: "onUserTranscript callback fired")
-        var receivedTranscript: String?
-        var receivedEventId: Int?
+        let receivedTranscripts = ValueRecorder<(String, Int)>()
 
-        conversation.options.onUserTranscript = { transcript, eventId in
-            receivedTranscript = transcript
-            receivedEventId = eventId
-            expectation.fulfill()
-        }
+        conversation = Conversation(
+            dependencyProvider: mockDependencyProvider,
+            options: ConversationOptions(
+                onUserTranscript: { transcript, eventId in
+                    Task { await receivedTranscripts.append((transcript, eventId)) }
+                    expectation.fulfill()
+                }
+            )
+        )
 
         let event = IncomingEvent.userTranscript(UserTranscriptEvent(
             transcript: "Hello world",
@@ -46,8 +49,9 @@ final class ConversationEventHandlerTests: XCTestCase {
         await conversation.handleIncomingEvent(event)
 
         await fulfillment(of: [expectation], timeout: 1.0)
-        XCTAssertEqual(receivedTranscript, "Hello world")
-        XCTAssertEqual(receivedEventId, 123)
+        let received = await receivedTranscripts.values()
+        XCTAssertEqual(received.first?.0, "Hello world")
+        XCTAssertEqual(received.first?.1, 123)
         XCTAssertEqual(conversation.messages.last?.content, "Hello world")
         XCTAssertEqual(conversation.messages.last?.role, .user)
     }
@@ -57,11 +61,16 @@ final class ConversationEventHandlerTests: XCTestCase {
     func testHandleAgentResponse() async {
         let expectation = XCTestExpectation(description: "onAgentResponse callback fired")
 
-        conversation.options.onAgentResponse = { response, eventId in
-            XCTAssertEqual(response, "I am an AI")
-            XCTAssertEqual(eventId, 456)
-            expectation.fulfill()
-        }
+        conversation = Conversation(
+            dependencyProvider: mockDependencyProvider,
+            options: ConversationOptions(
+                onAgentResponse: { response, eventId in
+                    XCTAssertEqual(response, "I am an AI")
+                    XCTAssertEqual(eventId, 456)
+                    expectation.fulfill()
+                }
+            )
+        )
 
         let event = IncomingEvent.agentResponse(AgentResponseEvent(
             response: "I am an AI",
@@ -81,10 +90,15 @@ final class ConversationEventHandlerTests: XCTestCase {
     func testHandleInterruption() async {
         let expectation = XCTestExpectation(description: "onInterruption callback fired")
 
-        conversation.options.onInterruption = { eventId in
-            XCTAssertEqual(eventId, 789)
-            expectation.fulfill()
-        }
+        conversation = Conversation(
+            dependencyProvider: mockDependencyProvider,
+            options: ConversationOptions(
+                onInterruption: { eventId in
+                    XCTAssertEqual(eventId, 789)
+                    expectation.fulfill()
+                }
+            )
+        )
 
         let event = IncomingEvent.interruption(InterruptionEvent(eventId: 789))
 

@@ -2,29 +2,29 @@
 import XCTest
 
 @MainActor
-final class ConversationStartupOrchestratorTests: XCTestCase {
-    var orchestrator: ConversationStartupOrchestrator!
+final class WebRTCConversationStartupTests: XCTestCase {
+    var startup: WebRTCConversationStartup!
     var mockDependencyProvider: TestDependencyProvider!
     var mockTokenService: MockTokenService!
-    var mockConnectionManager: MockConnectionManager!
+    var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
     var logger: SDKLogger!
 
     override func setUp() async throws {
         mockTokenService = MockTokenService()
-        mockConnectionManager = MockConnectionManager()
+        mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         mockDependencyProvider = TestDependencyProvider(
             tokenService: mockTokenService,
-            connectionManager: mockConnectionManager
+            webRTCConnectionManager: mockWebRTCConnectionManager
         )
         logger = SDKLogger(logLevel: .error)
-        orchestrator = ConversationStartupOrchestrator(logger: logger)
+        startup = WebRTCConversationStartup(logger: logger)
     }
 
     override func tearDown() {
-        orchestrator = nil
+        startup = nil
         mockDependencyProvider = nil
         mockTokenService = nil
-        mockConnectionManager = nil
+        mockWebRTCConnectionManager = nil
     }
 
     func testExecute_SuccessfulStartup() async throws {
@@ -39,20 +39,19 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
         mockTokenService.mockConnectionDetails = connectionDetails
 
         // Prime the connection manager to succeed immediately when asked to wait
-        mockConnectionManager.succeedAgentReady()
+        mockWebRTCConnectionManager.succeedAgentReady()
 
         let auth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
         var stateChanges = [ConversationStartupState]()
 
         do {
-            let result = try await orchestrator.execute(
+            let result = try await startup.execute(
                 auth: auth,
                 options: .default,
                 provider: mockDependencyProvider,
                 onStateChange: { state in
                     stateChanges.append(state)
-                },
-                onRoomConnected: { _ in }
+                }
             )
 
             XCTAssertEqual(result.agentId, "agent-123")
@@ -65,7 +64,7 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
                 if case .connectingRoom = $0 { return true }; return false
             }))
 
-        } catch StartupFailure.agentTimeout {
+        } catch let failure as StartupFailure where failure.reason == .agentTimeout {
             // Expected in mock env if we don't simulate agent ready signal
             XCTAssertTrue(stateChanges.contains(where: {
                 if case .connectingRoom = $0 { return true }; return false
@@ -81,16 +80,15 @@ final class ConversationStartupOrchestratorTests: XCTestCase {
         let auth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
 
         do {
-            _ = try await orchestrator.execute(
+            _ = try await startup.execute(
                 auth: auth,
                 options: .default,
                 provider: mockDependencyProvider,
-                onStateChange: { _ in },
-                onRoomConnected: { _ in }
+                onStateChange: { _ in }
             )
             XCTFail("Should have thrown error")
         } catch let failure as StartupFailure {
-            if case .token = failure {
+            if case .token = failure.reason {
                 // Success
             } else {
                 XCTFail("Wrong failure type: \(failure)")

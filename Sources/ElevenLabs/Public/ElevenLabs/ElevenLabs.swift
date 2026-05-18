@@ -159,6 +159,27 @@ public enum ElevenLabs {
         return try await startConversation(auth: authConfig, config: updatedConfig)
     }
 
+    /// Start a text-only conversation using a signed WebSocket URL from your backend.
+    ///
+    /// Use this for private/non-public agents in text-only mode. Signed URLs should be generated
+    /// server-side using your ElevenLabs API key.
+    @MainActor
+    public static func startConversation(
+        signedWebSocketURL: String,
+        config: ConversationConfig = .init(conversationOverrides: .init(textOnly: true)),
+        onAgentReady: (@Sendable () -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
+    ) async throws -> Conversation {
+        let authConfig = try ElevenLabsConfiguration.signedWebSocketURL(signedWebSocketURL)
+        var updatedConfig = config
+        var overrides = updatedConfig.conversationOverrides ?? ConversationOverrides()
+        overrides.textOnly = true
+        updatedConfig.conversationOverrides = overrides
+        updatedConfig.onAgentReady = onAgentReady
+        updatedConfig.onDisconnect = onDisconnect
+        return try await startConversation(auth: authConfig, config: updatedConfig)
+    }
+
     /// Advanced: Start a conversation with full authentication control.
     ///
     /// This is the most flexible method that all other convenience methods use internally.
