@@ -29,6 +29,7 @@ public enum ElevenLabs {
     @MainActor
     public static func configure(_ configuration: Configuration) {
         Global.shared.configuration = configuration
+        Dependencies.shared.update(configuration: configuration)
     }
 
     // MARK: - SDK interface

@@ -41,6 +41,27 @@ final class ElevenLabsSDKTests: XCTestCase {
         // This would require exposing the internal configuration for testing
     }
 
+    @MainActor
+    func testConfigureRefreshesTokenServiceWithoutReplacingConnectionManagers() async throws {
+        let webRTCManagerBefore = ObjectIdentifier(Dependencies.shared.webRTCConnectionManager as AnyObject)
+        let webSocketManagerBefore = ObjectIdentifier(Dependencies.shared.webSocketConnectionManager as AnyObject)
+
+        ElevenLabs.configure(ElevenLabs.Configuration(
+            apiEndpoint: URL(string: "https://custom.api.com"),
+            websocketUrl: "wss://custom.websocket",
+            logLevel: .debug
+        ))
+        defer { ElevenLabs.configure(.default) }
+
+        let details = try await Dependencies.shared.tokenService.fetchConnectionDetails(
+            configuration: .conversationToken("test-token")
+        )
+
+        XCTAssertEqual(details.serverUrl, "wss://custom.websocket")
+        XCTAssertEqual(ObjectIdentifier(Dependencies.shared.webRTCConnectionManager as AnyObject), webRTCManagerBefore)
+        XCTAssertEqual(ObjectIdentifier(Dependencies.shared.webSocketConnectionManager as AnyObject), webSocketManagerBefore)
+    }
+
     func testStartConversationWithAgentId() async {
         let config = ConversationConfig()
 

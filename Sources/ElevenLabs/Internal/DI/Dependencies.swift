@@ -18,19 +18,27 @@ protocol ConversationDependencyProvider: AnyObject {
 final class Dependencies: ConversationDependencyProvider {
     static let shared = Dependencies()
 
-    let logger: any Logging
-    let tokenService: any TokenServicing
+    private(set) var logger: any Logging
+    private(set) var tokenService: any TokenServicing
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
-    private init() {
-        let globalConfig = ElevenLabs.Global.shared.configuration
-        logger = SDKLogger(logLevel: globalConfig.logLevel)
-        tokenService = TokenService(configuration: TokenService.Configuration(
-            apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
-            websocketURL: globalConfig.websocketUrl
-        ))
+    private init(configuration: ElevenLabs.Configuration = .default) {
+        logger = SDKLogger(logLevel: configuration.logLevel)
+        tokenService = Self.makeTokenService(configuration: configuration)
         webRTCConnectionManager = WebRTCConnectionManager(logger: logger)
         webSocketConnectionManager = WebSocketConnectionManager(logger: logger)
+    }
+
+    func update(configuration: ElevenLabs.Configuration) {
+        logger = SDKLogger(logLevel: configuration.logLevel)
+        tokenService = Self.makeTokenService(configuration: configuration)
+    }
+
+    private static func makeTokenService(configuration: ElevenLabs.Configuration) -> any TokenServicing {
+        TokenService(configuration: TokenService.Configuration(
+            apiEndpoint: configuration.apiEndpoint?.absoluteString,
+            websocketURL: configuration.websocketUrl
+        ))
     }
 }
