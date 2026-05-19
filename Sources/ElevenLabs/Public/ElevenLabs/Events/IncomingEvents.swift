@@ -65,6 +65,7 @@ public struct AgentResponseMetadataEvent: Sendable {
 public struct AgentChatResponsePartEvent: Sendable {
     public let text: String
     public let type: AgentChatResponsePartType
+    public let eventId: Int
 }
 
 /// Audio alignment data showing character-level timing information

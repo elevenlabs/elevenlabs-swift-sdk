@@ -198,7 +198,8 @@ final class EventParserTests: XCTestCase {
             "type": "agent_chat_response_part",
             "text_response_part": {
                 "text": "",
-                "type": "start"
+                "type": "start",
+                "event_id": 13
             }
         }
         """.data(using: .utf8)!
@@ -212,6 +213,7 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(part.text, "")
         XCTAssertEqual(part.type, .start)
+        XCTAssertEqual(part.eventId, 13)
     }
 
     func testParseAgentChatResponsePartDelta() throws {
@@ -220,7 +222,8 @@ final class EventParserTests: XCTestCase {
             "type": "agent_chat_response_part",
             "text_response_part": {
                 "text": "Hello",
-                "type": "delta"
+                "type": "delta",
+                "event_id": 13
             }
         }
         """.data(using: .utf8)!
@@ -234,6 +237,7 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(part.text, "Hello")
         XCTAssertEqual(part.type, .delta)
+        XCTAssertEqual(part.eventId, 13)
     }
 
     func testParseAgentChatResponsePartStop() throws {
@@ -242,7 +246,8 @@ final class EventParserTests: XCTestCase {
             "type": "agent_chat_response_part",
             "text_response_part": {
                 "text": "",
-                "type": "stop"
+                "type": "stop",
+                "event_id": 13
             }
         }
         """.data(using: .utf8)!
@@ -256,6 +261,7 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(part.text, "")
         XCTAssertEqual(part.type, .stop)
+        XCTAssertEqual(part.eventId, 13)
     }
 
     func testParseAgentChatResponsePartDefaultsToDelta() throws {
@@ -263,7 +269,8 @@ final class EventParserTests: XCTestCase {
         {
             "type": "agent_chat_response_part",
             "text_response_part": {
-                "text": "Test"
+                "text": "Test",
+                "event_id": 13
             }
         }
         """.data(using: .utf8)!
@@ -277,6 +284,7 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(part.text, "Test")
         XCTAssertEqual(part.type, .delta)
+        XCTAssertEqual(part.eventId, 13)
     }
 
     func testParseAgentResponseMetadataEvent() throws {

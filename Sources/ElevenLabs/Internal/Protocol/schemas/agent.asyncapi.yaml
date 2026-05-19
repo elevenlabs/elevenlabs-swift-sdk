@@ -845,13 +845,16 @@ components:
 
     AgentChatResponsePartData:
       type: object
-      required: [text, type]
+      required: [text, type, event_id]
       properties:
         text:
           type: string
           description: Text chunk (empty for start/stop events)
         type:
           $ref: "#/components/schemas/AgentChatResponsePartType"
+        event_id:
+          type: integer
+          description: Identifier shared by all chunks of a single response and by the corresponding agent_response
 
     InterruptionData:
       type: object

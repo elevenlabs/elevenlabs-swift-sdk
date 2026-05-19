@@ -8,7 +8,7 @@ extension Conversation {
     func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
-            appendUserTranscript(e.transcript)
+            insertUserTranscript(content: e.transcript, eventId: e.eventId)
             agentStateManager?.processSignal(.userTranscript)
             options.onUserTranscript?(e.transcript, e.eventId)
 
@@ -16,7 +16,7 @@ extension Conversation {
             agentStateManager?.processSignal(.agentResponse)
 
         case let .agentResponse(e):
-            appendAgentMessage(e.response)
+            upsertAgentMessage(content: e.response, eventId: e.eventId)
             lastAgentEventId = e.eventId
             agentStateManager?.processSignal(.agentResponse)
             options.onAgentResponse?(e.response, e.eventId)
@@ -25,7 +25,7 @@ extension Conversation {
             }
 
         case let .agentResponseCorrection(correction):
-            // Handle agent response corrections
+            upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
             options.onAgentResponseCorrection?(
                 correction.originalAgentResponse,
                 correction.correctedAgentResponse,
@@ -39,7 +39,8 @@ extension Conversation {
             )
 
         case let .agentChatResponsePart(e):
-            handleAgentChatResponsePart(e)
+            let existing = messages.last(where: { $0.role == .agent && $0.eventId == e.eventId })?.content ?? ""
+            upsertAgentMessage(content: existing + e.text, eventId: e.eventId)
 
         case let .audio(audioEvent):
             latestAudioEvent = audioEvent
@@ -111,52 +112,35 @@ extension Conversation {
         }
     }
 
-    func handleAgentChatResponsePart(_ event: AgentChatResponsePartEvent) {
-        switch event.type {
-        case .start:
-            let newMessage = Message(
-                id: UUID().uuidString,
+    /// Inserts the user transcript before the agent message with the same `eventId`
+    /// if one exists, since the agent's response may be received before the transcript.
+    private func insertUserTranscript(content: String, eventId: Int) {
+        let message = Message(
+            id: UUID().uuidString,
+            role: .user,
+            content: content,
+            timestamp: Date(),
+            eventId: eventId
+        )
+        if let agentIdx = messages.firstIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
+            messages.insert(message, at: agentIdx)
+        } else {
+            messages.append(message)
+        }
+    }
+
+    private func upsertAgentMessage(content: String, eventId: Int) {
+        if let idx = messages.lastIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
+            let existing = messages[idx]
+            messages[idx] = Message(
+                id: existing.id,
                 role: .agent,
-                content: event.text,
-                timestamp: Date()
+                content: content,
+                timestamp: existing.timestamp,
+                eventId: eventId
             )
-            currentStreamingMessage = newMessage
-            messages.append(newMessage)
-
-        case .delta:
-            guard let streamingMessage = currentStreamingMessage else {
-                handleAgentChatResponsePart(
-                    AgentChatResponsePartEvent(text: event.text, type: .start)
-                )
-                return
-            }
-
-            messages.removeAll { $0.id == streamingMessage.id }
-            let updatedContent = streamingMessage.content + event.text
-            let updatedMessage = Message(
-                id: streamingMessage.id,
-                role: .agent,
-                content: updatedContent,
-                timestamp: streamingMessage.timestamp
-            )
-            currentStreamingMessage = updatedMessage
-            messages.append(updatedMessage)
-
-        case .stop:
-            if let streamingMessage = currentStreamingMessage {
-                if !event.text.isEmpty {
-                    messages.removeAll { $0.id == streamingMessage.id }
-                    let finalContent = streamingMessage.content + event.text
-                    let finalMessage = Message(
-                        id: streamingMessage.id,
-                        role: .agent,
-                        content: finalContent,
-                        timestamp: streamingMessage.timestamp
-                    )
-                    messages.append(finalMessage)
-                }
-            }
-            currentStreamingMessage = nil
+        } else {
+            appendMessage(role: .agent, content: content, eventId: eventId)
         }
     }
 }
