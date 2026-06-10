@@ -29,6 +29,10 @@ servers:
     url: wss://api.in.residency.elevenlabs.io
     protocol: ws
     description: India residency WebSocket server for data locality
+  sg-residency:
+    url: wss://api.sg.residency.elevenlabs.io
+    protocol: ws
+    description: Singapore residency WebSocket server for data locality
   webrtc:
     url: wss://livekit.rtc.elevenlabs.io
     protocol: ws
