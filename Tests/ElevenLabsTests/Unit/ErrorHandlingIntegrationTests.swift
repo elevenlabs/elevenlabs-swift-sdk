@@ -48,7 +48,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -116,7 +116,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -191,7 +191,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -251,7 +251,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             )
 
             let conversation = Conversation(
-                dependencies: Task { Dependencies.shared },
+                dependencyProvider: Dependencies.shared,
                 options: options
             )
 
@@ -298,7 +298,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -348,7 +348,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -392,7 +392,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation
@@ -475,7 +475,7 @@ extension ErrorHandlingIntegrationTests {
         )
 
         let conversation = Conversation(
-            dependencies: Task { Dependencies.shared },
+            dependencyProvider: Dependencies.shared,
             options: options
         )
         self.conversation = conversation

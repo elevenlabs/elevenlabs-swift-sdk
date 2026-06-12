@@ -29,6 +29,7 @@ public enum ElevenLabs {
     @MainActor
     public static func configure(_ configuration: Configuration) {
         Global.shared.configuration = configuration
+        Dependencies.shared.update(configuration: configuration)
     }
 
     // MARK: - SDK interface
@@ -207,8 +208,7 @@ public enum ElevenLabs {
     /// Creates a new Conversation instance with proper dependency injection.
     @MainActor
     private static func createConversation(options: ConversationOptions = .default) -> Conversation {
-        let depsTask = Task { Dependencies.shared }
-        return Conversation(dependencies: depsTask, options: options)
+        Conversation(dependencyProvider: Dependencies.shared, options: options)
     }
 
     // MARK: - Re-exports

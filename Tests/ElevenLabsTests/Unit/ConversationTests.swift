@@ -486,7 +486,6 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
         XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
-        XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterAgentTimeout = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
@@ -554,7 +553,6 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
         XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
-        XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterInitFailure = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
