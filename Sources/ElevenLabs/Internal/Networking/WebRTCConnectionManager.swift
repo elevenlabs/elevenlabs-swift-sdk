@@ -153,7 +153,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         )
         self.eventDelegate = eventDelegate
 
-        let room = Room()
+        let room = Room(roomOptions: RoomOptions(singlePeerConnection: true))
         self.room = room
         room.delegates.add(delegate: eventDelegate)
         room.delegates.add(delegate: readinessDelegate)
