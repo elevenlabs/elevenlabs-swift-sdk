@@ -214,7 +214,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
 /// `RoomDelegate` that forwards data, remote speaking, and remote-disconnect events
 /// (agent leaving or room disconnect) to manager-supplied closures.
-private final class LiveKitRoomEventDelegate: RoomDelegate {
+final class LiveKitRoomEventDelegate: RoomDelegate {
     private let onData: @Sendable (Data) -> Void
     private let onRemoteSpeaking: @Sendable (Bool) -> Void
     private let onRemoteDisconnect: @Sendable () async -> Void
@@ -236,9 +236,9 @@ private final class LiveKitRoomEventDelegate: RoomDelegate {
         onData(data)
     }
 
-    nonisolated func room(_: Room, participant: Participant, didUpdateIsSpeaking isSpeaking: Bool) {
-        guard participant is RemoteParticipant else { return }
-        onRemoteSpeaking(isSpeaking)
+    nonisolated func room(_: Room, didUpdateSpeakingParticipants participants: [Participant]) {
+        // The agent is a remote participant, so any active remote speaker means it's speaking.
+        onRemoteSpeaking(participants.contains { $0 is RemoteParticipant })
     }
 
     nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
