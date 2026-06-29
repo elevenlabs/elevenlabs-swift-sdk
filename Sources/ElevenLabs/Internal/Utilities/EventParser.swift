@@ -131,7 +131,8 @@ enum EventParser {
                let toolName = event["tool_name"] as? String,
                let toolCallId = event["tool_call_id"] as? String,
                let parameters = event["parameters"] as? [String: Any],
-               let eventId = event["event_id"] as? Int
+               let eventId = event["event_id"] as? Int,
+               let expectsResponse = event["expects_response"] as? Bool
             {
                 // Convert parameters to JSON data for Sendable compliance
                 if let parametersData = try? JSONSerialization.data(withJSONObject: parameters) {
@@ -140,7 +141,8 @@ enum EventParser {
                             toolName: toolName,
                             toolCallId: toolCallId,
                             parametersData: parametersData,
-                            eventId: eventId
+                            eventId: eventId,
+                            expectsResponse: expectsResponse
                         )
                     )
                 }
@@ -267,15 +269,12 @@ enum EventParser {
                 )
             }
 
-        case "error":
-            if let event = json["error_event"] as? [String: Any] {
-                let code = event["code"] as? Int ?? 1011
-                let message = event["message"] as? String
-                return .error(ErrorEvent(code: code, message: message))
-            }
-            let code = json["code"] as? Int ?? 1011
-            let message = json["message"] as? String
-            return .error(ErrorEvent(code: code, message: message))
+        case "client_error":
+            let event = json["error_event"] as? [String: Any]
+            let code = event?["code"] as? Int ?? 1011
+            let message = event?["message"] as? String
+            let errorName = event?["error_name"] as? String
+            return .error(ErrorEvent(code: code, message: message, errorName: errorName))
 
         default:
             throw EventParseError.unknownEventType(type)

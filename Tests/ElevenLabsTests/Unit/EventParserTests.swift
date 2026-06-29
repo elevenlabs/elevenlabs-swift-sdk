@@ -91,7 +91,8 @@ final class EventParserTests: XCTestCase {
                 "tool_call_id": "tool123",
                 "tool_name": "weather",
                 "parameters": {"city": "London"},
-                "event_id": 123
+                "event_id": 123,
+                "expects_response": false
             }
         }
         """.data(using: .utf8)!
@@ -105,6 +106,48 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(toolCall.toolCallId, "tool123")
         XCTAssertEqual(toolCall.toolName, "weather")
+        XCTAssertFalse(toolCall.expectsResponse)
+    }
+
+    func testParseClientToolCallEventExpectsResponse() throws {
+        let json = """
+        {
+            "type": "client_tool_call",
+            "client_tool_call": {
+                "tool_call_id": "tool123",
+                "tool_name": "weather",
+                "parameters": {"city": "London"},
+                "event_id": 123,
+                "expects_response": true
+            }
+        }
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .clientToolCall(toolCall) = event else {
+            XCTFail("Expected clientToolCall event")
+            return
+        }
+
+        XCTAssertTrue(toolCall.expectsResponse)
+    }
+
+    func testParseClientErrorEvent() throws {
+        let json = """
+        {"type":"client_error","error_event":{"code":1008,"error_name":"invalid_api_key","message":"Invalid API key"}}
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .error(errorEvent) = event else {
+            XCTFail("Expected error event")
+            return
+        }
+
+        XCTAssertEqual(errorEvent.code, 1008)
+        XCTAssertEqual(errorEvent.errorName, "invalid_api_key")
+        XCTAssertEqual(errorEvent.message, "Invalid API key")
     }
 
     func testParseMCPConnectionStatusEvent() throws {

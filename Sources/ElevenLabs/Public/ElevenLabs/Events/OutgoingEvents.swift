@@ -58,15 +58,37 @@ public struct FeedbackEvent: Sendable {
     }
 }
 
+/// Categorizes a client tool failure for the orchestrator.
+public enum ClientToolErrorType: String, Sendable {
+    case userRejected = "user_rejected"
+    case externalServer = "external_server"
+    case externalClient = "external_client"
+    case customerAuth = "customer_auth"
+    case clientTimeout = "client_timeout"
+    case unknown
+}
+
 /// Client tool execution result
 public struct ClientToolResultEvent: Sendable {
     public let toolCallId: String
     public let result: String
     public let isError: Bool
+    public let errorType: ClientToolErrorType?
 
-    public init(toolCallId: String, result: Any, isError: Bool = false) throws {
+    @available(
+        *,
+        deprecated,
+        message: "Use init(toolCallId:result:) with a String, or Conversation.sendToolResult with an Encodable value."
+    )
+    public init(
+        toolCallId: String,
+        result: Any,
+        isError: Bool = false,
+        errorType: ClientToolErrorType? = nil
+    ) throws {
         self.toolCallId = toolCallId
-        self.isError = isError
+        self.isError = isError || errorType != nil
+        self.errorType = errorType
 
         if let stringResult = result as? String {
             self.result = stringResult
@@ -85,10 +107,17 @@ public struct ClientToolResultEvent: Sendable {
         }
     }
 
-    public init(toolCallId: String, result: String, isError: Bool = false) {
+    /// `result` is a simple string or a JSON string
+    public init(
+        toolCallId: String,
+        result: String,
+        isError: Bool = false,
+        errorType: ClientToolErrorType? = nil
+    ) {
         self.toolCallId = toolCallId
         self.result = result
-        self.isError = isError
+        self.isError = isError || errorType != nil
+        self.errorType = errorType
     }
 }
 
