@@ -29,6 +29,7 @@ enum EventSerializer {
             json["tool_call_id"] = resultEvent.toolCallId
             json["result"] = resultEvent.result
             json["is_error"] = resultEvent.isError
+            json["error_type"] = resultEvent.errorType?.rawValue
 
         case let .contextualUpdate(updateEvent):
             json["type"] = "contextual_update"

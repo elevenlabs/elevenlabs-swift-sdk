@@ -116,6 +116,21 @@ public struct ClientToolCallEvent: Sendable {
     public let toolCallId: String
     public let parametersData: Data // Store as JSON data to be Sendable
     public let eventId: Int
+    public let expectsResponse: Bool
+
+    public init(
+        toolName: String,
+        toolCallId: String,
+        parametersData: Data,
+        eventId: Int,
+        expectsResponse: Bool
+    ) {
+        self.toolName = toolName
+        self.toolCallId = toolCallId
+        self.parametersData = parametersData
+        self.eventId = eventId
+        self.expectsResponse = expectsResponse
+    }
 
     /// Get parameters as dictionary (not Sendable, use carefully)
     public func getParameters() throws -> [String: Any] {
@@ -191,13 +206,15 @@ public struct ASRInitiationMetadataEvent: Sendable {
     }
 }
 
-//// Server error event with code and message.
+/// Server error event with code, optional name, and message.
 public struct ErrorEvent: Sendable, Equatable {
     public let code: Int
     public let message: String?
+    public let errorName: String?
 
-    public init(code: Int, message: String? = nil) {
+    public init(code: Int, message: String? = nil, errorName: String? = nil) {
         self.code = code
         self.message = message
+        self.errorName = errorName
     }
 }

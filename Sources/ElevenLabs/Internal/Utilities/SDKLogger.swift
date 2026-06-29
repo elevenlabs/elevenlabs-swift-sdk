@@ -54,7 +54,11 @@ struct SDKLogger: Logging {
         let prefix = "[ElevenLabs]"
         let finalMessage: String
         if let context, !context.isEmpty {
-            let contextString = context.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+            // ensure stable order in logs
+            let contextString = context
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: " ")
             finalMessage = "\(prefix) [\(contextString)] \(message)"
         } else {
             finalMessage = "\(prefix) \(message)"

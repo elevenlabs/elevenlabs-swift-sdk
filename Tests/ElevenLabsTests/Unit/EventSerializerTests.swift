@@ -42,14 +42,12 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(json["is_error"] as? Bool, false)
     }
 
-    func testSerializeClientToolResultWithJSON() throws {
-        // Test with dictionary result that will be converted to JSON string
-        let dictResult = ["temperature": "25°C", "condition": "Sunny"]
-        let event = try OutgoingEvent.clientToolResult(
+    func testSerializeClientToolResultWithErrorType() throws {
+        let event = OutgoingEvent.clientToolResult(
             ClientToolResultEvent(
-                toolCallId: "tool456",
-                result: dictResult,
-                isError: false
+                toolCallId: "tool-rejected",
+                result: "User denied location access",
+                errorType: .userRejected
             )
         )
 
@@ -57,33 +55,10 @@ final class EventSerializerTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         XCTAssertEqual(json["type"] as? String, "client_tool_result")
-        XCTAssertEqual(json["tool_call_id"] as? String, "tool456")
-        let resultString = json["result"] as? String
-        XCTAssertNotNil(resultString)
-        if let resultString {
-            let parsedResult = try JSONSerialization.jsonObject(with: XCTUnwrap(resultString.data(using: .utf8))) as? [String: String]
-            XCTAssertEqual(parsedResult?["temperature"], "25°C")
-            XCTAssertEqual(parsedResult?["condition"], "Sunny")
-        }
-        XCTAssertEqual(json["is_error"] as? Bool, false)
-    }
-
-    func testSerializeClientToolResultWithNumber() throws {
-        let event = try OutgoingEvent.clientToolResult(
-            ClientToolResultEvent(
-                toolCallId: "tool789",
-                result: 42,
-                isError: false
-            )
-        )
-
-        let data = try EventSerializer.serializeOutgoingEvent(event)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-
-        XCTAssertEqual(json["type"] as? String, "client_tool_result")
-        XCTAssertEqual(json["tool_call_id"] as? String, "tool789")
-        XCTAssertEqual(json["result"] as? String, "42")
-        XCTAssertEqual(json["is_error"] as? Bool, false)
+        XCTAssertEqual(json["tool_call_id"] as? String, "tool-rejected")
+        // errorType implies is_error even when not set explicitly.
+        XCTAssertEqual(json["is_error"] as? Bool, true)
+        XCTAssertEqual(json["error_type"] as? String, "user_rejected")
     }
 
     func testSerializePong() throws {

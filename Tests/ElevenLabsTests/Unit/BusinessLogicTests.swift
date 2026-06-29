@@ -37,7 +37,8 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             toolName: "test_tool",
             toolCallId: "call_123",
             parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
-            eventId: 1
+            eventId: 1,
+            expectsResponse: false
         )
 
         await conversation._testing_handleIncomingEvent(.clientToolCall(toolCall))
@@ -57,6 +58,30 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         let lastPayloadString = String(data: lastPayload, encoding: .utf8) ?? ""
         XCTAssertTrue(lastPayloadString.contains("call_123"))
         XCTAssertTrue(lastPayloadString.contains("success"))
+    }
+
+    func testSendToolResultEncodesEncodableResult() async throws {
+        struct Weather: Encodable {
+            let temperature: Int
+            let condition: String
+        }
+        mockWebRTCConnectionManager.room = Room()
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+
+        try await conversation.sendToolResult(
+            for: "call_42",
+            result: Weather(temperature: 25, condition: "Sunny")
+        )
+
+        let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
+        let envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        XCTAssertEqual(envelope["type"] as? String, "client_tool_result")
+        // The Encodable value is JSON-encoded into the `result` string.
+        let resultString = try XCTUnwrap(envelope["result"] as? String)
+        let parsed = try JSONSerialization.jsonObject(with: XCTUnwrap(resultString.data(using: .utf8))) as? [String: Any]
+        XCTAssertEqual(parsed?["temperature"] as? Int, 25)
+        XCTAssertEqual(parsed?["condition"] as? String, "Sunny")
     }
 
     // MARK: - Streaming Message Tests

@@ -1,1231 +1,1429 @@
-asyncapi: "2.6.0"
+asyncapi: 2.6.0
 info:
-  title: ElevenLabs Agents Contract
-  version: "1.0.0"
-  description: |
-    Real-time Agents with voice synthesis and transcription.
-    This WebSocket API enables bidirectional audio streaming and text messaging
-    between clients and AI agents.
-
-    ## Event Flow
-    - Audio chunks are sent without type field for performance (detected by presence of user_audio_chunk)
-    - All other messages use explicit type field for routing
-    - Client events can be selectively enabled via conversation config
-  contact:
-    name: ElevenLabs API Support
-    url: https://elevenlabs.io/docs
-    email: support@elevenlabs.io
-
+  title: ElevenLabs real-time API
+  description: ElevenLabs real-time API for real-time conversational AI interactions
+  license:
+    name: MIT License
+  version: 1.1.0
 servers:
-  production:
+  Production:
     url: wss://api.elevenlabs.io
-    protocol: ws
-    description: Production WebSocket server (US/Global)
-  eu-residency:
+    protocol: wss
+    description: Production (default). Routed to the closest region.
+  Production-US:
+    url: wss://api.us.elevenlabs.io
+    protocol: wss
+    description: Production routed only to the US region.
+  Production-EU:
     url: wss://api.eu.residency.elevenlabs.io
-    protocol: ws
-    description: EU residency WebSocket server for GDPR compliance
-  in-residency:
+    protocol: wss
+    description: Production route for customers with EU data residency.
+  Production-India:
     url: wss://api.in.residency.elevenlabs.io
-    protocol: ws
-    description: India residency WebSocket server for data locality
-  sg-residency:
+    protocol: wss
+    description: Production route for customers with India data residency.
+  Production-Singapore:
     url: wss://api.sg.residency.elevenlabs.io
-    protocol: ws
-    description: Singapore residency WebSocket server for data locality
-  webrtc:
-    url: wss://livekit.rtc.elevenlabs.io
-    protocol: ws
-    description: WebRTC/LiveKit server for real-time communication
-  development:
-    url: ws://localhost:8080
-    protocol: ws
-    description: Local development server
-
+    protocol: wss
+    description: Production route for customers with Singapore data residency.
+tags:
+- name: conversationalAI
+  description: APIs related to conversational AI functionality
 channels:
-  AgentMessages:
-    description: Main WebSocket channel for conversational AI
+  /v1/convai/conversation:
+    x-fern-audiences:
+    - convai
+    bindings:
+      ws:
+        query:
+          type: object
+          required:
+          - agent_id
+          properties:
+            agent_id:
+              description: The unique identifier of the agent to converse with.
+              schema:
+                type: string
+    description: Establish a WebSocket connection for real-time conversations with an AI agent.
     publish:
-      summary: Messages sent from server to client
+      summary: Messages sent from the client to the server.
+      description: Defines the message types that can be sent from client to server
       message:
         oneOf:
-          # Server -> Client messages
-          - $ref: "#/components/messages/Audio"
-          - $ref: "#/components/messages/UserTranscript"
-          - $ref: "#/components/messages/TentativeUserTranscript"
-          - $ref: "#/components/messages/AgentResponse"
-          - $ref: "#/components/messages/AgentResponseCorrection"
-          - $ref: "#/components/messages/AgentChatResponsePart"
-          - $ref: "#/components/messages/Interruption"
-          - $ref: "#/components/messages/ConversationMetadata"
-          - $ref: "#/components/messages/ClientToolCallMessage"
-          - $ref: "#/components/messages/AgentToolResponseMessage"
-          - $ref: "#/components/messages/MCPToolCall"
-          - $ref: "#/components/messages/MCPConnectionStatusMessage"
-          - $ref: "#/components/messages/VADScore"
-          - $ref: "#/components/messages/Ping"
-          - $ref: "#/components/messages/ASRInitiationMetadata"
-          - $ref: "#/components/messages/InternalTurnProbability"
-          - $ref: "#/components/messages/InternalTentativeAgentResponse"
-          - $ref: "#/components/messages/ErrorMessage"
+        - $ref: '#/components/messages/UserAudioChunk'
+        - $ref: '#/components/messages/Feedback'
+        - $ref: '#/components/messages/UserMessage'
+        - $ref: '#/components/messages/UserActivity'
+        - $ref: '#/components/messages/MultimodalMessage'
+        - $ref: '#/components/messages/Pong'
+        - $ref: '#/components/messages/ClientToolResult'
+        - $ref: '#/components/messages/McpToolApprovalResult'
+        - $ref: '#/components/messages/ContextualUpdate'
+        - $ref: '#/components/messages/ConversationInitiationClientData'
     subscribe:
-      summary: Messages received from client to server
+      summary: Messages sent from the server to the client.
+      description: Defines the message types that can be received by the client from the server
       message:
         oneOf:
-          # Client -> Server messages
-          - $ref: "#/components/messages/UserAudio"
-          - $ref: "#/components/messages/Pong"
-          - $ref: "#/components/messages/UserMessage"
-          - $ref: "#/components/messages/UserActivity"
-          - $ref: "#/components/messages/UserFeedback"
-          - $ref: "#/components/messages/ClientToolResult"
-          - $ref: "#/components/messages/MCPToolApprovalResult"
-          - $ref: "#/components/messages/ContextualUpdate"
-          - $ref: "#/components/messages/ConversationInitiation"
+        - $ref: '#/components/messages/ConversationInitiationMetadata'
+        - $ref: '#/components/messages/AgentResponseComplete'
+        - $ref: '#/components/messages/McpToolCall'
+        - $ref: '#/components/messages/ClientError'
+        - $ref: '#/components/messages/GuardrailTriggered'
+        - $ref: '#/components/messages/UserTranscript'
+        - $ref: '#/components/messages/AgentResponse'
+        - $ref: '#/components/messages/AgentResponseCorrection'
+        - $ref: '#/components/messages/AgentResponseMetadata'
+        - $ref: '#/components/messages/AudioResponse'
+        - $ref: '#/components/messages/Interruption'
+        - $ref: '#/components/messages/VadScore'
+        - $ref: '#/components/messages/AgentChatResponsePart'
+        - $ref: '#/components/messages/ClientToolCall'
+        - $ref: '#/components/messages/AgentToolResponse'
+        - $ref: '#/components/messages/AgentToolResponseFullPayload'
+        - $ref: '#/components/messages/AgentToolRequest'
+        - $ref: '#/components/messages/Ping'
+        - $ref: '#/components/messages/McpConnectionStatus'
+    x-fern-examples:
+    - messages:
+      - type: publish
+        messageId: ConversationInitiationClientData
+        value:
+          type: conversation_initiation_client_data
+          conversation_config_override:
+            agent:
+              prompt:
+                prompt: You are a helpful customer support agent named Alexis.
+              first_message: Hi, I'm Alexis from ElevenLabs support. How can I help you today?
+              language: en
+            tts:
+              voice_id: 21m00Tcm4TlvDq8ikWAM
+          custom_llm_extra_body:
+            temperature: 0.7
+            max_tokens: 150
+          dynamic_variables:
+            user_name: John
+            account_type: premium
+      - type: subscribe
+        messageId: ConversationInitiationMetadata
+        value:
+          type: conversation_initiation_metadata
+          conversation_initiation_metadata_event:
+            conversation_id: conv_123456789
+            agent_output_audio_format: pcm_16000
+            user_input_audio_format: pcm_16000
+      - type: publish
+        messageId: UserAudioChunk
+        value:
+          user_audio_chunk: base64EncodedAudioData==
+      - type: subscribe
+        messageId: VadScore
+        value:
+          type: vad_score
+          vad_score_event:
+            vad_score: 0.95
+      - type: subscribe
+        messageId: UserTranscript
+        value:
+          type: user_transcript
+          user_transcription_event:
+            user_transcript: I need help with my voice cloning project.
+            event_id: 42
+      - type: subscribe
+        messageId: AgentResponse
+        value:
+          type: agent_response
+          agent_response_event:
+            agent_response: I'd be happy to help with your voice cloning project. Could you tell me what specific aspects
+              you need assistance with?
+            event_id: 43
+      - type: publish
+        messageId: Feedback
+        value:
+          type: feedback
+          score: like
+          event_id: 43
+      - type: subscribe
+        messageId: AudioResponse
+        value:
+          type: audio
+          audio_event:
+            audio_base_64: base64EncodedAudioResponse==
+            event_id: 1
+            alignment:
+              chars:
+              - H
+              - e
+              - l
+              - l
+              - o
+              char_durations_ms:
+              - 50
+              - 30
+              - 40
+              - 40
+              - 60
+              char_start_times_ms:
+              - 0
+              - 50
+              - 80
+              - 120
+              - 160
+      - type: subscribe
+        messageId: Ping
+        value:
+          type: ping
+          ping_event:
+            event_id: 12345
+            ping_ms: 50
+      - type: publish
+        messageId: Pong
+        value:
+          type: pong
+          event_id: 12345
+      - type: subscribe
+        messageId: ClientToolCall
+        value:
+          type: client_tool_call
+          client_tool_call:
+            tool_name: check_account_status
+            tool_call_id: tool_call_123
+            parameters:
+              user_id: user_123
+            event_id: 44
+            expects_response: true
+      - type: publish
+        messageId: ClientToolResult
+        value:
+          type: client_tool_result
+          tool_call_id: tool_call_123
+          result: Account is active and in good standing
+          is_error: false
+      - type: publish
+        messageId: ContextualUpdate
+        value:
+          type: contextual_update
+          text: User is viewing the pricing page
+      - type: publish
+        messageId: UserMessage
+        value:
+          type: user_message
+          text: I would like to upgrade my account
+      - type: publish
+        messageId: UserActivity
+        value:
+          type: user_activity
+      - type: publish
+        messageId: MultimodalMessage
+        value:
+          type: multimodal_message
+          text:
+            type: user_message
+            text: What is this file?
+          file:
+            type: file_input
+            file_id: file_12345
 components:
   messages:
-    # ===== CLIENT → SERVER MESSAGES =====
-
-    UserAudio:
-      name: UserAudio
-      title: User Audio Chunk
-      summary: Audio data from user (no type field for performance optimization)
-      contentType: application/json
+    ConversationInitiationMetadata:
+      name: Conversation Initiation Metadata
+      description: Initial metadata and configuration details for a new conversation, only sent once.
       payload:
-        $ref: "#/components/schemas/UserAudioPayload"
-
-    Pong:
-      name: PongClientToOrchestratorEvent
-      title: Pong Response
-      summary: Response to server ping for latency measurement
-      contentType: application/json
+        $ref: '#/components/schemas/ConversationInitiationMetadata'
+    AgentResponseComplete:
+      name: Agent Response Complete
+      description: Notification that the agent has finished generating a complete response.
       payload:
-        $ref: "#/components/schemas/PongPayload"
-
-    UserMessage:
-      name: UserMessageClientToOrchestratorEvent
-      title: User Text Message
-      summary: Text message from user
-      contentType: application/json
+        $ref: '#/components/schemas/AgentResponseComplete'
+    McpToolCall:
+      name: Mcp Tool Call
+      description: MCP tool call event with state updates (loading, awaiting_approval, success, failure).
       payload:
-        $ref: "#/components/schemas/UserMessagePayload"
-
-    UserActivity:
-      name: UserActivityClientToOrchestratorEvent
-      title: User Activity Signal
-      summary: Signal that user is active (typing, etc.)
-      contentType: application/json
+        $ref: '#/components/schemas/McpToolCall'
+    ClientError:
+      name: Client Error
+      description: Error event sent when an error occurs during the conversation.
       payload:
-        $ref: "#/components/schemas/UserActivityPayload"
-
-    UserFeedback:
-      name: UserFeedbackClientToOrchestratorEvent
-      title: User Feedback
-      summary: User feedback on agent response
-      contentType: application/json
+        $ref: '#/components/schemas/ClientError'
+    GuardrailTriggered:
+      name: Guardrail Triggered
+      description: Notification that a guardrail was triggered during the conversation.
       payload:
-        $ref: "#/components/schemas/UserFeedbackPayload"
-
-    ClientToolResult:
-      name: ClientToolResultClientToOrchestratorEvent
-      title: Client Tool Result
-      summary: Result of client-side tool execution
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/ClientToolResultPayload"
-
-    MCPToolApprovalResult:
-      name: MCPToolApprovalResultClientToOrchestratorEvent
-      title: MCP Tool Approval Result
-      summary: User approval/rejection of MCP tool execution
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/MCPToolApprovalResultPayload"
-
-    ContextualUpdate:
-      name: ContextualUpdateClientToOrchestratorEvent
-      title: Contextual Update
-      summary: Non-interrupting context update
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/ContextualUpdatePayload"
-
-    ConversationInitiation:
-      name: ConversationInitiationClientToOrchestratorEvent
-      title: Conversation Initiation
-      summary: Initial configuration and overrides
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/ConversationInitiationPayload"
-
-    # ===== SERVER → CLIENT MESSAGES =====
-
-    Audio:
-      name: AudioClientEvent
-      title: Audio Output
-      summary: Synthesized audio from agent
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/AudioPayload"
-
+        $ref: '#/components/schemas/GuardrailTriggered'
     UserTranscript:
-      name: UserTranscriptionClientEvent
-      title: User Transcript
-      summary: Final transcription of user speech
-      contentType: application/json
+      name: User Transcript
+      description: Real-time transcriptions of user speech input.
       payload:
-        $ref: "#/components/schemas/UserTranscriptPayload"
-
-    TentativeUserTranscript:
-      name: TentativeUserTranscriptionClientEvent
-      title: Tentative User Transcript
-      summary: In-progress transcription (may change)
-      contentType: application/json
-      payload:
-        $ref: "#/components/schemas/TentativeUserTranscriptPayload"
-
+        $ref: '#/components/schemas/UserTranscript'
     AgentResponse:
-      name: AgentResponseClientEvent
-      title: Agent Response
-      summary: Agent's text response
-      contentType: application/json
+      name: Agent Response
+      description: Text responses generated by the AI agent.
       payload:
-        $ref: "#/components/schemas/AgentResponsePayload"
-
+        $ref: '#/components/schemas/AgentResponse'
     AgentResponseCorrection:
-      name: AgentResponseCorrectionClientEvent
-      title: Agent Response Correction
-      summary: Corrected response after interruption
-      contentType: application/json
+      name: Agent Response Correction
+      description: Correction to a previous agent response.
       payload:
-        $ref: "#/components/schemas/AgentResponseCorrectionPayload"
-
-    AgentChatResponsePart:
-      name: AgentChatResponsePartClientEvent
-      title: Agent Chat Response Part
-      summary: Streaming text chunk from agent (text-only mode)
-      contentType: application/json
+        $ref: '#/components/schemas/AgentResponseCorrection'
+    AgentResponseMetadata:
+      name: Agent Response Metadata
+      description: Metadata associated with an agent response, such as custom LLM response metadata.
       payload:
-        $ref: "#/components/schemas/AgentChatResponsePartPayload"
-
+        $ref: '#/components/schemas/AgentResponseMetadata'
+    AudioResponse:
+      name: Audio Response
+      description: Synthesized audio chunks of the agent's speech response.
+      payload:
+        $ref: '#/components/schemas/AudioResponse'
     Interruption:
-      name: InterruptionEvent
-      title: Interruption
-      summary: User interrupted agent speech
-      contentType: application/json
+      name: Interruption
+      description: Notification that the agent's current response was interrupted.
       payload:
-        $ref: "#/components/schemas/InterruptionPayload"
-
-    ConversationMetadata:
-      name: ConversationInitiationMetadataEvent
-      title: Conversation Metadata
-      summary: Initial connection metadata
-      contentType: application/json
+        $ref: '#/components/schemas/Interruption'
+    VadScore:
+      name: VAD Score
+      description: Voice Activity Detection scoring information.
       payload:
-        $ref: "#/components/schemas/ConversationMetadataPayload"
-
-    ClientToolCallMessage:
-      name: ClientToolCallClientEvent
-      title: Client Tool Call
-      summary: Tool for client to execute
-      contentType: application/json
+        $ref: '#/components/schemas/VadScore'
+    AgentChatResponsePart:
+      name: Agent Chat Response Part
+      description: Streaming text chunks of an agent's chat response.
       payload:
-        $ref: "#/components/schemas/ClientToolCallPayload"
-
-    AgentToolResponseMessage:
-      name: AgentToolResponseClientEvent
-      title: Agent Tool Response
-      summary: Result of agent tool execution
-      contentType: application/json
+        $ref: '#/components/schemas/AgentChatResponsePart'
+    ClientToolCall:
+      name: Client Tool Call
+      description: Requests from server for client to execute specific tool functions.
       payload:
-        $ref: "#/components/schemas/AgentToolResponsePayload"
-
-    MCPToolCall:
-      name: MCPToolCallClientEvent
-      title: MCP Tool Call
-      summary: Model Context Protocol tool call
-      contentType: application/json
+        $ref: '#/components/schemas/ClientToolCall'
+    AgentToolResponse:
+      name: Agent Tool Response
+      description: Response from an agent tool execution including status and metadata.
       payload:
-        $ref: "#/components/schemas/MCPToolCallPayload"
-
-    MCPConnectionStatusMessage:
-      name: MCPConnectionStatusClientEvent
-      title: MCP Connection Status
-      summary: Status of MCP service connections
-      contentType: application/json
+        $ref: '#/components/schemas/AgentToolResponse'
+    AgentToolResponseFullPayload:
+      name: Agent Tool Response Full Payload
+      description: Tool response including the tool's full result payload as a string.
       payload:
-        $ref: "#/components/schemas/MCPConnectionStatusPayload"
-
-    VADScore:
-      name: VADScoreClientEvent
-      title: VAD Score
-      summary: Voice Activity Detection score
-      contentType: application/json
+        $ref: '#/components/schemas/AgentToolResponseFullPayload'
+    AgentToolRequest:
+      name: Agent Tool Request
+      description: Notification that the agent is requesting a tool to be executed.
       payload:
-        $ref: "#/components/schemas/VADScorePayload"
-
+        $ref: '#/components/schemas/AgentToolRequest'
     Ping:
-      name: PingEvent
-      title: Ping
-      summary: Keepalive ping from server
-      contentType: application/json
+      name: Ping
+      description: Server-initiated ping messages for measuring connection latency.
       payload:
-        $ref: "#/components/schemas/PingPayload"
-
-    ASRInitiationMetadata:
-      name: ASRInitiationMetadataEvent
-      title: ASR Initiation Metadata
-      summary: ASR initialization metadata
-      contentType: application/json
+        $ref: '#/components/schemas/Ping'
+    McpConnectionStatus:
+      name: Mcp Connection Status
+      description: MCP connection status update with integration connection states.
       payload:
-        $ref: "#/components/schemas/ASRInitiationMetadataPayload"
-
-    InternalTurnProbability:
-      name: TurnProbabilityInternalClientEvent
-      title: Internal Turn Probability
-      summary: Internal turn probability score (not for public use)
-      contentType: application/json
+        $ref: '#/components/schemas/McpConnectionStatus'
+    UserAudioChunk:
+      name: User Audio Chunk
+      description: Send audio data chunks from the user to the server for processing.
       payload:
-        $ref: "#/components/schemas/InternalTurnProbabilityPayload"
-
-    InternalTentativeAgentResponse:
-      name: TentativeAgentResponseInternalClientEvent
-      title: Internal Tentative Agent Response
-      summary: Internal tentative agent response (not for public use)
-      contentType: application/json
+        $ref: '#/components/schemas/UserAudioChunk'
+    Feedback:
+      name: Feedback
+      description: Feedback score for a specific agent response event.
       payload:
-        $ref: "#/components/schemas/InternalTentativeAgentResponsePayload"
-
-    # ===== ERROR MESSAGES =====
-
-    ErrorMessage:
-      name: ErrorClientEvent
-      title: Error Message
-      summary: Error event sent when connection is closing due to an error
-      contentType: application/json
+        $ref: '#/components/schemas/Feedback'
+    UserMessage:
+      name: User Message
+      description: Text message sent by the user to the conversation.
       payload:
-        $ref: "#/components/schemas/ErrorPayload"
-
+        $ref: '#/components/schemas/UserMessage'
+    UserActivity:
+      name: User Activity
+      description: Activity ping to prevent agent interruption and indicate user presence.
+      payload:
+        $ref: '#/components/schemas/UserActivity'
+    MultimodalMessage:
+      name: Multimodal Message
+      description: A message combining text and a file reference, sent by the user to the conversation.
+      payload:
+        $ref: '#/components/schemas/MultimodalMessage'
+    Pong:
+      name: Pong
+      description: Response message to server ping requests for latency measurement.
+      payload:
+        $ref: '#/components/schemas/Pong'
+    ClientToolResult:
+      name: Client Tool Result
+      description: Results from client-side tool execution requested by the server.
+      payload:
+        $ref: '#/components/schemas/ClientToolResult'
+    McpToolApprovalResult:
+      name: Mcp Tool Approval Result
+      description: User approval or rejection of an MCP tool call that requires confirmation.
+      payload:
+        $ref: '#/components/schemas/McpToolApprovalResult'
+    ContextualUpdate:
+      name: Contextual Update
+      description: Non-interrupting content sent to update the conversation state without disrupting the flow.
+      payload:
+        $ref: '#/components/schemas/ContextualUpdate'
+    ConversationInitiationClientData:
+      name: Conversation Initiation Client Data
+      description: Client configuration data to override default conversation settings.
+      payload:
+        $ref: '#/components/schemas/ConversationInitiationClientData'
   schemas:
-    ClientEvent:
-      type: string
-      enum:
-        - audio
-        - agent_response
-        - agent_response_correction
-        - agent_chat_response_part
-        - interruption
-        - user_transcript
-        - tentative_user_transcript
-        - conversation_initiation_metadata
-        - client_tool_call
-        - agent_tool_request
-        - agent_tool_response
-        - mcp_tool_call
-        - mcp_connection_status
-        - vad_score
-        - ping
-        - asr_initiation_metadata
-        - internal_turn_probability
-        - internal_tentative_agent_response
-      description: Types of events that can be sent from server to client
-
-    Language:
-      type: string
-      enum:
-        - en
-        - ja
-        - zh
-        - de
-        - hi
-        - fr
-        - ko
-        - pt
-        - pt-br
-        - it
-        - es
-        - id
-        - nl
-        - tr
-        - pl
-        - sv
-        - bg
-        - ro
-        - ar
-        - cs
-        - el
-        - fi
-        - ms
-        - da
-        - ta
-        - uk
-        - ru
-        - hu
-        - hr
-        - sk
-        - no
-        - vi
-        - tl
-      description: Language code for ASR and TTS
-
-    AudioFormat:
-      type: string
-      enum:
-        - pcm_8000
-        - pcm_16000
-        - pcm_22050
-        - pcm_24000
-        - pcm_44100
-        - pcm_48000
-        - ulaw_8000
-      description: Audio encoding format
-
-    UserInputAudioFormat:
-      type: string
-      enum:
-        - pcm_8000
-        - pcm_16000
-        - pcm_22050
-        - pcm_24000
-        - pcm_44100
-        - pcm_48000
-        - ulaw_8000
-      description: Audio encoding format for user input
-
-    FeedbackScore:
-      type: string
-      enum:
-        - like
-        - dislike
-      description: User's feedback score
-
-    MCPIntegrationType:
-      type: string
-      enum:
-        - mcp_server
-        - mcp_integration
-      description: Type of MCP integration
-
-    MCPToolCallBase:
-      type: object
-      required: [service_id, tool_call_id, tool_name, parameters, timestamp]
-      additionalProperties: false
+    ConversationInitiationMetadata:
       properties:
-        service_id:
-          type: string
-          description: ID of the MCP service
-        tool_call_id:
-          type: string
-          description: Unique identifier for this tool call
-        tool_name:
-          type: string
-          description: Name of the tool being called
-        tool_description:
-          type: string
-          nullable: true
-          description: Optional description of the tool
-        parameters:
+        conversation_initiation_metadata_event:
+          properties:
+            conversation_id:
+              type: string
+            agent_output_audio_format:
+              enum:
+              - pcm_8000
+              - pcm_16000
+              - pcm_22050
+              - pcm_24000
+              - pcm_44100
+              - pcm_48000
+              - ulaw_8000
+              type: string
+              description: Audio format specification for agent's speech output.
+            user_input_audio_format:
+              enum:
+              - pcm_8000
+              - pcm_16000
+              - pcm_22050
+              - pcm_24000
+              - pcm_44100
+              - pcm_48000
+              - ulaw_8000
+              type: string
+              description: Audio format specification for user's speech input.
+          required:
+          - conversation_id
+          - agent_output_audio_format
+          - user_input_audio_format
           type: object
-          description: Parameters passed to the tool
-        timestamp:
-          type: string
-          format: date-time
-          description: ISO 8601 timestamp of the tool call
-
-    MCPToolCallLoading:
-      allOf:
-        - $ref: "#/components/schemas/MCPToolCallBase"
-        - type: object
-          required: [state]
-          additionalProperties: false
-          properties:
-            state:
-              type: string
-              const: loading
-              description: Tool call is being executed
-
-    MCPToolCallAwaitingApproval:
-      allOf:
-        - $ref: "#/components/schemas/MCPToolCallBase"
-        - type: object
-          required: [state, approval_timeout_secs]
-          additionalProperties: false
-          properties:
-            state:
-              type: string
-              const: awaiting_approval
-              description: Tool call requires user approval
-            approval_timeout_secs:
-              type: integer
-              default: 300
-              description: Timeout in seconds for user approval
-
-    MCPToolCallSuccess:
-      allOf:
-        - $ref: "#/components/schemas/MCPToolCallBase"
-        - type: object
-          required: [state, result]
-          additionalProperties: false
-          properties:
-            state:
-              type: string
-              const: success
-              description: Tool call completed successfully
-            result:
-              type: array
-              description: Array of content blocks returned by the tool
-              items:
-                type: object
-                description: ContentBlock from MCP
-
-    MCPToolCallFailure:
-      allOf:
-        - $ref: "#/components/schemas/MCPToolCallBase"
-        - type: object
-          required: [state, error_message]
-          additionalProperties: false
-          properties:
-            state:
-              type: string
-              const: failure
-              description: Tool call failed
-            error_message:
-              type: string
-              description: Error message describing the failure
-
-    # ===== CLIENT MESSAGE PAYLOADS =====
-
-    UserAudioPayload:
+        type:
+          x-fern-type: literal<"conversation_initiation_metadata">
+      required:
+      - conversation_initiation_metadata_event
       type: object
-      required: [user_audio_chunk]
+    AgentResponseComplete:
+      properties:
+        agent_response_complete_event:
+          properties:
+            event_id:
+              type: integer
+          required:
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"agent_response_complete">
+      required:
+      - agent_response_complete_event
+      type: object
+    McpToolCall:
+      properties:
+        mcp_tool_call:
+          anyOf:
+          - properties:
+              service_id:
+                type: string
+              tool_call_id:
+                type: string
+              tool_name:
+                type: string
+              tool_description:
+                anyOf:
+                - type: string
+                - type: 'null'
+                default: null
+              parameters:
+                additionalProperties: true
+                type: object
+              timestamp:
+                type: string
+              state:
+                const: loading
+                type: string
+            required:
+            - service_id
+            - tool_call_id
+            - tool_name
+            - parameters
+            - state
+            type: object
+          - properties:
+              service_id:
+                type: string
+              tool_call_id:
+                type: string
+              tool_name:
+                type: string
+              tool_description:
+                anyOf:
+                - type: string
+                - type: 'null'
+                default: null
+              parameters:
+                additionalProperties: true
+                type: object
+              timestamp:
+                type: string
+              state:
+                const: awaiting_approval
+                type: string
+              approval_timeout_secs:
+                default: 300
+                description: Timeout in seconds for user approval
+                type: integer
+            required:
+            - service_id
+            - tool_call_id
+            - tool_name
+            - parameters
+            - state
+            type: object
+          - properties:
+              service_id:
+                type: string
+              tool_call_id:
+                type: string
+              tool_name:
+                type: string
+              tool_description:
+                anyOf:
+                - type: string
+                - type: 'null'
+                default: null
+              parameters:
+                additionalProperties: true
+                type: object
+              timestamp:
+                type: string
+              state:
+                const: success
+                type: string
+              result:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+            required:
+            - service_id
+            - tool_call_id
+            - tool_name
+            - parameters
+            - state
+            - result
+            type: object
+          - properties:
+              service_id:
+                type: string
+              tool_call_id:
+                type: string
+              tool_name:
+                type: string
+              tool_description:
+                anyOf:
+                - type: string
+                - type: 'null'
+                default: null
+              parameters:
+                additionalProperties: true
+                type: object
+              timestamp:
+                type: string
+              state:
+                const: failure
+                type: string
+              error_message:
+                type: string
+            required:
+            - service_id
+            - tool_call_id
+            - tool_name
+            - parameters
+            - state
+            - error_message
+            type: object
+        type:
+          x-fern-type: literal<"mcp_tool_call">
+      required:
+      - mcp_tool_call
+      type: object
+    ClientError:
+      properties:
+        error_event:
+          properties:
+            code:
+              type: integer
+            error_name:
+              type: string
+            message:
+              type: string
+          required:
+          - code
+          - error_name
+          type: object
+        type:
+          x-fern-type: literal<"client_error">
+      required:
+      - error_event
+      type: object
+    GuardrailTriggered:
+      properties:
+        guardrail_triggered_event:
+          properties:
+            guardrail_name:
+              type: string
+          required:
+          - guardrail_name
+          type: object
+        type:
+          x-fern-type: literal<"guardrail_triggered">
+      required:
+      - guardrail_triggered_event
+      type: object
+    UserTranscript:
+      properties:
+        user_transcription_event:
+          properties:
+            user_transcript:
+              type: string
+            event_id:
+              type: integer
+          required:
+          - user_transcript
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"user_transcript">
+      required:
+      - user_transcription_event
+      type: object
+    AgentResponse:
+      properties:
+        agent_response_event:
+          properties:
+            agent_response:
+              type: string
+            event_id:
+              type: integer
+          required:
+          - agent_response
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"agent_response">
+      required:
+      - agent_response_event
+      type: object
+    AgentResponseCorrection:
+      properties:
+        agent_response_correction_event:
+          properties:
+            original_agent_response:
+              type: string
+            corrected_agent_response:
+              type: string
+            event_id:
+              type: integer
+          required:
+          - original_agent_response
+          - corrected_agent_response
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"agent_response_correction">
+      required:
+      - agent_response_correction_event
+      type: object
+    AgentResponseMetadata:
+      properties:
+        agent_response_metadata_event:
+          properties:
+            metadata:
+              additionalProperties: true
+              type: object
+            event_id:
+              type: integer
+          required:
+          - metadata
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"agent_response_metadata">
+      required:
+      - agent_response_metadata_event
+      type: object
+    AudioResponse:
+      properties:
+        audio_event:
+          properties:
+            audio_base_64:
+              type: string
+            event_id:
+              type: integer
+            alignment:
+              properties:
+                chars:
+                  items:
+                    type: string
+                  type: array
+                char_start_times_ms:
+                  items:
+                    type: integer
+                  type: array
+                char_durations_ms:
+                  items:
+                    type: integer
+                  type: array
+              required:
+              - chars
+              - char_start_times_ms
+              - char_durations_ms
+              type: object
+              description: Character-level timing data for the audio chunk, useful for synchronized text display or lip-syncing.
+            is_final:
+              default: false
+              description: Whether this is the last audio chunk of the current agent response.
+              type: boolean
+          required:
+          - audio_base_64
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"audio">
+      required:
+      - audio_event
+      type: object
+    Interruption:
+      properties:
+        interruption_event:
+          properties:
+            event_id:
+              type: integer
+          required:
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"interruption">
+      required:
+      - interruption_event
+      type: object
+    VadScore:
+      properties:
+        vad_score_event:
+          properties:
+            vad_score:
+              type: number
+          required:
+          - vad_score
+          type: object
+        type:
+          x-fern-type: literal<"vad_score">
+      required:
+      - vad_score_event
+      type: object
+    AgentChatResponsePart:
+      properties:
+        text_response_part:
+          properties:
+            text:
+              type: string
+            type:
+              enum:
+              - start
+              - delta
+              - stop
+              type: string
+            event_id:
+              type: integer
+          required:
+          - text
+          - type
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"agent_chat_response_part">
+      required:
+      - text_response_part
+      type: object
+    ClientToolCall:
+      properties:
+        client_tool_call:
+          properties:
+            tool_name:
+              type: string
+            tool_call_id:
+              type: string
+            parameters:
+              additionalProperties: true
+              type: object
+            event_id:
+              type: integer
+            expects_response:
+              description: Whether the server expects a ClientToolResult response.
+              type: boolean
+          required:
+          - tool_name
+          - tool_call_id
+          - parameters
+          - event_id
+          - expects_response
+          type: object
+        type:
+          x-fern-type: literal<"client_tool_call">
+      required:
+      - client_tool_call
+      type: object
+    AgentToolResponse:
+      properties:
+        agent_tool_response:
+          properties:
+            tool_name:
+              type: string
+            tool_call_id:
+              type: string
+            tool_type:
+              type: string
+            is_error:
+              type: boolean
+            is_blocked:
+              default: false
+              type: boolean
+            event_id:
+              type: integer
+            is_called:
+              type: boolean
+          required:
+          - tool_name
+          - tool_call_id
+          - tool_type
+          - is_error
+          - event_id
+          - is_called
+          type: object
+        type:
+          x-fern-type: literal<"agent_tool_response">
+      required:
+      - agent_tool_response
+      type: object
+    AgentToolResponseFullPayload:
+      properties:
+        agent_tool_response_full_payload:
+          properties:
+            tool_name:
+              type: string
+            tool_call_id:
+              type: string
+            tool_type:
+              type: string
+            is_error:
+              type: boolean
+            is_blocked:
+              default: false
+              type: boolean
+            event_id:
+              type: integer
+            is_called:
+              type: boolean
+            full_tool_result:
+              type: string
+            truncated:
+              default: false
+              type: boolean
+          required:
+          - tool_name
+          - tool_call_id
+          - tool_type
+          - is_error
+          - event_id
+          - is_called
+          - full_tool_result
+          type: object
+        type:
+          x-fern-type: literal<"agent_tool_response_full_payload">
+      required:
+      - agent_tool_response_full_payload
+      type: object
+    AgentToolRequest:
+      properties:
+        agent_tool_request:
+          properties:
+            tool_name:
+              type: string
+            tool_call_id:
+              type: string
+            tool_type:
+              type: string
+            event_id:
+              type: integer
+            expects_response:
+              type: boolean
+            disable_interruptions:
+              type: boolean
+            response_timeout_secs:
+              type: integer
+            execution_mode:
+              type: string
+          required:
+          - tool_name
+          - tool_call_id
+          - tool_type
+          - event_id
+          - expects_response
+          - disable_interruptions
+          - response_timeout_secs
+          - execution_mode
+          type: object
+        type:
+          x-fern-type: literal<"agent_tool_request">
+      required:
+      - agent_tool_request
+      type: object
+    Ping:
+      properties:
+        ping_event:
+          properties:
+            event_id:
+              type: integer
+            ping_ms:
+              type: integer
+          required:
+          - event_id
+          type: object
+        type:
+          x-fern-type: literal<"ping">
+      required:
+      - ping_event
+      type: object
+    McpConnectionStatus:
+      properties:
+        mcp_connection_status:
+          description: MCP connection status with array of integration statuses.
+          properties:
+            integrations:
+              items:
+                description: Status of a single MCP integration/server.
+                properties:
+                  integration_id:
+                    type: string
+                  integration_type:
+                    enum:
+                    - mcp_server
+                    - mcp_integration
+                    type: string
+                  is_connected:
+                    type: boolean
+                  tool_count:
+                    default: 0
+                    type: integer
+                required:
+                - integration_id
+                - integration_type
+                - is_connected
+                type: object
+              type: array
+          type: object
+        type:
+          x-fern-type: literal<"mcp_connection_status">
+      required:
+      - mcp_connection_status
+      type: object
+    UserAudioChunk:
       properties:
         user_audio_chunk:
+          description: Base64-encoded audio data from the user's microphone.
           type: string
-          description: Base64 encoded PCM or μ-law audio chunk
-          format: base64
-
-    PongPayload:
+      required:
+      - user_audio_chunk
       type: object
-      required: [type, event_id]
+    Feedback:
       properties:
         type:
-          type: string
-          const: pong
+          x-fern-type: literal<"feedback">
         event_id:
+          description: ID of the agent response event being rated.
           type: integer
-          description: Echo of ping event_id
-
-    UserMessagePayload:
+        score:
+          enum:
+          - like
+          - dislike
+          type: string
+          description: Feedback score for the referenced agent response. Null clears any previously submitted feedback for
+            the event.
+      required:
+      - event_id
       type: object
-      required: [type]
+    UserMessage:
       properties:
         type:
-          type: string
-          const: user_message
+          x-fern-type: literal<"user_message">
         text:
           type: string
-          nullable: true
-          description: User's text message (null for text-only mode signal)
-
-    UserActivityPayload:
+        user_identifier:
+          type: string
       type: object
-      required: [type]
+    UserActivity:
       properties:
         type:
-          type: string
-          const: user_activity
-
-    UserFeedbackPayload:
+          x-fern-type: literal<"user_activity">
       type: object
-      required: [type, event_id, score]
+    MultimodalMessage:
       properties:
         type:
-          type: string
-          const: feedback
+          x-fern-type: literal<"multimodal_message">
+        text:
+          properties:
+            type:
+              const: user_message
+              default: user_message
+              type: string
+            text:
+              type: string
+            user_identifier:
+              type: string
+          type: object
+        file:
+          properties:
+            type:
+              const: file_input
+              default: file_input
+              type: string
+            file_id:
+              type: string
+          required:
+          - file_id
+          type: object
+      type: object
+    Pong:
+      properties:
+        type:
+          x-fern-type: literal<"pong">
         event_id:
+          description: ID of the ping event this pong responds to.
           type: integer
-          description: ID of the event being given feedback on
-        score:
-          $ref: "#/components/schemas/FeedbackScore"
-
-    ClientToolResultPayload:
+      required:
+      - event_id
       type: object
-      required: [type, tool_call_id, result, is_error]
+    ClientToolResult:
       properties:
         type:
-          type: string
-          const: client_tool_result
+          x-fern-type: literal<"client_tool_result">
         tool_call_id:
+          description: ID of the tool call this result corresponds to.
           type: string
         result:
           type: string
         is_error:
           type: boolean
-
-    MCPToolApprovalResultPayload:
+        error_type:
+          enum:
+          - user_rejected
+          - external_server
+          - external_client
+          - customer_auth
+          - client_timeout
+          - unknown
+          type: string
+          description: Optional category for the failure reason. When set, `is_error` is treated as true. `user_rejected`
+            is special-cased to mark the tool as not having been called.
+      required:
+      - tool_call_id
+      - result
+      - is_error
       type: object
-      required: [type, tool_call_id, is_approved]
+    McpToolApprovalResult:
       properties:
         type:
-          type: string
-          const: mcp_tool_approval_result
+          x-fern-type: literal<"mcp_tool_approval_result">
         tool_call_id:
+          description: The ID of the tool call this approval responds to.
           type: string
         is_approved:
+          description: Whether the user approved the tool call.
           type: boolean
-
-    ContextualUpdatePayload:
+      required:
+      - tool_call_id
+      - is_approved
       type: object
-      required: [type, text]
+    ContextualUpdate:
       properties:
         type:
-          type: string
-          const: contextual_update
+          x-fern-type: literal<"contextual_update">
         text:
+          description: Context text to inject into the conversation without interrupting.
           type: string
-
-    ConversationInitiationPayload:
+        context_id:
+          type: string
+          description: 'Optional client-supplied identifier. When a newer update with the same context_id arrives, the older
+            one supersedes it: the older update is dropped from the LLM view and visually marked as superseded in the rendered
+            transcript.'
+      required:
+      - text
       type: object
-      required: [type]
+    ConversationInitiationClientData:
       properties:
-        type:
-          type: string
-          const: conversation_initiation_client_data
         conversation_config_override:
-          $ref: "#/components/schemas/ConversationConfigClientOverride"
+          example:
+            agent:
+              first_message: Hello, how can I help you today?
+              language: en
+              prompt:
+                knowledge_base: []
+                llm: gemini-2.0-flash-001
+                prompt: You are a helpful assistant that can answer questions about the topic of the conversation.
+                tool_ids: []
+            asr:
+              keywords:
+              - hello
+              - world
+            tts:
+              similarity_boost: 0.8
+              speed: 1.0
+              stability: 0.5
+              voice_id: cjVigY5qzO86Huf0OWal
+            turn:
+              soft_timeout_config:
+                message: Hhmmmm...yeah.
+          properties:
+            asr:
+              example:
+                keywords:
+                - hello
+                - world
+              properties:
+                keywords:
+                  items:
+                    type: string
+                  type: array
+                  description: Keywords to boost prediction probability for
+                  x-convai-client-override: true
+                  x-convai-soft-override-disallowed: true
+              type: object
+              description: Configuration for conversational transcription
+            turn:
+              example:
+                soft_timeout_config:
+                  message: Hhmmmm...yeah.
+              properties:
+                soft_timeout_config:
+                  example:
+                    message: Hhmmmm...yeah.
+                  properties:
+                    message:
+                      type: string
+                      description: Message to show when the first soft timeout is reached while waiting for LLM response.
+                        Supports dynamic variables (e.g., {{system__time}}, {{custom_variable}}).
+                      x-convai-client-override: true
+                      x-convai-language-override: true
+                  type: object
+                  description: Configuration for soft timeout functionality. Provides immediate feedback during longer LLM
+                    responses.
+              type: object
+              description: Configuration for turn detection
+            tts:
+              example:
+                similarity_boost: 0.8
+                speed: 1.0
+                stability: 0.5
+                voice_id: cjVigY5qzO86Huf0OWal
+              properties:
+                voice_id:
+                  type: string
+                  description: The voice ID to use for TTS
+                  x-convai-client-override: true
+                  x-convai-language-override: true
+                stability:
+                  type: number
+                  description: The stability of generated speech
+                  x-convai-client-override: true
+                speed:
+                  type: number
+                  description: The speed of generated speech
+                  x-convai-client-override: true
+                similarity_boost:
+                  type: number
+                  description: The similarity boost for generated speech
+                  x-convai-client-override: true
+              type: object
+              description: Configuration for conversational text to speech
+            conversation:
+              properties:
+                text_only:
+                  type: boolean
+                  description: If enabled audio will not be processed and only text will be used, use to avoid audio pricing.
+                  x-convai-client-override: true
+              type: object
+              description: Configuration for conversational events
+            agent:
+              example:
+                first_message: Hello, how can I help you today?
+                language: en
+                prompt:
+                  knowledge_base: []
+                  llm: gemini-2.0-flash-001
+                  prompt: You are a helpful assistant that can answer questions about the topic of the conversation.
+                  tool_ids: []
+              properties:
+                first_message:
+                  type: string
+                  description: If non-empty, the first message the agent will say. If empty, the agent waits for the user
+                    to start the discussion.
+                  x-convai-client-override: true
+                  x-convai-language-override: true
+                language:
+                  type: string
+                  description: Language of the agent - used for ASR and TTS
+                  x-convai-client-override: true
+                max_conversation_duration_message:
+                  type: string
+                  description: If non-empty, the message the agent will send when max conversation duration is reached.
+                  x-convai-client-override: true
+                  x-convai-language-override: true
+                prompt:
+                  example:
+                    knowledge_base: []
+                    llm: gemini-2.0-flash-001
+                    prompt: You are a helpful assistant that can answer questions about the topic of the conversation.
+                    tool_ids: []
+                  properties:
+                    prompt:
+                      type: string
+                      description: The prompt for the agent
+                      x-convai-client-override: true
+                    llm:
+                      enum:
+                      - gpt-4o-mini
+                      - gpt-4o
+                      - gpt-4
+                      - gpt-4-turbo
+                      - gpt-4.1
+                      - gpt-4.1-mini
+                      - gpt-4.1-nano
+                      - gpt-5
+                      - gpt-5.1
+                      - gpt-5.2
+                      - gpt-5.2-chat-latest
+                      - gpt-5.4
+                      - gpt-5.4-mini
+                      - gpt-5.4-nano
+                      - gpt-5.5
+                      - gpt-5-mini
+                      - gpt-5-nano
+                      - gpt-3.5-turbo
+                      - gemini-1.5-pro
+                      - gemini-1.5-flash
+                      - gemini-2.0-flash
+                      - gemini-2.0-flash-lite
+                      - gemini-2.5-flash-lite
+                      - gemini-2.5-flash
+                      - gemini-3-pro-preview
+                      - gemini-3-flash-preview
+                      - gemini-3.1-pro-preview
+                      - gemini-3.1-flash-lite-preview
+                      - gemini-3.1-flash-lite
+                      - gemini-3.5-flash
+                      - claude-sonnet-4-5
+                      - claude-opus-4-7
+                      - claude-sonnet-4-6
+                      - claude-sonnet-4
+                      - claude-haiku-4-5
+                      - claude-3-7-sonnet
+                      - claude-3-5-sonnet
+                      - claude-3-5-sonnet-v1
+                      - claude-3-haiku
+                      - grok-beta
+                      - custom-llm
+                      - qwen3-4b
+                      - qwen3-30b-a3b
+                      - qwen36-35b-a3b
+                      - qwen35-397b-a17b
+                      - gpt-oss-20b
+                      - gpt-oss-120b
+                      - glm-45-air-fp8
+                      - gemini-2.5-flash-preview-09-2025
+                      - gemini-2.5-flash-lite-preview-09-2025
+                      - gemini-2.5-flash-preview-05-20
+                      - gemini-2.5-flash-preview-04-17
+                      - gemini-2.5-flash-lite-preview-06-17
+                      - gemini-2.0-flash-lite-001
+                      - gemini-2.0-flash-001
+                      - gemini-1.5-flash-002
+                      - gemini-1.5-flash-001
+                      - gemini-1.5-pro-002
+                      - gemini-1.5-pro-001
+                      - claude-sonnet-4@20250514
+                      - claude-sonnet-4-5@20250929
+                      - claude-haiku-4-5@20251001
+                      - claude-3-7-sonnet@20250219
+                      - claude-3-5-sonnet@20240620
+                      - claude-3-5-sonnet-v2@20241022
+                      - claude-3-haiku@20240307
+                      - gpt-5-2025-08-07
+                      - gpt-5.1-2025-11-13
+                      - gpt-5.2-2025-12-11
+                      - gpt-5.4-2026-03-05
+                      - gpt-5.4-mini-2026-03-17
+                      - gpt-5.4-nano-2026-03-17
+                      - gpt-5.5-2026-04-23
+                      - gpt-5-mini-2025-08-07
+                      - gpt-5-nano-2025-08-07
+                      - gpt-4.1-2025-04-14
+                      - gpt-4.1-mini-2025-04-14
+                      - gpt-4.1-nano-2025-04-14
+                      - gpt-4o-mini-2024-07-18
+                      - gpt-4o-2024-11-20
+                      - gpt-4o-2024-08-06
+                      - gpt-4o-2024-05-13
+                      - gpt-4-0613
+                      - gpt-4-0314
+                      - gpt-4-turbo-2024-04-09
+                      - gpt-3.5-turbo-0125
+                      - gpt-3.5-turbo-1106
+                      - watt-tool-8b
+                      - watt-tool-70b
+                      type: string
+                      description: The LLM to query with the prompt and the chat history. If using data residency, the LLM
+                        must be supported in the data residency environment
+                      x-convai-client-override: true
+                    tool_ids:
+                      items:
+                        type: string
+                      type: array
+                      description: A list of IDs of tools used by the agent
+                      x-convai-client-override: true
+                    native_mcp_server_ids:
+                      items:
+                        type: string
+                      type: array
+                      description: A list of Native MCP server ids to be used by the agent
+                      x-convai-client-override: true
+                    knowledge_base:
+                      items:
+                        example:
+                          id: '123'
+                          name: My Knowledge Base
+                          type: file
+                          usage_mode: auto
+                        properties:
+                          type:
+                            enum:
+                            - file
+                            - url
+                            - text
+                            - folder
+                            type: string
+                            description: The type of the knowledge base
+                          name:
+                            description: The name of the knowledge base
+                            type: string
+                          id:
+                            description: The ID of the knowledge base
+                            type: string
+                          usage_mode:
+                            enum:
+                            - prompt
+                            - auto
+                            type: string
+                            default: auto
+                            description: The usage mode of the knowledge base
+                        required:
+                        - type
+                        - name
+                        - id
+                        type: object
+                      type: array
+                      description: A list of knowledge bases to be used by the agent
+                      x-convai-client-override: true
+                  type: object
+                  description: The prompt for the agent
+              type: object
+              description: Agent specific configuration
+          type: object
         custom_llm_extra_body:
+          additionalProperties: true
           type: object
-          description: Additional parameters passed to the LLM provider
-        dynamic_variables:
-          type: object
-          description: Dynamic variables available in the conversation context
         user_id:
           type: string
-          nullable: true
-          description: Unique identifier for the user
+          description: ID of the end user participating in this conversation (for agent owner's user identification)
         source_info:
-          $ref: "#/components/schemas/SourceInfo"
-
-    # ===== SERVER MESSAGE PAYLOADS =====
-
-    AudioPayload:
-      type: object
-      required: [audio_event, type]
-      properties:
-        type:
-          type: string
-          const: audio
-        audio_event:
-          $ref: "#/components/schemas/AudioEventData"
-
-    UserTranscriptPayload:
-      type: object
-      required: [user_transcription_event, type]
-      properties:
-        type:
-          type: string
-          const: user_transcript
-        user_transcription_event:
-          $ref: "#/components/schemas/UserTranscriptionData"
-
-    TentativeUserTranscriptPayload:
-      type: object
-      required: [tentative_user_transcription_event, type]
-      properties:
-        type:
-          type: string
-          const: tentative_user_transcript
-        tentative_user_transcription_event:
-          $ref: "#/components/schemas/TentativeTranscriptionData"
-
-    AgentResponsePayload:
-      type: object
-      required: [agent_response_event, type]
-      properties:
-        type:
-          type: string
-          const: agent_response
-        agent_response_event:
-          $ref: "#/components/schemas/AgentResponseData"
-
-    AgentResponseCorrectionPayload:
-      type: object
-      required: [agent_response_correction_event, type]
-      properties:
-        type:
-          type: string
-          const: agent_response_correction
-        agent_response_correction_event:
-          $ref: "#/components/schemas/AgentResponseCorrectionData"
-
-    AgentChatResponsePartPayload:
-      type: object
-      required: [text_response_part, type]
-      properties:
-        type:
-          type: string
-          const: agent_chat_response_part
-        text_response_part:
-          $ref: "#/components/schemas/AgentChatResponsePartData"
-
-    InterruptionPayload:
-      type: object
-      required: [interruption_event, type]
-      properties:
-        type:
-          type: string
-          const: interruption
-        interruption_event:
-          $ref: "#/components/schemas/InterruptionData"
-
-    ConversationMetadataPayload:
-      type: object
-      required: [conversation_initiation_metadata_event, type]
-      properties:
-        type:
-          type: string
-          const: conversation_initiation_metadata
-        conversation_initiation_metadata_event:
-          $ref: "#/components/schemas/ConversationMetadataData"
-
-    ClientToolCallPayload:
-      type: object
-      required: [client_tool_call, type]
-      properties:
-        type:
-          type: string
-          const: client_tool_call
-        client_tool_call:
-          $ref: "#/components/schemas/ClientToolCallData"
-
-    AgentToolResponsePayload:
-      type: object
-      required: [agent_tool_response, type]
-      properties:
-        type:
-          type: string
-          const: agent_tool_response
-        agent_tool_response:
-          $ref: "#/components/schemas/AgentToolResponseData"
-
-    AgentToolRequestPayload:
-      type: object
-      required: [agent_tool_request, type]
-      properties:
-        type:
-          type: string
-          const: agent_tool_request
-        agent_tool_request:
-          $ref: "#/components/schemas/AgentToolRequestData"
-
-    MCPToolCallPayload:
-      type: object
-      required: [mcp_tool_call, type]
-      properties:
-        type:
-          type: string
-          const: mcp_tool_call
-        mcp_tool_call:
+          description: Information about the source of conversation initiation
+          properties:
+            source:
+              description: Source of the conversation initiation
+              enum:
+              - unknown
+              - android_sdk
+              - node_js_sdk
+              - react_native_sdk
+              - react_sdk
+              - js_sdk
+              - python_sdk
+              - widget
+              - sip_trunk
+              - twilio
+              - exotel
+              - genesys
+              - swift_sdk
+              - whatsapp
+              - twilio_sms
+              - flutter_sdk
+              - zendesk_integration
+              - slack_integration
+              - telegram_integration
+              - intercom_integration
+              - freshdesk_integration
+              - template_preview
+              - genesys_bot_connector
+              type: string
+            version:
+              maxLength: 50
+              type: string
+              description: The SDK version number
           type: object
-          description: MCP tool call data (polymorphic based on state)
-          oneOf:
-            - $ref: "#/components/schemas/MCPToolCallLoading"
-            - $ref: "#/components/schemas/MCPToolCallAwaitingApproval"
-            - $ref: "#/components/schemas/MCPToolCallSuccess"
-            - $ref: "#/components/schemas/MCPToolCallFailure"
-
-    MCPConnectionStatusPayload:
-      type: object
-      required: [mcp_connection_status, type]
-      properties:
-        type:
+        branch_id:
           type: string
-          const: mcp_connection_status
-        mcp_connection_status:
-          $ref: "#/components/schemas/MCPConnectionStatusData"
-
-    VADScorePayload:
-      type: object
-      required: [vad_score_event, type]
-      properties:
-        type:
+          description: ID of the agent branch to use for this conversation
+        environment:
           type: string
-          const: vad_score
-        vad_score_event:
-          $ref: "#/components/schemas/VADScoreData"
-
-    PingPayload:
-      type: object
-      required: [ping_event, type]
-      properties:
-        type:
+          description: Environment to use for resolving environment variables
+        starting_workflow_node_id:
           type: string
-          const: ping
-        ping_event:
-          $ref: "#/components/schemas/PingData"
-
-    # ===== NAMED SCHEMAS FOR EVENT DATA =====
-
-    AudioAlignment:
-      type: object
-      required: [chars, char_start_times_ms, char_durations_ms]
-      description: Character-level timing information for audio synthesis
-      properties:
-        chars:
-          type: array
-          items:
-            type: string
-          description: Array of individual characters that were spoken
-        char_start_times_ms:
-          type: array
-          items:
-            type: integer
-          description: Start time in milliseconds for each character
-        char_durations_ms:
-          type: array
-          items:
-            type: integer
-          description: Duration in milliseconds for each character
-
-    AudioEventData:
-      type: object
-      required: [audio_base_64, event_id]
-      properties:
-        audio_base_64:
-          type: string
-          format: base64
-        event_id:
-          type: integer
-        alignment:
-          $ref: "#/components/schemas/AudioAlignment"
-          nullable: true
-          description: Optional alignment data showing character timing information
-
-    UserTranscriptionData:
-      type: object
-      required: [user_transcript, event_id]
-      properties:
-        user_transcript:
-          type: string
-        event_id:
-          type: integer
-
-    TentativeTranscriptionData:
-      type: object
-      required: [user_transcript, event_id]
-      properties:
-        user_transcript:
-          type: string
-        event_id:
-          type: integer
-
-    AgentResponseData:
-      type: object
-      required: [agent_response, event_id]
-      properties:
-        agent_response:
-          type: string
-        event_id:
-          type: integer
-
-    AgentResponseCorrectionData:
-      type: object
-      required: [original_agent_response, corrected_agent_response, event_id]
-      properties:
-        original_agent_response:
-          type: string
-        corrected_agent_response:
-          type: string
-        event_id:
-          type: integer
-
-    AgentChatResponsePartType:
-      type: string
-      enum:
-        - start
-        - delta
-        - stop
-      description: Type of streaming response chunk
-
-    AgentChatResponsePartData:
-      type: object
-      required: [text, type, event_id]
-      properties:
-        text:
-          type: string
-          description: Text chunk (empty for start/stop events)
-        type:
-          $ref: "#/components/schemas/AgentChatResponsePartType"
-        event_id:
-          type: integer
-          description: Identifier shared by all chunks of a single response and by the corresponding agent_response
-
-    InterruptionData:
-      type: object
-      required: [event_id]
-      properties:
-        event_id:
-          type: integer
-
-    ConversationMetadataData:
-      type: object
-      required:
-        [conversation_id, agent_output_audio_format, user_input_audio_format]
-      properties:
-        conversation_id:
-          type: string
-        agent_output_audio_format:
-          $ref: "#/components/schemas/AudioFormat"
-        user_input_audio_format:
-          $ref: "#/components/schemas/UserInputAudioFormat"
-
-    ClientToolCallData:
-      type: object
-      required: [tool_name, tool_call_id, parameters, event_id]
-      properties:
-        tool_name:
-          type: string
-        tool_call_id:
-          type: string
-        parameters:
+          description: If set, start the workflow at this node id instead of the default entry
+        dynamic_variables:
+          additionalProperties:
+            anyOf:
+            - type: string
+            - type: number
+            - type: integer
+            - type: boolean
+            - items:
+                anyOf:
+                - type: string
+                - type: integer
+                - type: number
+                - type: boolean
+                - items:
+                    $ref: '#/components/schemas/DynamicVariableNestedValueType'
+                  type: array
+                - type: 'null'
+              type: array
+            - type: 'null'
           type: object
-        event_id:
-          type: integer
-
-    AgentToolResponseData:
-      type: object
-      required: [tool_name, tool_call_id, tool_type, is_error, event_id]
-      properties:
-        tool_name:
-          type: string
-          description: Name of the tool that was executed
-        tool_call_id:
-          type: string
-          description: Unique identifier for the tool call
-        tool_type:
-          type: string
-          description: Type of tool (client, system, or mcp)
-        is_error:
-          type: boolean
-          description: Whether the tool execution resulted in an error
-        event_id:
-          type: integer
-
-    AgentToolRequestData:
-      type: object
-      required: [tool_name, tool_call_id, tool_type, event_id]
-      properties:
-        tool_name:
-          type: string
-          description: Name of the tool being requested
-        tool_call_id:
-          type: string
-          description: Unique identifier for the requested tool call
-        tool_type:
-          type: string
-          description: Type of tool (client, system, or mcp)
-        event_id:
-          type: integer
-
-    MCPConnectionStatusData:
-      type: object
-      required: [integrations]
-      properties:
-        integrations:
-          type: array
-          description: List of MCP integration statuses
-          items:
-            $ref: "#/components/schemas/MCPIntegrationStatus"
-
-    MCPIntegrationStatus:
-      type: object
-      required: [integration_id, integration_type, is_connected, tool_count]
-      properties:
-        integration_id:
-          type: string
-          description: Unique identifier for the integration
-        integration_type:
-          $ref: "#/components/schemas/MCPIntegrationType"
-        is_connected:
-          type: boolean
-          description: Whether the integration is currently connected
-        tool_count:
-          type: integer
-          default: 0
-          description: Number of tools available from this integration
-
-    VADScoreData:
-      type: object
-      required: [vad_score]
-      properties:
-        vad_score:
-          type: number
-          minimum: 0
-          maximum: 1
-
-    PingData:
-      type: object
-      required: [event_id]
-      properties:
-        event_id:
-          type: integer
-        ping_ms:
-          type: integer
-          nullable: true
-          description: Estimated round-trip time in milliseconds
-
-    ASRInitiationMetadataPayload:
-      type: object
-      required: [asr_initiation_metadata_event, type]
-      properties:
         type:
-          type: string
-          const: asr_initiation_metadata
-        asr_initiation_metadata_event:
-          type: object
-          description: ASR initialization metadata
-
-    InternalTurnProbabilityPayload:
+          x-fern-type: literal<"conversation_initiation_client_data">
       type: object
-      required: [turn_probability_internal_event, type]
-      properties:
-        type:
-          type: string
-          const: internal_turn_probability
-        turn_probability_internal_event:
-          $ref: "#/components/schemas/InternalTurnProbabilityData"
-
-    InternalTurnProbabilityData:
-      type: object
-      required: [turn_probability]
-      properties:
-        turn_probability:
-          type: number
-          minimum: 0
-          maximum: 1
-          description: Probability of turn-taking (0-1)
-
-    InternalTentativeAgentResponsePayload:
-      type: object
-      required: [tentative_agent_response_internal_event, type]
-      properties:
-        type:
-          type: string
-          const: internal_tentative_agent_response
-        tentative_agent_response_internal_event:
-          $ref: "#/components/schemas/InternalTentativeAgentResponseData"
-
-    InternalTentativeAgentResponseData:
-      type: object
-      required: [tentative_agent_response]
-      properties:
-        tentative_agent_response:
-          type: string
-          description: Tentative response from the agent (internal use)
-
-    SourceInfo:
-      type: object
-      properties:
-        source:
-          type: string
-          nullable: true
-          description: Identifier of the client application
-        version:
-          type: string
-          nullable: true
-          description: Version of the client application
-
-    # ===== CONVERSATION CONFIG OVERRIDE SCHEMAS =====
-
-    ConversationConfigClientOverride:
-      type: object
-      description: Client-side overrides for conversation configuration
-      properties:
-        agent:
-          $ref: "#/components/schemas/AgentConfigOverride"
-        tts:
-          $ref: "#/components/schemas/TTSConversationalConfigOverride"
-        conversation:
-          $ref: "#/components/schemas/ConversationConfigOverride"
-
-    AgentConfigOverride:
-      type: object
-      description: Agent-specific configuration overrides
-      properties:
-        first_message:
-          type: string
-          nullable: true
-          description: Initial message the agent will say. If empty, agent waits for user to start
-        language:
-          $ref: "#/components/schemas/Language"
-        prompt:
-          $ref: "#/components/schemas/PromptAgentOverride"
-        native_mcp_server_ids:
-          type: array
-          nullable: true
-          maxItems: 10
-          items:
-            type: string
-          description: List of Native MCP server IDs to be used by the agent
-
-    PromptAgentOverride:
-      type: object
-      description: Agent prompt configuration override
-      properties:
-        prompt:
-          type: string
-          nullable: true
-          description: The system prompt that defines the agent's behavior
-
-    TTSConversationalConfigOverride:
-      type: object
-      description: Text-to-speech configuration overrides
-      properties:
-        voice_id:
-          type: string
-          nullable: true
-          description: ElevenLabs voice ID for speech synthesis
-        stability:
-          type: number
-          nullable: true
-          minimum: 0
-          maximum: 1
-          description: Voice stability (0-1). Lower values = more variable intonation
-        speed:
-          type: number
-          nullable: true
-          minimum: 0.7
-          maximum: 5
-          description: Speech speed multiplier (0.7-5). 1.0 = normal speed
-        similarity_boost:
-          type: number
-          nullable: true
-          minimum: 0
-          maximum: 1
-          description: Voice similarity boost (0-1). Higher values = more similar to original
-
-    ConversationConfigOverride:
-      type: object
-      description: Conversation-specific configuration overrides
-      properties:
-        text_only:
-          type: boolean
-          nullable: true
-          description: If true, disables audio processing and uses text-only mode
-        client_events:
-          type: array
-          nullable: true
-          items:
-            $ref: "#/components/schemas/ClientEvent"
-          description: |
-            List of events to send to the client. If not specified, defaults to:
-            [audio, interruption, agent_response, user_transcript, tentative_user_transcript,
-             conversation_initiation_metadata, ping]
-          minItems: 1
-
-    # ===== ERROR MESSAGE SCHEMAS =====
-
-    ErrorPayload:
-      type: object
-      required: [type, error_event]
-      properties:
-        type:
-          type: string
-          const: error
-        error_event:
-          $ref: "#/components/schemas/ErrorData"
-
-    ErrorData:
-      type: object
-      required: [code]
-      properties:
-        code:
-          $ref: "#/components/schemas/WebSocketCloseCode"
-        message:
-          type: string
-          description: Human-readable error description
-        error_type:
-          $ref: "#/components/schemas/ErrorType"
-          nullable: true
-          description: Specific error type for programmatic handling
-        reason:
-          type: string
-          nullable: true
-          description: Generic reason without sensitive details (sent to all clients)
-        debug_message:
-          type: string
-          nullable: true
-          description: Detailed debug message (only sent based on error reporting access level)
-        details:
-          type: object
-          additionalProperties: true
-          nullable: true
-          description: Additional error context
-
-    WebSocketCloseCode:
-      type: integer
-      enum: [1000, 1002, 1008, 1011]
-      description: |
-        WebSocket close codes used by the conversation API:
-        - 1000: Normal closure (agent ended conversation, max duration exceeded)
-        - 1002: Protocol/operational error (timeouts, safety/policy violations, LLM/TTS/ASR failures, HTTP exceptions)
-        - 1008: Input/contract error (invalid messages, missing required fields, auth/validation errors)
-        - 1011: Internal server error (unexpected errors)
-
-    ErrorType:
-      type: string
-      enum:
-        - unknown
-        - invalid_message
-        - telephony_agent_error
-        - mcp_tool_error
-        - mcp_https_error
-        - value_error
-        - missing_fields
-        - override_error
-        - missing_dynamic_variable_transfer
-        - missing_dynamic_variable
-        - websocket_disconnect
-        - safety_violation
-        - llm_timeout
-        - transport_receive_timeout
-        - asyncio_timeout
-        - http_exception
-        - max_duration_exceeded
-        - llm_error
-        - custom_llm_error
-        - cascade_brain_error
-        - asr_transcription_error
-        - vad_error
-        - turn_probability_error
-        - tts_cascade_error
-        - redis_timeout_error
-        - unknown_websocket_crash
-      description: |
-        Specific error types that can occur:
-        - unknown: Default/unknown error type
-        - invalid_message: Invalid JSON or WebSocket message format (code 1008)
-        - telephony_agent_error: ASR-only agents cannot handle telephony calls (code 1008)
-        - mcp_tool_error: Invalid MCP tool schema or conversion error (code 1008)
-        - mcp_https_error: MCP servers require HTTPS URLs (code 1008)
-        - value_error: ValueError in message processing (code 1008)
-        - missing_fields: Required fields missing from message (code 1008)
-        - override_error: Invalid override configuration (code 1008)
-        - missing_dynamic_variable_transfer: Missing dynamic variable after agent transfer (code 1008)
-        - missing_dynamic_variable: Required dynamic variable not provided (code 1008)
-        - websocket_disconnect: WebSocket disconnected
-        - safety_violation: Content policy violation detected (code 1002)
-        - llm_timeout: LLM response took over 20 seconds (code 1002)
-        - transport_receive_timeout: No user input for 60 seconds (code 1002)
-        - asyncio_timeout: Internal asyncio task timeout (code 1002)
-        - http_exception: HTTP exception converted to WebSocket error (code 1002)
-        - max_duration_exceeded: Max call duration exceeded (code 1000)
-        - llm_error: OpenAI or custom LLM error (code 1002)
-        - custom_llm_error: Custom LLM generation failed (code 1002)
-        - cascade_brain_error: All LLMs have failed (code 1002)
-        - asr_transcription_error: Audio transcription failed (code 1002)
-        - vad_error: Voice activity detection failed (code 1002)
-        - turn_probability_error: Turn detection failed (code 1002)
-        - tts_cascade_error: All TTS models have failed (code 1002)
-        - redis_timeout_error: Redis queries timed out (code 1002)
-        - unknown_websocket_crash: Unexpected server error (code 1011)
+    DynamicVariableNestedValueType:
+      anyOf:
+      - type: string
+      - type: integer
+      - type: number
+      - type: boolean
+      - items:
+          $ref: '#/components/schemas/DynamicVariableNestedValueType'
+        type: array
+      - type: 'null'
