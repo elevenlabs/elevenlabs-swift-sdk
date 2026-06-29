@@ -62,14 +62,11 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         let vCount = vDSP_Length(frameCount)
 
         var totalRMS: Float = 0
-        for i in 0 ..< audioBuffer.channels {
+        for i in 0 ..< channelCount {
             let ptr = audioBuffer.rawBuffer(forChannel: i)
-            var normalized = [Float](repeating: 0, count: frameCount)
-            var divisor: Float = 32768.0
-            vDSP_vsdiv(ptr, 1, &divisor, &normalized, 1, vCount)
             var channelRMS: Float = 0
-            vDSP_rmsqv(normalized, 1, &channelRMS, vCount)
-            totalRMS += channelRMS
+            vDSP_rmsqv(ptr, 1, &channelRMS, vCount)
+            totalRMS += channelRMS / 32768.0
         }
         let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
         let db = 20 * log10(max(averageRMS, 1e-6))
