@@ -41,6 +41,9 @@ extension ConnectionManaging {
             if let event = try EventParser.parseIncomingEvent(from: data) {
                 onEventReceived?(event)
             }
+        } catch let EventParseError.unknownEventType(type) {
+            // Unrecognized event types are expected (newer server) — not errors.
+            logger.debug("Ignoring unknown incoming event type", context: ["type": type])
         } catch {
             logger.error("Failed to parse incoming event", context: ["error": "\(error)"])
             logger.debug("Incoming raw data bytes", context: ["bytes": "\(data.count)"])

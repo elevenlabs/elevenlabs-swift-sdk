@@ -122,11 +122,12 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     static func url(for auth: ElevenLabsConfiguration) throws -> URL {
         switch auth.authSource {
         case let .publicAgentId(agentId):
-            var components = URLComponents(string: ConnectionConstants.textConversationUrl)!
-            components.queryItems = [
-                URLQueryItem(name: "agent_id", value: agentId)
-            ]
-            return components.url!
+            var components = URLComponents(string: ConnectionConstants.textConversationUrl)
+            components?.queryItems = [URLQueryItem(name: "agent_id", value: agentId)]
+            guard let url = components?.url else {
+                throw ConversationError.authenticationFailed("Invalid conversation URL")
+            }
+            return url
 
         case let .signedWebSocketURL(urlString, _):
             guard let url = URL(string: urlString) else {
