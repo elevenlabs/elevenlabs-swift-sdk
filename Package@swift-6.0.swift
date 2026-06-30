@@ -6,9 +6,9 @@ import PackageDescription
 let package = Package(
     name: "ElevenLabs",
     platforms: [
-        .iOS(.v13),
-        .macOS(.v10_15),
-        .macCatalyst(.v14),
+        .iOS(.v15),
+        .macOS(.v12),
+        .macCatalyst(.v15),
         .visionOS(.v2),
         .tvOS(.v17)
     ],
@@ -16,10 +16,14 @@ let package = Package(
         .library(
             name: "ElevenLabs",
             targets: ["ElevenLabs"]
+        ),
+        .library(
+            name: "ElevenLabsWidget",
+            targets: ["ElevenLabsWidget"]
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.10.0")
+        .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.15.0")
     ],
     targets: [
         .target(
@@ -35,6 +39,15 @@ let package = Package(
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy")
+            ]
+        ),
+        .target(
+            name: "ElevenLabsWidget",
+            dependencies: [
+                "ElevenLabs"
+            ],
+            resources: [
+                .process("Resources/OrbShader.metal")
             ]
         ),
         .testTarget(

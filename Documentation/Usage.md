@@ -24,39 +24,39 @@ This document provides in-depth examples and advanced configuration options for 
 
 ## State Management
 
-The `Conversation` object provides reactive `@Published` properties for seamless UI integration.
+The `ConversationClient` exposes reactive `@Published` properties for seamless UI integration. Hold one as a `@StateObject` and bind to it directly.
 
 ### Message Handling
 
 Monitor real-time transcriptions for both the agent and the user. The `messages` array is automatically updated.
 
 ```swift
-conversation.$messages
+client.$messages
     .receive(on: DispatchQueue.main)
     .sink { messages in
         // messages are of type [Message]
         // Each message has role (.user or .agent) and content
+        // `message.isPartial` is true while it's still being assembled —
+        // a streaming agent response or an in-progress (tentative) user
+        // transcript — and flips to false once finalized.
     }
     .store(in: &cancellables)
 ```
 
-### Agent State Monitoring
+### Agent Speaking State
 
-Directly track what the agent is currently doing to show appropriate UI indicators.
+Track whether the agent is currently speaking to drive UI indicators (e.g. an
+animated orb). The agent is always listening, so there is no separate
+"listening"/"thinking" state — `isAgentSpeaking` is the single, honest signal of
+agent voice activity, driven by the transport's speaking detection.
 
 ```swift
-conversation.$agentState
-    .sink { state in
-        switch state {
-        case .listening:
-            // Agent is waiting for the user to speak
-            break
-        case .speaking:
-            // Agent is currently talking
-            break
-        case .thinking:
-            // Agent is preparing a tool call or response
-            break
+client.$isAgentSpeaking
+    .sink { isSpeaking in
+        if isSpeaking {
+            // Agent is currently talking — show the speaking indicator
+        } else {
+            // Agent is not talking
         }
     }
     .store(in: &cancellables)
@@ -64,22 +64,24 @@ conversation.$agentState
 
 ### Connection State
 
-Handle transitions between idle, connecting, active, and ended states.
+Handle transitions between idle, connecting, connected, ended, and startup-failed
+states. The `connecting` case carries a `StartupPhase` describing how far the
+connection/handshake has progressed; ignore it if you only need the coarse state.
 
 ```swift
-conversation.$state
+client.$state
     .sink { state in
         switch state {
         case .idle:
             break
-        case .connecting:
-            break
-        case .active(let callInfo):
-            print("Connected to agent: \(callInfo.agentId)")
+        case .connecting(let phase):
+            print("Connecting: \(phase)")
+        case .connected:
+            print("Connected")
         case .ended(let reason):
             print("Conversation ended: \(reason)")
-        case .error(let error):
-            print("Error: \(error.localizedDescription)")
+        case .startupFailed(let failure):
+            print("Startup failed: \(failure)")
         }
     }
     .store(in: &cancellables)
@@ -93,18 +95,19 @@ Start a conversation without audio and use text messages only.
 
 ```swift
 // 1) Start a text-only conversation (no microphone used)
-let conversation = try await ElevenLabs.startConversation(
-    agentId: "agent_123",
+let client = ConversationClient()
+try await client.start(
+    auth: .publicAgent(id: "agent_123"),
     config: ConversationConfig(
-        conversationOverrides: .init(textOnly: true)
+        textOnly: true
     )
 )
 
 // 2) Send text messages
-try await conversation.sendMessage("Hi! Tell me about the weather.")
+try await client.sendMessage("Hi! Tell me about the weather.")
 
 // 3) Receive responses (reactive)
-conversation.$messages
+client.$messages
     .receive(on: DispatchQueue.main)
     .sink { messages in
         guard let last = messages.last, last.role == .agent else { return }
@@ -122,41 +125,44 @@ conversation.$messages
 Control the user's microphone state directly without needing to manage `AVAudioSession` yourself.
 
 ```swift
+@MainActor
 class AudioControlViewModel: ObservableObject {
     @Published var isAgentReady = false
-    @Published var isMuted = true
-    
-    private var conversation: Conversation?
+    // Microphone (input) mute only — this does not mute the agent's audio output.
+    @Published var isMicMuted = true
+
+    let client: ConversationClient
     private var cancellables = Set<AnyCancellable>()
-    
-    func startConversation(agentId: String) async throws {
-        conversation = try await ElevenLabs.startConversation(
-            agentId: agentId,
-            config: .init(
+
+    init() {
+        client = ConversationClient(
+            callbacks: .init(
                 onAgentReady: { [weak self] in
                     Task { @MainActor in
                         self?.isAgentReady = true
-                        // Automatically unmute when agent is ready
-                        try? await self?.setMuted(false)
+                        // Automatically unmute the mic when the agent is ready
+                        try? await self?.setMicMuted(false)
                     }
                 }
             )
         )
-        
-        // Observe mute state changes from the conversation
-        conversation?.$isMuted
+
+        // Observe mic mute state changes from the client
+        client.$isMicMuted
             .receive(on: DispatchQueue.main)
-            .assign(to: &$isMuted)
+            .assign(to: &$isMicMuted)
     }
-    
-    func setMuted(_ muted: Bool) async {
-        guard let conversation else { return }
-        try? await conversation.setMuted(muted)
+
+    func startConversation(agentId: String) async throws {
+        try await client.start(auth: .publicAgent(id: agentId))
     }
-    
-    func toggleMute() async {
-        guard let conversation else { return }
-        try? await conversation.toggleMute()
+
+    func setMicMuted(_ muted: Bool) async {
+        try? await client.setMicMuted(muted)
+    }
+
+    func toggleMicMute() async {
+        try? await client.toggleMicMute()
     }
 }
 
@@ -169,15 +175,15 @@ struct AudioControlView: View {
             if viewModel.isAgentReady {
                 Button(action: {
                     Task {
-                        await viewModel.toggleMute()
+                        await viewModel.toggleMicMute()
                     }
                 }) {
-                    Image(systemName: viewModel.isMuted ? "mic.slash" : "mic")
+                    Image(systemName: viewModel.isMicMuted ? "mic.slash" : "mic")
                         .font(.largeTitle)
                 }
                 .buttonStyle(.borderedProminent)
                 
-                Text(viewModel.isMuted ? "Muted" : "Unmuted")
+                Text(viewModel.isMicMuted ? "Muted" : "Unmuted")
                     .foregroundColor(.secondary)
             } else {
                 ProgressView("Connecting...")
@@ -190,20 +196,39 @@ struct AudioControlView: View {
 }
 ```
 
-### Raw Audio Tracks
+### Custom Audio Renderers
 
-Access the underlying LiveKit audio tracks for advanced visualization (e.g., audio visualizers or level meters).
+For advanced audio handling — visualizers, level meters, recording, custom DSP,
+or deriving your own metrics (frequency bands, a playout clock) — tap the raw
+decoded PCM with a `ConversationAudioRenderer`. This works without exposing any
+transport types: the only value you receive is an `AVAudioPCMBuffer`.
 
 ```swift
-// Use these with LiveKit view components or custom processors
-if let inputTrack = conversation.inputTrack as? LocalAudioTrack {
-    // Access local microphone track
+import AVFoundation
+import ElevenLabs
+
+final class PlayoutClock: ConversationAudioRenderer {
+    private(set) var playoutMs = 0.0
+
+    // Called on a realtime audio thread — keep it light and hop off before
+    // touching UI state.
+    func render(_ buffer: AVAudioPCMBuffer) {
+        let sampleRate = buffer.format.sampleRate
+        guard sampleRate > 0 else { return }
+        playoutMs += Double(buffer.frameLength) / sampleRate * 1000
+    }
 }
 
-if let agentTrack = conversation.agentAudioTrack as? RemoteAudioTrack {
-    // Access agent's audio track
-}
+let clock = PlayoutClock()
+client.addAgentAudioRenderer(clock)   // agent output
+// client.addInputAudioRenderer(clock) // local microphone
+
+// later, to stop and release it:
+client.removeAgentAudioRenderer(clock)
 ```
+
+Renderers attach automatically once the relevant track is available and are
+re-attached across reconnects, so you can register them at any time.
 
 ---
 
@@ -220,18 +245,18 @@ class ConversationViewModel: ObservableObject {
     @Published var isProcessingTool = false
     
     private var cancellables = Set<AnyCancellable>()
-    private let conversation: Conversation
+    private let client: ConversationClient
     private var toolObserverTask: Task<Void, Never>?
     
-    init(conversation: Conversation) {
-        self.conversation = conversation
+    init(client: ConversationClient) {
+        self.client = client
         setupToolObserver()
     }
     
     private func setupToolObserver() {
         // Option 1: Using async/await pattern (recommended for automatic execution)
         toolObserverTask = Task {
-            for await toolCalls in conversation.$pendingToolCalls.values {
+            for await toolCalls in client.$pendingToolCalls.values {
                 await withTaskGroup(of: Void.self) { group in
                     for toolCall in toolCalls {
                         group.addTask {
@@ -243,7 +268,7 @@ class ConversationViewModel: ObservableObject {
         }
         
         // Option 2: Using Combine (for manual execution with UI control)
-        conversation.$pendingToolCalls
+        client.$pendingToolCalls
             .receive(on: DispatchQueue.main)
             .sink { [weak self] toolCalls in
                 self?.pendingTools = toolCalls
@@ -277,10 +302,10 @@ class ConversationViewModel: ObservableObject {
                 result = "Unknown tool: \(toolCall.toolName)"
             }
             
-            try await conversation.sendToolResult(for: toolCall.toolCallId, result: result)
+            try await client.sendToolResult(for: toolCall.toolCallId, result: result)
         } catch {
             print("Tool execution failed: \(error)")
-            try? await conversation.sendToolResult(
+            try? await client.sendToolResult(
                 for: toolCall.toolCallId,
                 result: "Error: \(error.localizedDescription)",
                 isError: true
@@ -313,8 +338,8 @@ class ConversationViewModel: ObservableObject {
 struct ConversationView: View {
     @StateObject private var viewModel: ConversationViewModel
     
-    init(conversation: Conversation) {
-        _viewModel = StateObject(wrappedValue: ConversationViewModel(conversation: conversation))
+    init(client: ConversationClient) {
+        _viewModel = StateObject(wrappedValue: ConversationViewModel(client: client))
     }
     
     var body: some View {
@@ -345,26 +370,26 @@ class MCPViewModel: ObservableObject {
     @Published var pendingApprovals: [MCPToolCallEvent] = []
     @Published var isProcessing = false
     
-    private let conversation: Conversation
+    private let client: ConversationClient
     private var cancellables = Set<AnyCancellable>()
     private var mcpObserverTask: Task<Void, Never>?
     
-    init(conversation: Conversation) {
-        self.conversation = conversation
+    init(client: ConversationClient) {
+        self.client = client
         setupMCPObserver()
     }
     
     private func setupMCPObserver() {
         // Option 1: Automatic approval with custom logic
         mcpObserverTask = Task {
-            for await mcpCalls in conversation.$mcpToolCalls.values {
+            for await mcpCalls in client.$mcpToolCalls.values {
                 await withTaskGroup(of: Void.self) { group in
                     for call in mcpCalls where call.state == .awaitingApproval {
                         group.addTask {
                             // Auto-approve safe operations, ask for dangerous ones
                             let approved = await self.shouldAutoApprove(call)
                             if let approved {
-                                try? await self.conversation.sendMCPToolApproval(
+                                try? await self.client.sendMCPToolApproval(
                                     toolCallId: call.toolCallId,
                                     isApproved: approved
                                 )
@@ -376,7 +401,7 @@ class MCPViewModel: ObservableObject {
         }
         
         // Option 2: Manual approval through UI
-        conversation.$mcpToolCalls
+        client.$mcpToolCalls
             .receive(on: DispatchQueue.main)
             .sink { [weak self] calls in
                 self?.pendingApprovals = calls.filter { $0.state == .awaitingApproval }
@@ -399,7 +424,7 @@ class MCPViewModel: ObservableObject {
         isProcessing = true
         defer { isProcessing = false }
         
-        try? await conversation.sendMCPToolApproval(
+        try? await client.sendMCPToolApproval(
             toolCallId: toolCallId,
             isApproved: approved
         )
@@ -416,8 +441,8 @@ struct MCPApprovalView: View {
     @State private var showingDialog = false
     @State private var currentCall: MCPToolCallEvent?
     
-    init(conversation: Conversation) {
-        _viewModel = StateObject(wrappedValue: MCPViewModel(conversation: conversation))
+    init(client: ConversationClient) {
+        _viewModel = StateObject(wrappedValue: MCPViewModel(client: client))
     }
     
     var body: some View {
@@ -468,15 +493,25 @@ struct MCPApprovalView: View {
 
 ## Event Callbacks
 
-For non-reactive integrations, use fine-grained callbacks in `ConversationConfig`.
+For non-reactive integrations, pass fine-grained `ConversationCallbacks` when you create the client.
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
+    onError: { error in
+        print("A non-fatal or startup error occurred: \(error)")
+    },
     onAgentResponse: { text, eventId in 
         print("Agent finalized response: \(text)")
     },
+    onAgentResponsePart: { text, type, eventId in
+        // type is .start / .delta / .stop; text is empty for the boundary markers
+        if type == .delta { print("Streamed agent chunk: \(text)") }
+    },
     onUserTranscript: { text, eventId in
         print("User said: \(text)")
+    },
+    onTentativeUserTranscript: { text, eventId in
+        print("User is saying (in progress): \(text)")
     },
     onInterruption: { eventId in
         print("User interrupted the agent!")
@@ -484,14 +519,14 @@ let config = ConversationConfig(
     onAudioAlignment: { alignment in
         // Real-time word highlighting timing.
     },
-    onCanSendFeedbackChange: { canSend in
-        // Enable/disable your 'Thumbs Up/Down' buttons in the UI
-        self.showFeedbackUI = canSend
-    },
-    onError: { error in
-        print("A non-fatal or startup error occurred: \(error)")
+    onMessage: { source, message in
+        // Raw JSON frames for logging/telemetry. `source` is "ai" or "user".
+        // Fires for every frame (incl. the ping heartbeat), so it can be noisy;
+        // prefer the typed callbacks above for app logic.
     }
 )
+
+let client = ConversationClient(callbacks: callbacks)
 ```
 
 ---
@@ -502,13 +537,13 @@ The `AudioPipelineConfiguration` allows you to fine-tune the hardware audio beha
 
 ```swift
 let audioConfig = AudioPipelineConfiguration(
-    // .inputMixer (default) - uses standard system mixing
-    // .voiceProcessing - optimized for speech (AEC/NS)
+    // How to mute the local mic. Pick one strategy:
+    //   .inputMixer (default)  - instant, silent; no speaking-while-muted detection
+    //   .voiceProcessing       - supports detection, but iOS plays a sound effect
+    //   .restart               - fully releases the mic (privacy dot off), slower
+    //   .software(speechThreshold: -35) - silent + detection, mutes in software
     microphoneMuteMode: .inputMixer,
-    
-    // Set to true to minimize latency of the first word
-    recordingAlwaysPrepared: true,
-    
+
     // Bypass system Echo Cancellation / Noise Suppression (Advanced)
     voiceProcessingBypassed: false
 )
@@ -520,21 +555,18 @@ let config = ConversationConfig(audioConfiguration: audioConfig)
 
 ## Startup Performance Tuning {#startup-tuning}
 
-Control the connection handshake and retry behavior.
+Bound how long startup waits before failing with `.agentTimeout`. These are two
+independent budgets: `agentJoinTimeout` (voice only) covers waiting for the agent
+to join the room, and `conversationInitTimeout` (voice and text) covers waiting
+for the `conversation_initiation_metadata` acknowledgement that completes the
+handshake.
 
 ```swift
-let startupConfig = ConversationStartupConfiguration(
-    // Time to wait for agent to be 'ready' after room connection
-    agentReadyTimeout: 10.0,
-    
-    // Backoff strategy for protocol initialization 
-    initRetryDelays: [0, 1.0, 2.0, 5.0],
-    
-    // Whether to fail early if agent takes too long
-    failIfAgentNotReady: true
+// Each defaults to 3 seconds.
+let config = ConversationConfig(
+    agentJoinTimeout: 10.0,
+    conversationInitTimeout: 10.0
 )
-
-let config = ConversationConfig(startupConfiguration: startupConfig)
 ```
 
 ---
@@ -543,33 +575,32 @@ let config = ConversationConfig(startupConfiguration: startupConfig)
 
 Handle feedback (like/dislike) and contextual updates to the agent.
 
+Feedback is correlated to a specific agent message via its `eventId`, which every
+agent `Message` in `client.messages` carries. There is intentionally **no**
+`canSendFeedback` flag: the backend accepts feedback for any past agent event
+while the conversation is connected, and is last-write-wins (re-rating overwrites;
+an unknown `eventId` is a no-op). So the only requirements are a valid agent
+`eventId` and an active connection — `sendFeedback` throws `notConnected`
+otherwise. "Once per response" or "disable after rating" is UI state your app
+owns (e.g. by remembering which `eventId`s you've already rated).
+
 ```swift
-// 1) Setup: react to feedback availability
-var canSendFeedback = false
+let client = ConversationClient()
+try await client.start(auth: .publicAgent(id: "agent_123"))
 
-let cfg = ConversationConfig(
-    onAgentResponse: { text, eventId in
-        print("Agent:", text, "(event:", eventId, ")")
-    },
-    onCanSendFeedbackChange: { can in
-        canSendFeedback = can
-        // e.g., refresh your UI
-    }
-)
-
-let conversation = try await ElevenLabs.startConversation(agentId: "agent_123", config: cfg)
-
-// 2) Sending feedback from your UI
-func thumbsUp(latestEventId: Int) {
-    Task { try? await conversation.sendFeedback(.like, eventId: latestEventId) }
+// Per-message thumbs: rate any agent message by its eventId.
+func thumbsUp(for message: Message) {
+    guard let eventId = message.eventId else { return } // locally-appended messages have none
+    Task { try? await client.sendFeedback(.like, eventId: eventId) }
 }
 
-func thumbsDown(latestEventId: Int) {
-    Task { try? await conversation.sendFeedback(.dislike, eventId: latestEventId) }
+func thumbsDown(for message: Message) {
+    guard let eventId = message.eventId else { return }
+    Task { try? await client.sendFeedback(.dislike, eventId: eventId) }
 }
 
-// 3) Contextual updates (e.g., user preferences)
-Task { try? await conversation.updateContext("user_prefers_detailed_answers=true") }
+// Contextual updates (e.g., user preferences)
+Task { try? await client.updateContext("user_prefers_detailed_answers=true") }
 ```
 
 ---
@@ -584,16 +615,16 @@ class ReconnectionManager: ObservableObject {
     @Published var isReconnecting = false
     @Published var reconnectAttempts = 0
     
-    private let conversation: Conversation
+    private let client: ConversationClient
     private let agentId: String
     private let maxRetries = 3
     private var cancellables = Set<AnyCancellable>()
     
-    init(conversation: Conversation, agentId: String) {
-        self.conversation = conversation
+    init(client: ConversationClient, agentId: String) {
+        self.client = client
         self.agentId = agentId
         
-        conversation.$state
+        client.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self else { return }
@@ -604,7 +635,7 @@ class ReconnectionManager: ObservableObject {
                         self.showReconnectButton = true
                         self.reconnectAttempts = 0
                     }
-                case .active:
+                case .connected:
                     self.showReconnectButton = false
                     self.isReconnecting = false
                     self.reconnectAttempts = 0
@@ -620,7 +651,8 @@ class ReconnectionManager: ObservableObject {
         
         while reconnectAttempts < maxRetries {
             do {
-                try await conversation.startConversation(with: agentId)
+                // The client is reusable — starting again runs a fresh session.
+                try await client.start(auth: .publicAgent(id: agentId))
                 return
             } catch {
                 reconnectAttempts += 1
@@ -672,13 +704,15 @@ struct ConversationView: View {
 Monitor the user's voice intensity for custom animations or meters.
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onVadScore: { score in
         // score is a float from 0.0 to 1.0
         // 0.0 = Silence, 1.0 = Loud Speech
         self.updateAmplitudeView(with: score)
     }
 )
+
+let client = ConversationClient(callbacks: callbacks)
 ```
 
 ---
@@ -687,17 +721,50 @@ let config = ConversationConfig(
 
 ### Custom Token Provider
 
-For complex scenarios where you need to refresh tokens or verify user session before starting a conversation.
+For complex scenarios where you need to refresh tokens or verify the user session before starting a conversation, fetch a fresh conversation token right before you connect. `auth` is consumed at `start(auth:)`-time, so the token stays fresh.
 
 ```swift
-let conversation = try await ElevenLabs.startConversation(
-    tokenProvider: {
-        // Your custom logic to fetch a conversation token
-        let session = try await myAuthService.getCurrentSession()
-        return try await myBackend.fetchToken(for: session)
-    }
+// Your custom logic to fetch a conversation token
+let session = try await myAuthService.getCurrentSession()
+let token = try await myBackend.fetchToken(for: session)
+
+let client = ConversationClient()
+try await client.start(auth: .conversationToken(token))
+```
+
+### Custom Endpoints {#custom-endpoints}
+
+The SDK talks to four endpoints: the conversation-token host, the LiveKit voice
+host, the text-WebSocket host, and the REST host (file upload/delete, feedback).
+By default these point at production (`ElevenLabsEndpoints.production`). Set a
+custom `ElevenLabsEndpoints` on `ConversationConfig.endpoints` to front them
+through a proxy/gateway, use a regional/data-residency host, or target a staging
+deployment.
+
+Three of the four endpoints share an API host, so the common case is one base URL:
+
+```swift
+// Derives conversationToken / textWebSocket / apiBase from one host;
+// LiveKit stays on the production host unless you override it.
+let endpoints = ElevenLabsEndpoints.apiBase(URL(string: "https://my-proxy.example.com")!)
+
+let client = ConversationClient()
+try await client.start(
+    auth: .publicAgent(id: "your-agent-id"),
+    config: .init(endpoints: endpoints)
 )
 ```
+
+For full control (e.g. a custom LiveKit host), use the memberwise initializer —
+any endpoint you omit falls back to its production value:
+
+```swift
+let endpoints = ElevenLabsEndpoints(
+    voiceWebSocket: URL(string: "wss://livekit.my-region.example.com")!
+)
+```
+
+The same `endpoints:` parameter is available on `ChatWidget.init` for the widget.
 
 ---
 
@@ -711,12 +778,13 @@ The SDK uses `os.Logger` for high-performance logging. You can filter logs in Xc
 
 ### Log Levels
 
-Adjust the verbosity of the SDK:
+Set the verbosity of the SDK per conversation via `ConversationConfig` (fixed for
+the lifetime of the conversation; defaults to `.warning`):
 
 ```swift
-ElevenLabs.configure(
-    ElevenLabs.Configuration(logLevel: .debug) // .trace for full event logs
-)
+let config = ConversationConfig(logLevel: .debug) // .trace for full event logs
+let client = ConversationClient()
+try await client.start(auth: .publicAgent(id: "your-agent-id"), config: config)
 ```
 
 ---
@@ -732,20 +800,22 @@ Always call SDK methods from the `@MainActor` when interacting with the UI. The 
 Although the SDK uses ARC, we recommend calling `endConversation()` when the user leaves the chat screen to promptly release WebRTC resources.
 
 ```swift
-// Call endConversation() when the conversation is active
-if conversation.state.isActive {
-    await conversation.endConversation()
+// Call endConversation() when the conversation is connected
+if client.state == .connected {
+    await client.endConversation()
 }
 ```
 
 ### 3. Cancelling Startup
 
-If you want to abort connecting (e.g., the user dismisses the screen during `startConversation(...)`), run the start in a separate `Task` and cancel it if needed:
+If you want to abort connecting (e.g., the user dismisses the screen during `start(auth:)`), run the start in a separate `Task` and cancel it if needed:
 
 ```swift
+let client = ConversationClient()
+
 // Start
-let connectTask = Task { () -> Conversation in
-    try await ElevenLabs.startConversation(agentId: "agent_123")
+let connectTask = Task {
+    try await client.start(auth: .publicAgent(id: "agent_123"))
 }
 
 // Cancel later
@@ -753,8 +823,8 @@ connectTask.cancel()
 
 // Optionally await the result
 do {
-    let conversation = try await connectTask.value
-    // conversation is ready
+    try await connectTask.value
+    // client is connected
 } catch is CancellationError {
     // connection cancelled
 } catch {
@@ -767,9 +837,11 @@ Timeout-based cancellation:
 If you want to automatically cancel connecting after a timeout (e.g., 10 seconds), start the task and schedule a cancellation using `Task.sleep`:
 
 ```swift
+let client = ConversationClient()
+
 // Start connecting
-let connectTask = Task { () -> Conversation in
-    try await ElevenLabs.startConversation(agentId: "agent_123")
+let connectTask = Task {
+    try await client.start(auth: .publicAgent(id: "agent_123"))
 }
 
 // Cancel after timeout
@@ -780,7 +852,7 @@ Task {
 
 // Await result (optional)
 do {
-    let conversation = try await connectTask.value
+    try await connectTask.value
     // connected
 } catch is CancellationError {
     // cancelled due to timeout
@@ -795,4 +867,4 @@ Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)
 
 ### 5. Privacy
 
-Always ensure you have requested microphone permissions **before** calling `startConversation` for a smoother user experience, although the SDK will handle basics.
+Always ensure you have requested microphone permissions **before** calling `start(auth:)` for a smoother user experience, although the SDK will handle basics.
