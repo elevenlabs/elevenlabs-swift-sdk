@@ -7,3 +7,14 @@ xcuserdata/
 xcshareddata/
 Package.resolved
 *.bak
+
+# Xcode build output / per-user state
+DerivedData/
+build/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Local-only root workspace — open Examples/DemoApp/DemoApp.xcodeproj directly.
+# (The example's own .xcodeproj/project.xcworkspace stays tracked.)
+/SDK.xcworkspace
