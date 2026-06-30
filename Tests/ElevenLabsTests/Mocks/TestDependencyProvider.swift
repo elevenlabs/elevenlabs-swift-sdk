@@ -1,43 +1,20 @@
 @testable import ElevenLabs
 
+/// Test double for `ConversationDependencyProvider` that vends mock connection
+/// managers, so the full `Conversation` startup pipeline can be exercised
+/// without touching the network or LiveKit.
 @MainActor
 final class TestDependencyProvider: ConversationDependencyProvider {
     let logger: any Logging
-    private let _tokenService: any TokenServicing
-    private let _webRTCConnectionManager: any WebRTCConnectionManaging
-    private let _webSocketConnectionManager: any WebSocketConnectionManaging
-    let errorHandler: ((Swift.Error?) -> Void)?
+    let webRTCConnectionManager: any WebRTCConnectionManaging
+    let webSocketConnectionManager: any WebSocketConnectionManaging
 
     init(
-        tokenService: any TokenServicing,
-        webRTCConnectionManager: any WebRTCConnectionManaging,
-        webSocketConnectionManager: any WebSocketConnectionManaging = MockWebSocketConnectionManager(),
-        errorHandler: (@Sendable (Swift.Error?) -> Void)? = nil
+        webRTCConnectionManager: (any WebRTCConnectionManaging)? = nil,
+        webSocketConnectionManager: (any WebSocketConnectionManaging)? = nil
     ) {
-        _tokenService = tokenService
-        _webRTCConnectionManager = webRTCConnectionManager
-        _webSocketConnectionManager = webSocketConnectionManager
-        self.errorHandler = errorHandler
-
-        logger = SDKLogger(logLevel: .error)
-
-        _webRTCConnectionManager.errorHandler = { [weak self] error in
-            self?.errorHandler?(error)
-        }
-        _webSocketConnectionManager.errorHandler = { [weak self] error in
-            self?.errorHandler?(error)
-        }
-    }
-
-    var tokenService: any TokenServicing {
-        get async { _tokenService }
-    }
-
-    func webRTCConnectionManager() async -> any WebRTCConnectionManaging {
-        _webRTCConnectionManager
-    }
-
-    func webSocketConnectionManager() async -> any WebSocketConnectionManaging {
-        _webSocketConnectionManager
+        self.webRTCConnectionManager = webRTCConnectionManager ?? MockWebRTCConnectionManager()
+        self.webSocketConnectionManager = webSocketConnectionManager ?? MockWebSocketConnectionManager()
+        logger = SDKLogger(levelOverride: .error)
     }
 }

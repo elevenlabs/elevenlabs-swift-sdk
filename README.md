@@ -24,7 +24,7 @@ Add the package via Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "3.2.2")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "3.2.0")
 ]
 ```
 
@@ -36,64 +36,56 @@ dependencies: [
 
 ### 3. Basic Usage (SwiftUI)
 
-The SDK is designed to be reactive. Simply observe the `Conversation` object and the UI will update automatically as the AI speaks and generates transcripts.
+The SDK is designed to be reactive. Hold a `ConversationClient` as a `@StateObject` and observe it directly — the UI updates automatically as the agent connects, speaks, and generates transcripts. The client is durable and reusable: call `start(auth:)` to begin a session and `start` again later to begin another.
 
 ```swift
 import ElevenLabs
 import SwiftUI
 
-@MainActor
-class ChatViewModel: ObservableObject {
-    @Published var conversation: Conversation?
-
-    func startChat() async {
-        do {
-            // Start session with a public agent ID
-            conversation = try await ElevenLabs.startConversation(agentId: "your-agent-id")
-        } catch {
-            print("Failed to start: \(error)")
-        }
-    }
-}
-
 struct ChatView: View {
-    @StateObject var vm = ChatViewModel()
+    @StateObject private var client = ConversationClient()
 
     var body: some View {
         VStack(spacing: 20) {
-            if let conversation = vm.conversation {
-                // Connection state
-                Group {
-                    switch conversation.state {
-                    case .idle: Text("Status: idle")
-                    case .connecting: Text("Status: connecting")
-                    case .active(let info): Text("Connected to: \(info.agentId)")
-                    case .ended: Text("Status: ended")
-                    case .error: Text("Status: error")
+            // Connection state
+            Group {
+                switch client.state {
+                case .idle: Text("Status: idle")
+                case .connecting(let phase): Text("Status: connecting (\(phase))")
+                case .connected: Text("Status: connected")
+                case .ended(let reason): Text("Status: ended (\(reason))")
+                case .startupFailed(let failure): Text("Status: failed (\(failure))")
+                }
+            }
+            .font(.caption).foregroundColor(.secondary)
+
+            // Real-time transcriptions
+            ScrollViewReader { proxy in
+                ScrollView {
+                    ForEach(client.messages) { msg in
+                        Text("**\(msg.role)**: \(msg.content)")
+                            .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
+                            .id(msg.id)
                     }
                 }
-                .font(.caption).foregroundColor(.secondary)
-
-                // Real-time transcriptions
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        ForEach(conversation.messages) { msg in
-                            Text("**\(msg.role)**: \(msg.content)")
-                                .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
-                                .id(msg.id)
-                        }
-                    }
-                    .onChange(of: conversation.messages.count) { _ in
-                        proxy.scrollTo(conversation.messages.last?.id)
-                    }
+                .onChange(of: client.messages.count) { _ in
+                    proxy.scrollTo(client.messages.last?.id)
                 }
+            }
 
+            if client.state == .connected {
                 Button("End Conversation", role: .destructive) {
-                    Task { await conversation.endConversation() }
+                    Task { await client.endConversation() }
                 }
             } else {
                 Button("Start Voice Chat") {
-                    Task { await vm.startChat() }
+                    Task {
+                        do {
+                            try await client.start(auth: .publicAgent(id: "your-agent-id"))
+                        } catch {
+                            print("Failed to start: \(error)")
+                        }
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -109,33 +101,11 @@ If you need to stop connecting (e.g., the user leaves the screen before the conn
 
 ```swift
 // Start connecting
-let connectTask = Task { () -> Conversation in
-    try await ElevenLabs.startConversation(agentId: "your-agent-id")
-private func handleToolCall(_ toolCall: ClientToolCallEvent) async {
-    do {
-        let parameters = try toolCall.getParameters()
-
-        let result = await executeClientTool(
-            name: toolCall.toolName,
-            parameters: parameters
-        )
-
-        // Send the tool result back to the agent
-        try await conversation?.sendToolResult(
-            for: toolCall.toolCallId,
-            result: result
-        )
-    } catch {
-        // Handle tool execution errors
-        try? await conversation?.sendToolResult(
-            for: toolCall.toolCallId,
-            result: ["error": error.localizedDescription],
-            isError: true
-        )
-    }
+let connectTask = Task {
+    try await client.start(auth: .publicAgent(id: "your-agent-id"))
 }
 
-// Cancel connecting
+// Later, if the user leaves before the connection completes:
 connectTask.cancel()
 ```
 
@@ -148,7 +118,8 @@ connectTask.cancel()
 Perfect for prototyping. Connect directly using your Agent ID from the ElevenLabs dashboard.
 
 ```swift
-let conversation = try await ElevenLabs.startConversation(agentId: "my-public-id")
+let client = ConversationClient()
+try await client.start(auth: .publicAgent(id: "my-public-id"))
 ```
 
 ### Private Agents (Production Ready)
@@ -163,29 +134,33 @@ For private agents, your backend should generate a temporary **Conversation Toke
 let token = try await myBackend.fetchToken(agentId: "my-private-id")
 
 // 2. Start session safely
-let conversation = try await ElevenLabs.startConversation(
-    conversationToken: token
-)
+let client = ConversationClient()
+try await client.start(auth: .conversationToken(token))
 ```
 
 ---
 
 ## Text-Only Conversations
 
-Skip the microphone entirely and run a chat-style conversation over WebSocket. The `Conversation` API is identical — `sendMessage`, `messages`, `endConversation` all work the same.
+Skip the microphone entirely and run a chat-style conversation over WebSocket. The `ConversationClient` API is identical — `sendMessage`, `messages`, `endConversation` all work the same; just opt in with `textOnly`.
 
 ```swift
 // Public agent
-let conversation = try await ElevenLabs.startConversation(
-    agentId: "your-agent-id",
-    config: .init(conversationOverrides: .init(textOnly: true))
+let client = ConversationClient()
+try await client.start(
+    auth: .publicAgent(id: "your-agent-id"),
+    config: .init(textOnly: true)
 )
 
-try await conversation.sendMessage("Hello!")
+try await client.sendMessage("Hello!")
 
 // Private agent: backend generates a signed WebSocket URL
 let signedURL = try await myBackend.fetchSignedWebSocketURL(agentId: "my-private-id")
-let conversation = try await ElevenLabs.startConversation(signedWebSocketURL: signedURL)
+let textClient = ConversationClient()
+try await textClient.start(
+    auth: .signedWebSocketURL(signedURL),
+    config: .init(textOnly: true)
+)
 ```
 
 ---
@@ -197,7 +172,7 @@ You can allow your agent to perform actions in your app (like opening a screen o
 ```swift
 // Observe requested tool calls with async/await
 Task {
-    for await calls in conversation.$pendingToolCalls.values {
+    for await calls in client.$pendingToolCalls.values {
         for call in calls {
             // 1. Parse parameters
             let params = (try? call.getParameters()) ?? [:]
@@ -206,7 +181,7 @@ Task {
             let result = await myAppAction(params)
 
             // 3. Send result back to the agent
-            try? await conversation.sendToolResult(for: call.toolCallId, result: result)
+            try? await client.sendToolResult(for: call.toolCallId, result: result)
         }
     }
 }
@@ -219,28 +194,50 @@ Task {
 
 ## Configuration & Tuning
 
-### Global Setup
+### Logging
 
-Configure logging and global behaviors at app launch:
+Set the SDK's diagnostic verbosity per conversation via `ConversationConfig` (defaults to `.warning`):
 
 ```swift
-ElevenLabs.configure(
-    ElevenLabs.Configuration(logLevel: .info)
+let config = ConversationConfig(logLevel: .info) // .trace for full event logs
+let client = ConversationClient()
+try await client.start(auth: .publicAgent(id: "your-agent-id"), config: config)
+```
+
+### Custom Endpoints
+
+Front ElevenLabs through a proxy/gateway, a regional/data-residency host, or a staging deployment by setting `endpoints` on `ConversationConfig` (or on `ChatWidget`):
+
+```swift
+// Everything behind one API host (token/text/REST derived from it):
+let endpoints = ElevenLabsEndpoints.apiBase(URL(string: "https://my-proxy.example.com")!)
+
+let client = ConversationClient()
+try await client.start(
+    auth: .publicAgent(id: "your-agent-id"),
+    config: .init(endpoints: endpoints)
+)
+
+// Or override individual endpoints (e.g. a custom LiveKit host); any omitted
+// endpoint falls back to production:
+let custom = ElevenLabsEndpoints(
+    voiceWebSocket: URL(string: "wss://livekit.my-region.example.com")!
 )
 ```
 
 ### Fine-Grained Callbacks
 
-Want to handle events without Combine? Use `ConversationConfig`:
+Want to handle events without Combine? Pass `ConversationCallbacks` when creating the client:
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onAgentResponse: { text, _ in print("Agent said: \(text)") },
     onUserTranscript: { text, _ in print("User said: \(text)") },
     onVadScore: { score in print("Voice intensity: \(score)") }
 )
 
-let conversation = try await ElevenLabs.startConversation(agentId: "id", config: config)
+let client = ConversationClient(callbacks: callbacks)
+try await client.start(auth: .publicAgent(id: "id"))
 ```
 
 ---
@@ -251,7 +248,8 @@ The SDK handles all the heavy lifting of WebRTC coordination and protocol parsin
 
 ```mermaid
 graph TD
-    App[Your App] --> Conversation[Conversation Object]
+    App[Your App] --> ConversationClient[ConversationClient]
+    ConversationClient --> Conversation[Conversation session - internal, single-use]
     Conversation --> WebRTCConnectionManager[WebRTC Connection Manager]
     Conversation --> WebSocketConnectionManager[WebSocket Connection Manager]
     WebRTCConnectionManager --> LiveKit[LiveKit SDK]

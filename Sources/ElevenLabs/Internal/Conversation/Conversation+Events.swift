@@ -8,90 +8,84 @@ extension Conversation {
     func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
-            insertUserTranscript(content: e.transcript, eventId: e.eventId)
-            agentStateManager?.processSignal(.userTranscript)
-            options.onUserTranscript?(e.transcript, e.eventId)
+            applyUserTranscript(content: e.transcript, eventId: e.eventId)
+            callbacks.onUserTranscript?(e.transcript, e.eventId)
 
-        case .tentativeAgentResponse:
-            agentStateManager?.processSignal(.agentResponse)
+        case let .tentativeUserTranscript(e):
+            applyTentativeUserTranscript(content: e.transcript, eventId: e.eventId)
+            callbacks.onTentativeUserTranscript?(e.transcript, e.eventId)
 
         case let .agentResponse(e):
-            upsertAgentMessage(content: e.response, eventId: e.eventId)
-            lastAgentEventId = e.eventId
-            agentStateManager?.processSignal(.agentResponse)
-            options.onAgentResponse?(e.response, e.eventId)
-            if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
-                options.onCanSendFeedbackChange?(true)
-            }
+            applyAgentResponse(content: e.response, eventId: e.eventId)
+            callbacks.onAgentResponse?(e.response, e.eventId)
 
         case let .agentResponseCorrection(correction):
-            upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
-            options.onAgentResponseCorrection?(
+            applyAgentResponse(
+                content: correction.correctedAgentResponse,
+                eventId: correction.eventId
+            )
+            callbacks.onAgentResponseCorrection?(
                 correction.originalAgentResponse,
                 correction.correctedAgentResponse,
                 correction.eventId
             )
 
+        case let .agentChatResponsePart(e):
+            applyAgentResponsePart(text: e.text, type: e.type, eventId: e.eventId)
+            callbacks.onAgentResponsePart?(e.text, e.type, e.eventId)
+
         case let .agentResponseMetadata(metadata):
-            options.onAgentResponseMetadata?(
+            callbacks.onAgentResponseMetadata?(
                 metadata.metadataData,
                 metadata.eventId
             )
 
-        case let .agentChatResponsePart(e):
-            let existing = messages.last(where: { $0.role == .agent && $0.eventId == e.eventId })?.content ?? ""
-            upsertAgentMessage(content: existing + e.text, eventId: e.eventId)
-
         case let .audio(audioEvent):
-            latestAudioEvent = audioEvent
-            latestAudioAlignment = audioEvent.alignment
             if let alignment = audioEvent.alignment {
-                options.onAudioAlignment?(alignment)
+                callbacks.onAudioAlignment?(alignment)
             }
 
         case let .interruption(interruptionEvent):
             speakingTimer?.cancel()
-            applyStateSignal(.interruption, fallback: .listening)
-            options.onInterruption?(interruptionEvent.eventId)
-            options.onCanSendFeedbackChange?(false)
+            isAgentSpeaking = false
+            callbacks.onInterruption?(interruptionEvent.eventId)
 
         case let .conversationMetadata(metadata):
-            // Store the conversation metadata for public access
             conversationMetadata = metadata
-            options.onConversationMetadata?(metadata)
+            // This event completes the startup handshake: release any waiter
+            // blocking `connect()` on metadata receipt.
+            resumeConversationMetadataWaiter()
 
         case let .ping(p):
-            // Respond to ping with pong
-            let pong = OutgoingEvent.pong(PongEvent(eventId: p.eventId))
-            try? await publish(pong)
-
-        case let .clientToolCall(toolCall):
-            // Add to pending tool calls for the app to handle
-            options.onUnhandledClientToolCall?(toolCall)
-            pendingToolCalls.append(toolCall)
+            if let pingMs = p.pingMs {
+                callbacks.onPing?(pingMs)
+            }
+            // Send pong off the serialized handler loop: awaiting the publish
+            // here would let a slow transport stall delivery of every queued
+            // event behind this heartbeat. Pong is keyed by `eventId`, so
+            // out-of-order delivery is fine.
+            let eventId = p.eventId
+            Task { @MainActor [weak self] in
+                try? await self?.publish(.pong(PongEvent(eventId: eventId)))
+            }
 
         case let .vadScore(vad):
-            agentStateManager?.processSignal(.vadScore(vad.vadScore))
-            options.onVadScore?(vad.vadScore)
+            callbacks.onVadScore?(vad.vadScore)
 
-        case let .agentToolResponse(toolResponse):
-            applyStateSignal(.agentToolResponse, fallback: .listening)
-
-            if toolResponse.toolName == "end_call" {
-                await endConversation()
-            }
-            options.onAgentToolResponse?(toolResponse)
+        case let .clientToolCall(toolCall):
+            // Append before invoking the callback so a handler that inspects
+            // `pendingToolCalls` (directly or via the mirrored client property)
+            // already sees the new call.
+            pendingToolCalls.append(toolCall)
+            callbacks.onClientToolCall?(toolCall)
 
         case let .agentToolRequest(toolRequest):
-            applyStateSignal(.agentToolRequest, fallback: .thinking)
-            options.onAgentToolRequest?(toolRequest)
+            callbacks.onAgentToolRequest?(toolRequest)
 
-        case .tentativeUserTranscript:
-            // Tentative user transcript (in-progress transcription)
-            break
+        case let .agentToolResponse(toolResponse):
+            callbacks.onAgentToolResponse?(toolResponse)
 
         case let .mcpToolCall(toolCall):
-            // Update or append MCP tool call based on toolCallId
             if let index = mcpToolCalls.firstIndex(where: { $0.toolCallId == toolCall.toolCallId }) {
                 mcpToolCalls[index] = toolCall
             } else {
@@ -99,48 +93,117 @@ extension Conversation {
             }
 
         case let .mcpConnectionStatus(status):
-            // Update MCP connection status
             mcpConnectionStatus = status
 
-        case .asrInitiationMetadata:
-            // ASR initiation metadata is available in the event stream
-            break
-
         case let .error(errorEvent):
-            logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")
-            options.onError?(.serverError(errorEvent))
+            logger.error("Received error event from server: code=\(errorEvent.code), name=\(errorEvent.errorName ?? "none"), message=\(errorEvent.message ?? "none")")
+            callbacks.onError?(.serverError(errorEvent))
         }
     }
 
-    /// Inserts the user transcript before the agent message with the same `eventId`
-    /// if one exists, since the agent's response may be received before the transcript.
-    private func insertUserTranscript(content: String, eventId: Int) {
-        let message = Message(
-            id: UUID().uuidString,
-            role: .user,
-            content: content,
-            timestamp: Date(),
-            eventId: eventId
-        )
-        if let agentIdx = messages.firstIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
-            messages.insert(message, at: agentIdx)
+    // MARK: - Transcript / response reconciliation
+    //
+    // `messages` is keyed by role + event id and only ever appended, never
+    // reordered, so order follows the arrival of finalized text:
+    //   * Finalized text (`agent_response`, `agent_response_correction`,
+    //     `user_transcript`) is always recorded — a matching event id updates in
+    //     place, otherwise it's appended (even out of order).
+    //   * Streaming parts (`agent_chat_response_part`, `tentative_user_transcript`)
+    //     only open a new partial when their event id is newer than the role's
+    //     highest; otherwise they're stale and ignored.
+    // Event ids stay unique per role; partial user transcripts are cleared on
+    // every tentative/final user transcript.
+
+    /// `agent_chat_response_part`: accumulates streamed text. A finalized message
+    /// (`.stop` already seen) is never reopened, and a stale part (older than the
+    /// agent's highest event id) never opens a new bubble.
+    private func applyAgentResponsePart(text: String, type: AgentChatResponsePartType, eventId: Int) {
+        let isPartial = type != .stop
+        guard let idx = messageIndex(role: .agent, eventId: eventId) else {
+            if isNewerThanHighestEventId(role: .agent, eventId: eventId) {
+                appendMessage(role: .agent, content: text, eventId: eventId, isPartial: isPartial)
+            }
+            return
+        }
+        guard messages[idx].isPartial else { return }
+        messages[idx] = messages[idx].updating(content: messages[idx].content + text, eventId: eventId, isPartial: isPartial)
+    }
+
+    /// `agent_response` | `agent_response_correction`: the finalized response for a
+    /// turn. Replaces the matching message in place, or records it (appending,
+    /// even out of order) when no slot exists yet.
+    private func applyAgentResponse(content: String, eventId: Int) {
+        if let idx = messageIndex(role: .agent, eventId: eventId) {
+            messages[idx] = messages[idx].updating(content: content, eventId: eventId, isPartial: false)
         } else {
-            messages.append(message)
+            appendMessage(role: .agent, content: content, eventId: eventId, isPartial: false)
         }
     }
 
-    private func upsertAgentMessage(content: String, eventId: Int) {
-        if let idx = messages.lastIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
-            let existing = messages[idx]
-            messages[idx] = Message(
-                id: existing.id,
-                role: .agent,
+    /// `user_transcript`: the finalized user transcript. Finalizes the matching
+    /// in-progress partial, or records it (appending, even out of order) when no
+    /// slot exists; then drops any leftover partial (a tentative that never
+    /// produced its own final).
+    private func applyUserTranscript(content: String, eventId: Int) {
+        if let idx = messageIndex(role: .user, eventId: eventId) {
+            messages[idx] = messages[idx].updating(content: content, eventId: eventId, isPartial: false)
+        } else {
+            appendMessage(role: .user, content: content, eventId: eventId, isPartial: false)
+        }
+        // A finalized transcript ends the turn, so any leftover in-progress
+        // partial is stale and removed.
+        messages.removeAll { $0.role == .user && $0.isPartial }
+    }
+
+    /// `tentative_user_transcript`: the in-progress user transcript. Supersedes any
+    /// existing partial, then surfaces a fresh one if it belongs to a turn newer
+    /// than the user's highest event id.
+    private func applyTentativeUserTranscript(content: String, eventId: Int) {
+        messages.removeAll { $0.role == .user && $0.isPartial }
+        guard isNewerThanHighestEventId(role: .user, eventId: eventId) else { return }
+        appendMessage(role: .user, content: content, eventId: eventId, isPartial: true)
+    }
+
+    /// Index of the `role` message with exactly `eventId`, scanning tail-first so
+    /// the common "touch the latest message" case is cheap. Event ids are unique
+    /// per role (matches update in place), so first/last match the same element.
+    private func messageIndex(role: Message.Role, eventId: Int) -> Int? {
+        messages.lastIndex { $0.role == role && $0.eventId == eventId }
+    }
+
+    /// Whether `eventId` is greater than the highest event id recorded for `role`.
+    /// Uses the max rather than the last message, because finalized responses can
+    /// append out of order and locally-sent messages carry no event id (skipped).
+    private func isNewerThanHighestEventId(role: Message.Role, eventId: Int) -> Bool {
+        guard let highest = messages.compactMap({ $0.role == role ? $0.eventId : nil }).max() else { return true }
+        return eventId > highest
+    }
+
+    private func appendMessage(role: Message.Role, content: String, eventId: Int, isPartial: Bool) {
+        messages.append(
+            Message(
+                id: UUID().uuidString,
+                role: role,
                 content: content,
-                timestamp: existing.timestamp,
-                eventId: eventId
+                timestamp: Date(),
+                eventId: eventId,
+                isPartial: isPartial
             )
-        } else {
-            appendMessage(role: .agent, content: content, eventId: eventId)
-        }
+        )
+    }
+}
+
+private extension Message {
+    /// A copy with new `content`/`eventId`/`isPartial`, preserving the stable
+    /// `id`, `role`, and `timestamp` so SwiftUI identity and ordering hold.
+    func updating(content: String, eventId: Int?, isPartial: Bool) -> Message {
+        Message(
+            id: id,
+            role: role,
+            content: content,
+            timestamp: timestamp,
+            eventId: eventId,
+            isPartial: isPartial
+        )
     }
 }
