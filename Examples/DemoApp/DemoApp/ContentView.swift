@@ -4,7 +4,7 @@ import ElevenLabsWidget
 
 struct ContentView: View {
     let authProvider: () async throws -> ConversationAuth = {
-        return ConversationAuth.publicAgent(id: "agent_7901knp31fjmfn8sh4jm50k011mj")
+        return ConversationAuth.publicAgent(id: "your agent id")
     }
     let launcher: () -> AnyView = { AnyView(Text("Chat")) }
     @State private var conversationMode: WidgetConversationMode = .voiceAndTextWithTextOnly

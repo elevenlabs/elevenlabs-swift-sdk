@@ -52,6 +52,29 @@ jobs:
       - name: Test (release)
         run: swift test --configuration release
 
+  # Build the example app so it doesn't drift out of sync with the SDK API.
+  # It's an Xcode project (not a SwiftPM target), so `swift build` above never
+  # compiles it — this job catches breakage in Examples/DemoApp.
+  demo-app:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.0.app
+
+      - name: Build example app
+        run: |
+          xcodebuild build \
+            -project Examples/DemoApp/DemoApp.xcodeproj \
+            -scheme DemoApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
   # Swift 6 strict build temporarily disabled because LiveKit pins JWTKit to
   # 4.13.x, which lacks Sendable annotations. Re-enable after upstream fixes.
   # Tracking: https://github.com/livekit/client-sdk-swift/issues/846
