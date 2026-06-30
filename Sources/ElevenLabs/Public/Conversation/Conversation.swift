@@ -1,4 +1,3 @@
-import AVFoundation
 import Combine
 import Foundation
 import LiveKit
@@ -211,11 +210,10 @@ public final class Conversation: ObservableObject {
 
         let result: StartupResult
         do {
-            result = try await WebRTCConversationStartup(logger: logger).execute(
+            result = try await webRTCConnectionManager.connect(
                 auth: auth,
                 options: options,
-                provider: provider,
-                onStateChange: { [weak self] newState in
+                onStartupStateChange: { [weak self] newState in
                     self?.updateStartupState(newState)
                 }
             )
