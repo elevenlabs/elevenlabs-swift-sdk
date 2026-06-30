@@ -15,6 +15,6 @@ final class TestDependencyProvider: ConversationDependencyProvider {
     ) {
         self.webRTCConnectionManager = webRTCConnectionManager ?? MockWebRTCConnectionManager()
         self.webSocketConnectionManager = webSocketConnectionManager ?? MockWebSocketConnectionManager()
-        logger = SDKLogger(logLevel: .error)
+        logger = SDKLogger(levelOverride: .error)
     }
 }

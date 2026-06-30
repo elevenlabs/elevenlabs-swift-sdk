@@ -3,55 +3,53 @@ import XCTest
 
 final class ElevenLabsSDKTests: XCTestCase {
     func testSDKVersionExists() {
-        XCTAssertEqual(ElevenLabs.version, "3.2.2")
-        XCTAssertFalse(ElevenLabs.version.isEmpty)
+        XCTAssertEqual(SDKVersion.version, "3.2.0")
+        XCTAssertFalse(SDKVersion.version.isEmpty)
     }
 
-    func testDefaultConfiguration() {
-        let config = ElevenLabs.Configuration.default
+    func testDefaultEndpoints() {
+        let endpoints = ElevenLabsEndpoints.production
 
-        XCTAssertNil(config.apiEndpoint)
-        XCTAssertEqual(config.logLevel, .warning)
-        XCTAssertFalse(config.debugMode)
+        XCTAssertEqual(endpoints.voiceWebSocket.absoluteString, "wss://livekit.rtc.elevenlabs.io")
+        XCTAssertEqual(endpoints.textWebSocket.absoluteString, "wss://api.elevenlabs.io/v1/convai/conversation")
+        XCTAssertEqual(endpoints.apiBase.absoluteString, "https://api.elevenlabs.io")
     }
 
-    func testCustomConfiguration() {
-        let config = ElevenLabs.Configuration(
-            apiEndpoint: URL(string: "https://custom.api.com"),
-            logLevel: .debug,
-            debugMode: true
+    func testCustomEndpointsOverrideSingleField() {
+        let endpoints = ElevenLabsEndpoints(
+            voiceWebSocket: URL(string: "wss://livekit.custom.example.com")!
         )
 
-        XCTAssertEqual(config.apiEndpoint, URL(string: "https://custom.api.com"))
-        XCTAssertEqual(config.logLevel, .debug)
-        XCTAssertTrue(config.debugMode)
+        // Overridden field is applied; the rest fall back to production.
+        XCTAssertEqual(endpoints.voiceWebSocket.absoluteString, "wss://livekit.custom.example.com")
+        XCTAssertEqual(endpoints.apiBase, ElevenLabsEndpoints.production.apiBase)
+    }
+
+    func testApiBaseConvenienceDerivesEndpoints() {
+        let endpoints = ElevenLabsEndpoints.apiBase(URL(string: "https://my-proxy.example.com")!)
+
+        XCTAssertEqual(endpoints.apiBase.absoluteString, "https://my-proxy.example.com")
+        // Scheme is upgraded to wss for the text endpoint.
+        XCTAssertEqual(endpoints.textWebSocket.absoluteString, "wss://my-proxy.example.com/v1/convai/conversation")
+        // LiveKit stays on the production host unless overridden.
+        XCTAssertEqual(endpoints.voiceWebSocket, ElevenLabsEndpoints.production.voiceWebSocket)
+    }
+
+    func testLogLevelDefaultsToWarningAndIsConfigurable() {
+        XCTAssertEqual(ConversationConfig().logLevel, .warning)
+
+        let config = ConversationConfig(logLevel: .trace)
+        XCTAssertEqual(config.logLevel, .trace)
     }
 
     @MainActor
-    func testConfigureSDK() {
-        let config = ElevenLabs.Configuration(
-            apiEndpoint: URL(string: "https://test.api.com"),
-            logLevel: .info,
-            debugMode: false
-        )
-
-        ElevenLabs.configure(config)
-
-        // Verify configuration was applied (in real implementation)
-        // This would require exposing the internal configuration for testing
-    }
-
     func testStartConversationWithAgentId() async {
-        let config = ConversationConfig()
+        let client = ConversationClient()
 
         do {
-            let conversation = try await ElevenLabs.startConversation(
-                agentId: "test-agent-123",
-                config: config
-            )
-
-            XCTAssertNotNil(conversation)
+            try await client.start(auth: .publicAgent(id: "test-agent-123"), config: ConversationConfig())
             // In a proper test environment with mocks, we'd verify connection
+            XCTAssertEqual(client.state, .connected)
         } catch {
             // Expected to fail without proper API setup
             XCTAssertTrue(error is ConversationError)
@@ -59,7 +57,7 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
 
     func testConversationTokenAuthConfiguration() {
-        let auth = ElevenLabsConfiguration.conversationToken("test-token-123")
+        let auth = ConversationAuth.conversationToken("test-token-123")
         switch auth.authSource {
         case let .conversationToken(token):
             XCTAssertEqual(token, "test-token-123")
@@ -70,41 +68,24 @@ final class ElevenLabsSDKTests: XCTestCase {
 
     func testSignedWebSocketURLAuthConfiguration() throws {
         let url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&conversation_signature=sig"
-        let auth = try ElevenLabsConfiguration.signedWebSocketURL(url)
+        let auth = try ConversationAuth.signedWebSocketURL(url)
 
         switch auth.authSource {
         case let .signedWebSocketURL(signedURL, agentId):
             XCTAssertEqual(signedURL, url)
             XCTAssertEqual(agentId, "agent-123")
-            XCTAssertEqual(auth.agentId, "agent-123")
         default:
             XCTFail("Expected signedWebSocketURL case")
         }
     }
 
-    func testCustomTokenProviderAuthConfiguration() {
-        let tokenProvider: @Sendable () async throws -> String = {
-            "dynamic-token-123"
-        }
-        let auth = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
-        switch auth.authSource {
-        case .customTokenProvider:
-            break // Success - provider is configured
-        default:
-            XCTFail("Expected customTokenProvider case")
-        }
-    }
+    
 
-    func testConfigurationLogLevels() {
-        let debugConfig = ElevenLabs.Configuration(logLevel: .debug)
-        let infoConfig = ElevenLabs.Configuration(logLevel: .info)
-        let warningConfig = ElevenLabs.Configuration(logLevel: .warning)
-        let errorConfig = ElevenLabs.Configuration(logLevel: .error)
-
-        XCTAssertEqual(debugConfig.logLevel, .debug)
-        XCTAssertEqual(infoConfig.logLevel, .info)
-        XCTAssertEqual(warningConfig.logLevel, .warning)
-        XCTAssertEqual(errorConfig.logLevel, .error)
+    func testLogLevelOrdering() {
+        XCTAssertLessThan(LogLevel.error, .warning)
+        XCTAssertLessThan(LogLevel.warning, .info)
+        XCTAssertLessThan(LogLevel.info, .debug)
+        XCTAssertLessThan(LogLevel.debug, .trace)
     }
 
     func testConversationConfigDefaults() {
@@ -112,15 +93,12 @@ final class ElevenLabsSDKTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertNil(config.conversationOverrides)
+        XCTAssertFalse(config.textOnly)
     }
 
     func testAuthenticationMethods() {
-        let agentAuth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
-        let tokenAuth = ElevenLabsConfiguration.conversationToken("token-456")
-        let providerAuth = ElevenLabsConfiguration.customTokenProvider {
-            "provided-token"
-        }
+        let agentAuth = ConversationAuth.publicAgent(id: "agent-123")
+        let tokenAuth = ConversationAuth.conversationToken("token-456")
 
         switch agentAuth.authSource {
         case let .publicAgentId(id):
@@ -135,18 +113,11 @@ final class ElevenLabsSDKTests: XCTestCase {
         default:
             XCTFail("Expected conversationToken case")
         }
-
-        switch providerAuth.authSource {
-        case .customTokenProvider:
-            break // Success
-        default:
-            XCTFail("Expected customTokenProvider case")
-        }
     }
 
     func testSDKModuleImports() {
         // Verify that all necessary types are accessible
-        XCTAssertNotNil(ElevenLabs.self)
+        XCTAssertNotNil(ConversationClient.self)
         XCTAssertNotNil(Conversation.self)
         XCTAssertNotNil(ConversationConfig.self)
         XCTAssertNotNil(ConversationError.self)

@@ -19,35 +19,49 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
 
     private var lock = os_unfair_lock_s()
     private var isMuted: Bool = false
-    private var lastNotificationTime: Date = .distantPast
 
     private var consecutiveAboveCount: Int = 0
     private var consecutiveBelowCount: Int = 0
     private var hangoverLatched: Bool = false
 
-    private let onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
+    private let onSpeakingWhileMutedChange: (@Sendable (Bool) -> Void)?
     private let mutedSpeechThresholdInDb: Float
-    private let mutedSpeechThrottleInSeconds: TimeInterval
 
     init(
-        onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?,
-        mutedSpeechThresholdInDb: Float = -35,
-        mutedSpeechThrottleInSeconds: TimeInterval = 3.0
+        onSpeakingWhileMutedChange: (@Sendable (Bool) -> Void)?,
+        mutedSpeechThresholdInDb: Float = -35
     ) {
-        self.onMutedSpeech = onMutedSpeech
+        self.onSpeakingWhileMutedChange = onSpeakingWhileMutedChange
         self.mutedSpeechThresholdInDb = mutedSpeechThresholdInDb
-        self.mutedSpeechThrottleInSeconds = mutedSpeechThrottleInSeconds
+    }
+
+    /// The current software-gate mute state. The source of truth for
+    /// `.software` mute mode, where the capture track stays open and the
+    /// hardware mic flag would misleadingly read as unmuted.
+    var muted: Bool {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return isMuted
     }
 
     func setMuted(_ muted: Bool) {
+        var fireEnded = false
         os_unfair_lock_lock(&lock)
         if isMuted != muted {
+            // Unmuting while speech was latched ends the muted-speech segment.
+            if !muted, hangoverLatched {
+                fireEnded = true
+            }
             consecutiveAboveCount = 0
             consecutiveBelowCount = 0
             hangoverLatched = false
         }
         isMuted = muted
         os_unfair_lock_unlock(&lock)
+
+        if fireEnded {
+            DispatchQueue.main.async { self.onSpeakingWhileMutedChange?(false) }
+        }
     }
 
     func audioProcessingProcess(audioBuffer: LKAudioBuffer) {
@@ -61,6 +75,11 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         let frameCount = audioBuffer.frames
         let vCount = vDSP_Length(frameCount)
 
+        // RMS is homogeneous (RMS(x/k) == RMS(x)/k), so we compute it on the raw
+        // samples and scale the single scalar instead of normalizing the whole
+        // buffer first. This avoids a heap allocation on the realtime audio thread.
+        // `rawBuffer(forChannel:)` returns float samples in int16 range (±32768),
+        // hence the 32768 divisor.
         var totalRMS: Float = 0
         for i in 0 ..< channelCount {
             let ptr = audioBuffer.rawBuffer(forChannel: i)
@@ -73,37 +92,35 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
 
         let levelActive = db > mutedSpeechThresholdInDb
 
-        var shouldFire = false
-        var fireLevel: Float = 0
+        var fireStarted = false
+        var fireEnded = false
         os_unfair_lock_lock(&lock)
         if levelActive {
             consecutiveBelowCount = 0
             consecutiveAboveCount += 1
-            if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
+            if consecutiveAboveCount >= Hangover.buffersAboveToConfirm, !hangoverLatched {
                 hangoverLatched = true
+                fireStarted = true
             }
         } else {
             consecutiveAboveCount = 0
             consecutiveBelowCount += 1
-            if consecutiveBelowCount >= Hangover.buffersBelowToClear {
+            if consecutiveBelowCount >= Hangover.buffersBelowToClear, hangoverLatched {
                 hangoverLatched = false
                 consecutiveBelowCount = 0
-            }
-        }
-
-        if hangoverLatched, levelActive {
-            let now = Date()
-            if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
-                lastNotificationTime = now
-                shouldFire = true
-                fireLevel = db
+                fireEnded = true
             }
         }
         os_unfair_lock_unlock(&lock)
 
-        if shouldFire {
+        if fireStarted {
             DispatchQueue.main.async {
-                self.onMutedSpeech?(.init(audioLevel: fireLevel))
+                self.onSpeakingWhileMutedChange?(true)
+            }
+        }
+        if fireEnded {
+            DispatchQueue.main.async {
+                self.onSpeakingWhileMutedChange?(false)
             }
         }
 

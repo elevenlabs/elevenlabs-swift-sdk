@@ -96,13 +96,6 @@ enum EventParser {
                 return .vadScore(VadScoreEvent(vadScore: vadScore))
             }
 
-        case "internal_tentative_agent_response":
-            if let event = json["tentative_agent_response_internal_event"] as? [String: Any],
-               let response = event["tentative_agent_response"] as? String
-            {
-                return .tentativeAgentResponse(TentativeAgentResponseEvent(tentativeResponse: response))
-            }
-
         case "conversation_initiation_metadata":
             if let event = json["conversation_initiation_metadata_event"] as? [String: Any],
                let conversationId = event["conversation_id"] as? String,
@@ -131,11 +124,11 @@ enum EventParser {
                let toolName = event["tool_name"] as? String,
                let toolCallId = event["tool_call_id"] as? String,
                let parameters = event["parameters"] as? [String: Any],
-               let eventId = event["event_id"] as? Int,
-               let expectsResponse = event["expects_response"] as? Bool
+               let eventId = event["event_id"] as? Int
             {
                 // Convert parameters to JSON data for Sendable compliance
                 if let parametersData = try? JSONSerialization.data(withJSONObject: parameters) {
+                    let expectsResponse = event["expects_response"] as? Bool ?? false
                     return .clientToolCall(
                         ClientToolCallEvent(
                             toolName: toolName,
@@ -250,13 +243,6 @@ enum EventParser {
                 return .mcpConnectionStatus(MCPConnectionStatusEvent(integrations: integrations))
             }
 
-        case "asr_initiation_metadata":
-            if let event = json["asr_initiation_metadata_event"] as? [String: Any],
-               let metadataData = try? JSONSerialization.data(withJSONObject: event)
-            {
-                return .asrInitiationMetadata(ASRInitiationMetadataEvent(metadataData: metadataData))
-            }
-
         case "agent_chat_response_part":
             if let event = json["text_response_part"] as? [String: Any],
                let text = event["text"] as? String,
@@ -269,12 +255,26 @@ enum EventParser {
                 )
             }
 
+        // Known event types we intentionally don't surface to consumers. Listed
+        // explicitly so they're dropped (return nil) rather than throwing
+        // `unknownEventType` via the `default` branch.
+        case "agent_response_complete",
+             "guardrail_triggered",
+             "agent_tool_response_full_payload",
+             "asr_initiation_metadata":
+            return nil
+
         case "client_error":
-            let event = json["error_event"] as? [String: Any]
-            let code = event?["code"] as? Int ?? 1011
-            let message = event?["message"] as? String
-            let errorName = event?["error_name"] as? String
-            return .error(ErrorEvent(code: code, message: message, errorName: errorName))
+            if let event = json["error_event"] as? [String: Any] {
+                let code = event["code"] as? Int ?? 1011
+                let message = event["message"] as? String
+                let errorName = event["error_name"] as? String
+                return .error(ErrorEvent(code: code, message: message, errorName: errorName))
+            }
+            // Defensive fallback for a malformed error frame missing `error_event`.
+            let code = json["code"] as? Int ?? 1011
+            let message = json["message"] as? String
+            return .error(ErrorEvent(code: code, message: message))
 
         default:
             throw EventParseError.unknownEventType(type)

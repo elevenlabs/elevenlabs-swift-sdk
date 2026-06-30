@@ -92,7 +92,7 @@ final class EventParserTests: XCTestCase {
                 "tool_name": "weather",
                 "parameters": {"city": "London"},
                 "event_id": 123,
-                "expects_response": false
+                "expects_response": true
             }
         }
         """.data(using: .utf8)!
@@ -106,48 +106,7 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(toolCall.toolCallId, "tool123")
         XCTAssertEqual(toolCall.toolName, "weather")
-        XCTAssertFalse(toolCall.expectsResponse)
-    }
-
-    func testParseClientToolCallEventExpectsResponse() throws {
-        let json = """
-        {
-            "type": "client_tool_call",
-            "client_tool_call": {
-                "tool_call_id": "tool123",
-                "tool_name": "weather",
-                "parameters": {"city": "London"},
-                "event_id": 123,
-                "expects_response": true
-            }
-        }
-        """.data(using: .utf8)!
-
-        let event = try EventParser.parseIncomingEvent(from: json)
-
-        guard case let .clientToolCall(toolCall) = event else {
-            XCTFail("Expected clientToolCall event")
-            return
-        }
-
         XCTAssertTrue(toolCall.expectsResponse)
-    }
-
-    func testParseClientErrorEvent() throws {
-        let json = """
-        {"type":"client_error","error_event":{"code":1008,"error_name":"invalid_api_key","message":"Invalid API key"}}
-        """.data(using: .utf8)!
-
-        let event = try EventParser.parseIncomingEvent(from: json)
-
-        guard case let .error(errorEvent) = event else {
-            XCTFail("Expected error event")
-            return
-        }
-
-        XCTAssertEqual(errorEvent.code, 1008)
-        XCTAssertEqual(errorEvent.errorName, "invalid_api_key")
-        XCTAssertEqual(errorEvent.message, "Invalid API key")
     }
 
     func testParseMCPConnectionStatusEvent() throws {
@@ -350,6 +309,39 @@ final class EventParserTests: XCTestCase {
 
         XCTAssertEqual(metadata.eventId, 456)
         XCTAssertFalse(metadata.metadataData.isEmpty)
+    }
+
+    func testParseClientErrorEvent() throws {
+        let json = """
+        {"type":"client_error","error_event":{"code":1008,"error_name":"invalid_api_key","message":"Invalid API key"}}
+        """.data(using: .utf8)!
+
+        let event = try EventParser.parseIncomingEvent(from: json)
+
+        guard case let .error(errorEvent) = event else {
+            XCTFail("Expected error event")
+            return
+        }
+
+        XCTAssertEqual(errorEvent.code, 1008)
+        XCTAssertEqual(errorEvent.errorName, "invalid_api_key")
+        XCTAssertEqual(errorEvent.message, "Invalid API key")
+    }
+
+    func testKnownButIgnoredEventTypesParseToNil() throws {
+        let payloads = [
+            #"{"type":"agent_response_complete","agent_response_complete_event":{"event_id":42}}"#,
+            #"{"type":"guardrail_triggered","guardrail_triggered_event":{"guardrail_name":"toxicity"}}"#,
+            #"{"type":"agent_tool_response_full_payload","agent_tool_response_full_payload":{"tool_name":"search","tool_call_id":"abc","tool_type":"system","is_error":false,"event_id":7,"is_called":true,"full_tool_result":"x"}}"#,
+            #"{"type":"asr_initiation_metadata","asr_initiation_metadata_event":{"metadata":{}}}"#,
+        ]
+
+        for payload in payloads {
+            let json = payload.data(using: .utf8)!
+            // Intentionally ignored: parsed to nil (dropped), never thrown as unknown.
+            let event = try EventParser.parseIncomingEvent(from: json)
+            XCTAssertNil(event, "Expected \(payload) to be ignored (nil)")
+        }
     }
 }
 

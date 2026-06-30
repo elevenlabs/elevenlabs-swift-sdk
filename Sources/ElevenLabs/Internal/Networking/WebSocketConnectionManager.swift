@@ -10,10 +10,14 @@ import Foundation
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
 /// without media.
+@MainActor
 final class WebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
+    var onRawMessage: (@Sendable (Data, IncomingEvent?) -> Void)?
     var onDisconnected: (() async -> Void)?
-    var errorHandler: ((Swift.Error?) -> Void)?
+
+    /// Reports startup-phase transitions during `connect`.
+    var onStartupPhaseChange: ((StartupPhase) -> Void)?
 
     private let urlSession: URLSession
     private let logger: any Logging
@@ -29,36 +33,41 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         urlSession.invalidateAndCancel()
     }
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
-        let startTime = Date()
-        var metrics = ConversationStartupMetrics()
+    func connect(auth: ConversationAuth, config: ConversationConfig) async throws {
+        let endpoints = config.endpoints
+
+        // Authorizing: build/validate the WebSocket URL from `auth`.
+        onStartupPhaseChange?(.authorizing)
 
         let url: URL
         do {
-            url = try Self.url(for: auth)
+            url = try Self.url(for: auth, base: endpoints.textWebSocket, environment: config.environment)
         } catch {
-            metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw ConversationStartupFailure.token(convError)
         }
+
+        // Connecting: open the socket (the handshake completes on first send).
+        onStartupPhaseChange?(.connecting)
 
         let task = urlSession.webSocketTask(with: url)
         self.task = task
         task.resume()
 
-        // The first send awaits the WebSocket handshake internally —
-        // any connection failure surfaces here.
+        // Sending the conversation_initiation_client_data handshake. The first
+        // send awaits the WebSocket handshake internally — any connection
+        // failure surfaces here.
+        onStartupPhaseChange?(.sendingInitData)
         do {
-            let initEvent = ConversationInitEvent(config: options.toConversationConfig())
+            let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
         } catch is CancellationError {
             tearDownTask(task)
             throw CancellationError()
         } catch {
             tearDownTask(task)
-            metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw ConversationStartupFailure.conversationInit(convError)
         }
 
         // Socket is up and the init message is sent. Start consuming responses.
@@ -66,10 +75,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             guard let self, let task else { return }
             await receiveLoop(task: task)
         }
-
-        metrics.conversationInitAttempts = 1
-        metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
     }
 
     func send(data: Data) async throws {
@@ -81,8 +86,9 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
     func disconnect() async {
         onEventReceived = nil
+        onRawMessage = nil
         onDisconnected = nil
-        errorHandler = nil
+        onStartupPhaseChange = nil
 
         receiveTask?.cancel()
         receiveTask = nil
@@ -112,20 +118,28 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             } catch {
                 guard !Task.isCancelled else { return }
                 self.task = nil
-                errorHandler?(error)
+                logger.error("WebSocket receive failed", context: ["error": "\(error)"])
                 await onDisconnected?()
                 return
             }
         }
     }
 
-    static func url(for auth: ElevenLabsConfiguration) throws -> URL {
+    static func url(for auth: ConversationAuth, base: URL, environment: String? = nil) throws -> URL {
         switch auth.authSource {
         case let .publicAgentId(agentId):
-            var components = URLComponents(string: ConnectionConstants.textConversationUrl)
-            components?.queryItems = [URLQueryItem(name: "agent_id", value: agentId)]
-            guard let url = components?.url else {
-                throw ConversationError.authenticationFailed("Invalid conversation URL")
+            guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+                throw ConversationError.invalidURL
+            }
+            var queryItems = [
+                URLQueryItem(name: "agent_id", value: agentId)
+            ]
+            if let environment {
+                queryItems.append(URLQueryItem(name: "environment", value: environment))
+            }
+            components.queryItems = queryItems
+            guard let url = components.url else {
+                throw ConversationError.invalidURL
             }
             return url
 
@@ -135,7 +149,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             }
             return url
 
-        case .conversationToken, .customTokenProvider:
+        case .conversationToken:
             throw ConversationError.authenticationFailed(
                 "Text-only conversations require a public agent ID or signed WebSocket URL."
             )
