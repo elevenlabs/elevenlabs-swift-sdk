@@ -50,7 +50,8 @@ final class Dependencies: ConversationDependencyProvider {
         if let existing = _webRTCConnectionManager {
             return existing
         }
-        let manager = WebRTCConnectionManager(logger: logger)
+        let service = await tokenService
+        let manager = WebRTCConnectionManager(logger: logger, tokenService: service)
         _webRTCConnectionManager = manager
         return manager
     }

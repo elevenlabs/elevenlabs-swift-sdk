@@ -1,13 +1,9 @@
+import AVFoundation
 import Foundation
 import LiveKit
 
-struct AgentReadyDetail: Equatable {
-    let elapsed: TimeInterval
-    let viaGraceTimeout: Bool
-}
-
 enum AgentReadyWaitResult: Equatable {
-    case success(AgentReadyDetail)
+    case success(elapsed: TimeInterval)
     case timedOut(elapsed: TimeInterval)
 }
 
@@ -66,17 +62,80 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
     private let logger: any Logging
+    private let tokenService: any TokenServicing
 
-    init(logger: any Logging) {
+    init(logger: any Logging, tokenService: any TokenServicing) {
         self.logger = logger
+        self.tokenService = tokenService
     }
 
     // MARK: – Public API
 
+    /// Full WebRTC startup sequence: resolve token → request mic permission →
+    /// connect room → wait for agent → send conversation_init (sent once).
+    @MainActor
+    func connect(
+        auth: ElevenLabsConfiguration,
+        options: ConversationOptions,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> StartupResult {
+        let startTime = Date()
+        var metrics = ConversationStartupMetrics()
+        logger.info("Starting conversation startup sequence", context: ["agentId": auth.agentId])
+
+        // 1. Resolve token / connection details.
+        onStartupStateChange(.resolvingToken)
+        let connectionDetails = try await runPhase(
+            timing: \.tokenFetch, metrics: &metrics, startTime: startTime, failure: StartupFailure.token
+        ) {
+            try await tokenService.fetchConnectionDetails(configuration: auth)
+        }
+
+        // 2. Request microphone permission (denial doesn't block startup).
+        let permissionGranted = await Self.requestMicrophonePermission()
+
+        // 3. Connect the LiveKit room.
+        onStartupStateChange(.connectingRoom)
+        let throwOnMicFailure = options.microphoneFailureHandling == .throwError
+        try await runPhase(
+            timing: \.roomConnect, metrics: &metrics, startTime: startTime, failure: StartupFailure.room
+        ) {
+            try await connectToRoom(
+                details: connectionDetails,
+                enableMic: permissionGranted,
+                throwOnMicrophoneFailure: throwOnMicFailure,
+                networkConfiguration: options.networkConfiguration
+            )
+        }
+
+        // 4. Wait for the agent to be ready (fails outright if it doesn't join in time).
+        let agentTimeout = options.startupConfiguration.agentReadyTimeout
+        onStartupStateChange(.waitingForAgent(timeout: agentTimeout))
+        guard case let .success(elapsed) = await waitForAgentReady(timeout: agentTimeout) else {
+            metrics.total = Date().timeIntervalSince(startTime)
+            logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
+            throw StartupFailure.agentTimeout(metrics)
+        }
+        metrics.agentReady = elapsed
+        onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
+
+        // 5. Send conversation_initiation_client_data (sent once).
+        onStartupStateChange(.sendingConversationInit(attempt: 1))
+        try await runPhase(
+            timing: \.conversationInit, metrics: &metrics, startTime: startTime,
+            failure: StartupFailure.conversationInit
+        ) {
+            try await send(event: .conversationInit(ConversationInitEvent(config: options.toConversationConfig())))
+        }
+        metrics.conversationInitAttempts = 1
+
+        metrics.total = Date().timeIntervalSince(startTime)
+        return StartupResult(agentId: auth.agentId, metrics: metrics)
+    }
+
     /// Race the delegate's "agent audio track subscribed" signal against `timeout`.
-    /// The caller (`AgentReadyStep`) decides whether `.timedOut` should throw or
-    /// be promoted to `.success(viaGraceTimeout: true)`.
-    func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
+    /// A `.timedOut` result makes `connect` fail with `StartupFailure.agentTimeout`.
+    private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
             return .timedOut(elapsed: 0)
         }
@@ -85,10 +144,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             group.addTask {
                 do {
                     try await delegate.awaitSubscription()
-                    return .success(AgentReadyDetail(
-                        elapsed: Date().timeIntervalSince(start),
-                        viaGraceTimeout: false
-                    ))
+                    return .success(elapsed: Date().timeIntervalSince(start))
                 } catch {
                     return .timedOut(elapsed: Date().timeIntervalSince(start))
                 }
@@ -127,17 +183,18 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
     }
 
-    /// Establish a LiveKit connection.
+    /// Establish the LiveKit room connection (the low-level room/mic primitive
+    /// used by `connect`).
     ///
     /// - Parameters:
     ///   - details: Token-service credentials (URL + participant token).
     ///   - enableMic: Whether to enable the local microphone immediately.
     ///   - throwOnMicrophoneFailure: If true, throws error when microphone setup fails.
     ///     If false, logs warning and continues.
-    func connect(
+    private func connectToRoom(
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
-        throwOnMicrophoneFailure: Bool = true,
+        throwOnMicrophoneFailure: Bool,
         networkConfiguration: LiveKitNetworkConfiguration
     ) async throws {
         await readinessDelegate?.release()
@@ -207,6 +264,60 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         await room?.disconnect()
         room = nil
         eventDelegate = nil
+    }
+
+    // MARK: – Private helpers
+
+    /// Run one timed startup phase: record its duration into `metrics[keyPath:]`,
+    /// let `CancellationError` propagate unwrapped, and wrap any other error via
+    /// `failure` (stamping `total`).
+    @MainActor
+    private func runPhase<T>(
+        timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
+        metrics: inout ConversationStartupMetrics,
+        startTime: Date,
+        failure: (ConversationError, ConversationStartupMetrics) -> StartupFailure,
+        _ body: () async throws -> T
+    ) async throws -> T {
+        let start = Date()
+        do {
+            let result = try await body()
+            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
+            return result
+        } catch is CancellationError {
+            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw CancellationError()
+        } catch {
+            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw failure(error as? ConversationError ?? .connectionFailed(error), metrics)
+        }
+    }
+
+    private static func requestMicrophonePermission() async -> Bool {
+        #if os(macOS)
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+        #elseif os(visionOS)
+        return await AVAudioApplication.requestRecordPermission()
+        #elseif os(tvOS)
+        return false
+        #else
+        return await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+        #endif
     }
 }
 

@@ -76,8 +76,6 @@ final class ConversationTests: XCTestCase {
         }
         XCTAssertEqual(callInfo.agentId, "test-agent-id")
         XCTAssertEqual(metrics.conversationInitAttempts, 1)
-        XCTAssertFalse(metrics.agentReadyTimedOut)
-        XCTAssertFalse(metrics.agentReadyViaGraceTimeout)
         XCTAssertEqual(conversation.startupMetrics?.total, metrics.total)
         let errorsAfterSuccess = await capturedErrors.values()
         XCTAssertTrue(errorsAfterSuccess.isEmpty)
@@ -397,7 +395,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationTokenFailure() async {
-        mockTokenService.scenario = .authenticationFailed("Mock authentication failed")
+        mockWebRTCConnectionManager.tokenError = .authenticationFailed("Mock authentication failed")
 
         let options = makeConfig()
 
@@ -449,11 +447,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationAgentTimeoutFailure() async {
-        let options = ConversationStartupConfiguration(
-            agentReadyTimeout: 0.05,
-            initRetryDelays: [0],
-            failIfAgentNotReady: true
-        )
+        let options = ConversationStartupConfiguration(agentReadyTimeout: 0.05)
 
         let conversationConfig = makeConfig(startupConfiguration: options)
 
@@ -476,10 +470,9 @@ final class ConversationTests: XCTestCase {
             XCTAssertEqual(error as? ConversationError, .agentTimeout)
         }
 
-        guard case let .failed(.agentTimeout, metrics) = conversation.startupState else {
+        guard case .failed(.agentTimeout, _) = conversation.startupState else {
             return XCTFail("Expected agent timeout failure state")
         }
-        XCTAssertTrue(metrics.agentReadyTimedOut)
         XCTAssertEqual(conversation.state, .idle)
         XCTAssertTrue(conversation.isMuted)
         XCTAssertNil(mockWebRTCConnectionManager.room)
@@ -489,36 +482,6 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterAgentTimeout = await capturedErrors.values(waitingFor: 1)
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
-    }
-
-    func testStartConversationAgentTimeoutAllowedToProceed() async throws {
-        let options = makeConfig()
-
-        let startTask = Task {
-            guard let conversation = self.conversation else { return }
-            try await conversation.startConversation(
-                auth: .publicAgent(id: "test-agent"),
-                options: options
-            )
-        }
-
-        await Task.yield()
-        // Agent succeeds via grace timeout - this is a success case, not a timeout
-        mockWebRTCConnectionManager.succeedAgentReady(elapsed: 0.25, viaGraceTimeout: true)
-
-        try await startTask.value
-
-        guard case let .active(_, metrics) = conversation.startupState else {
-            return XCTFail("Expected active startup state")
-        }
-
-        // When agent succeeds via grace timeout, it's still a success (no timeout flag)
-        XCTAssertFalse(metrics.agentReadyTimedOut)
-        XCTAssertTrue(metrics.agentReadyViaGraceTimeout)
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent")))
-        let errorsAfterGraceTimeout = await capturedErrors.values()
-        // No errors because agent ultimately succeeded
-        XCTAssertTrue(errorsAfterGraceTimeout.isEmpty)
     }
 
     func testStartConversationConversationInitFailure() async {
