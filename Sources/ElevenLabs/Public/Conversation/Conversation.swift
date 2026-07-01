@@ -4,65 +4,106 @@ import LiveKit
 
 // swiftlint:disable file_length type_body_length
 
-/// The central entry point for the ElevenLabs Conversational AI SDK.
+/// A single-use conversation session: created `.idle`, connected once, and
+/// terminal after it ends. Coordinates the transport (`WebRTCConnectionManager`
+/// / `WebSocketConnectionManager`), the protocol parser, and `@Published` UI
+/// state.
 ///
-/// **Role:**
-/// - Manages the lifecycle of a single conversation session.
-/// - Coordinates state between the network layer (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
-/// (`EventParser`), and the UI (`ObservableObject`).
-/// - Handles audio device management and permission checks.
-///
-/// **Usage:**
-/// Create an instance via `ElevenLabs.startConversation(...)`. Use the `@Published` properties
-/// to bind your UI to conversation state.
+/// Internal: ``ConversationClient`` owns one per session and mirrors its
+/// published state, so the public API only ever sees `ConversationClient`.
 @MainActor
-public final class Conversation: ObservableObject {
+final class Conversation: ObservableObject {
     // MARK: - Public State
 
-    @Published public internal(set) var state: ConversationState = .idle
-    @Published public internal(set) var startupState: ConversationStartupState = .idle
-    @Published public internal(set) var startupMetrics: ConversationStartupMetrics?
-    @Published public internal(set) var messages: [Message] = []
-    @Published public internal(set) var agentState: ElevenLabs.AgentState = .listening
-    @Published public internal(set) var isMuted: Bool = true // Start as true, will be updated based on actual state
+    @Published var state: ConversationState = .idle
+    @Published var messages: [Message] = []
 
-    /// Stream of client tool calls that need to be executed by the app
-    @Published public internal(set) var pendingToolCalls: [ClientToolCallEvent] = []
+    /// Whether the agent is currently speaking, from the transport's
+    /// remote-speaking detection. (There is no "listening" state: the agent
+    /// always listens.)
+    @Published var isAgentSpeaking: Bool = false
 
-    /// Conversation metadata including conversation ID, received when the conversation is initialized
-    @Published public internal(set) var conversationMetadata: ConversationMetadataEvent?
+    /// Heuristic tri-state (`.listening`/`.speaking`/`.thinking`). Driven by
+    /// `AgentStateManager` when `config.agentStateConfiguration` is set; otherwise
+    /// mirrors `isAgentSpeaking`.
+    @Published var agentState: AgentState = .listening
 
-    /// MCP tool calls from the agent
-    @Published public internal(set) var mcpToolCalls: [MCPToolCallEvent] = []
-
-    /// Current MCP connection status for all integrations
-    @Published public internal(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
-
-    /// Latest audio alignment payload emitted by the agent.
-    @Published public internal(set) var latestAudioAlignment: AudioAlignment?
-
-    /// Latest audio event emitted by the agent.
-    @Published public internal(set) var latestAudioEvent: AudioEvent?
-
-    /// Device lists (optional to expose; keep `internal` if you don't want them public)
-    @Published public internal(set) var audioDevices: [AudioDevice] = []
-    @Published public internal(set) var selectedAudioDeviceID: String = ""
-
-    var lastAgentEventId: Int?
-    var lastFeedbackSubmittedEventId: Int?
-
-    /// Pending mute state to apply after connection completes.
-    /// Allows setting mute state during connection phase.
-    private var pendingMuteState: Bool?
-
-    /// Audio device management
-    private var audioManager: ConversationAudioManager?
-
-    /// Agent state manager for event-based state tracking
+    /// Event-based agent-state tracker; non-nil only when configured.
     var agentStateManager: AgentStateManager?
+    /// Whether the local microphone (input) is muted — distinct from agent
+    /// output muting (``isAgentMuted``). Starts `true`; reconciled with the
+    /// actual capture state once a voice conversation connects.
+    @Published var isMicMuted: Bool = true
 
-    /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
-    func applyStateSignal(_ signal: AgentStateSignal, fallback: ElevenLabs.AgentState) {
+    /// Whether the user is speaking while the mic is muted. Only detected for
+    /// ``MicrophoneMuteMode/voiceProcessing`` and
+    /// ``MicrophoneMuteMode/software(speechThreshold:)``; always `false`
+    /// otherwise. Resets on unmute and when the conversation ends.
+    @Published var isSpeakingWhileMuted: Bool = false
+
+    /// Whether the agent's audio output (playback) is muted. Independent of
+    /// ``isMicMuted``. Defaults to `false` (agent audible).
+    @Published var isAgentMuted: Bool = false
+
+    /// Client tool calls awaiting execution or local completion by the app.
+    @Published var pendingToolCalls: [ClientToolCallEvent] = []
+
+    /// Server metadata (conversation id, audio formats), set once the init
+    /// handshake is acknowledged.
+    @Published var conversationMetadata: ConversationMetadataEvent?
+
+    /// MCP tool calls from the agent.
+    @Published var mcpToolCalls: [MCPToolCallEvent] = []
+
+    /// Current MCP connection status for all integrations.
+    @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
+
+    // MARK: - Audio pipeline state
+    //
+    // `internal` (not `private`) so the controls in `Conversation+Audio` reach them.
+
+    /// Mute requested mid-connect, applied once the transport is up.
+    var pendingMuteState: Bool?
+
+    /// Audio device management.
+    var audioManager: ConversationAudioManager?
+
+    /// Internal logger, accessible from nonisolated contexts.
+    nonisolated let logger: any Logging
+
+    // MARK: - Init
+
+    /// Creates a session. With a `nil` `dependencyProvider`, a production
+    /// `Dependencies` is built for this conversation; tests inject a provider
+    /// that vends mock connection managers. `config` is fixed for the session.
+    ///
+    /// Audio setup is intentionally deferred to `connect(auth:)`: it activates
+    /// the capture engine and triggers the mic-permission prompt.
+    init(
+        dependencyProvider: (any ConversationDependencyProvider)? = nil,
+        config: ConversationConfig = .default,
+        callbacks: ConversationCallbacks? = nil
+    ) {
+        // Built in the @MainActor init body (not a default arg) so no
+        // main-actor-isolated value is referenced from a nonisolated context.
+        let provider = dependencyProvider ?? Dependencies(logLevel: config.logLevel)
+        self.provider = provider
+        self.config = config
+        self.callbacks = callbacks ?? ConversationCallbacks()
+        self.logger = provider.logger
+        setupAgentStateManager()
+    }
+
+    private func setupAgentStateManager() {
+        guard let configuration = config.agentStateConfiguration else { return }
+        let manager = AgentStateManager(configuration: configuration)
+        manager.onStateChange = { [weak self] state in self?.agentState = state }
+        agentStateManager = manager
+    }
+
+    /// Forward a signal to the event-based manager, or fall back to setting
+    /// `agentState` directly when no `agentStateConfiguration` was provided.
+    func feedAgentState(_ signal: AgentStateSignal, fallback: AgentState) {
         if let manager = agentStateManager {
             manager.processSignal(signal)
         } else {
@@ -70,115 +111,124 @@ public final class Conversation: ObservableObject {
         }
     }
 
-    func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
-        if let manager = agentStateManager {
-            manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
-        } else if isSpeaking {
-            speakingTimer?.cancel()
-            agentState = .speaking
-        } else {
-            scheduleBackToListening(delay: 1.0)
-        }
-    }
+    // MARK: - Lifecycle
 
-    /// Internal logger, accessible from nonisolated contexts.
-    nonisolated let logger: any Logging
-
-    /// Context for logging (e.g. agentId)
-    private var activeContext: [String: String]?
-
-    /// Audio tracks for advanced use cases
-    public var inputTrack: LocalAudioTrack? {
-        activeWebRTCConnectionManager?.inputTrack
-    }
-
-    public var agentAudioTrack: RemoteAudioTrack? {
-        activeWebRTCConnectionManager?.agentAudioTrack
-    }
-
-    // MARK: - Init
-
-    init(
-        dependencyProvider: any ConversationDependencyProvider,
-        options: ConversationOptions = .default
-    ) {
-        self.dependencyProvider = dependencyProvider
-        self.options = options
-        logger = dependencyProvider.logger
-        setupAudioManager()
-    }
-
-    private func setupAudioManager() {
-        guard !options.conversationOverrides.textOnly else { return }
-        let manager = ConversationAudioManager(logger: logger)
-        manager.onDevicesChanged = { [weak self] devices in
-            self?.audioDevices = devices
-        }
-        manager.onSelectedDeviceChanged = { [weak self] deviceId in
-            self?.selectedAudioDeviceID = deviceId
-        }
-        audioManager = manager
-        // Sync initial values
-        audioDevices = manager.audioDevices
-        selectedAudioDeviceID = manager.selectedAudioDeviceID
-    }
-
-    private func setupAgentStateManager() {
-        guard let configuration = options.agentStateConfiguration else { return }
-        let manager = AgentStateManager(configuration: configuration)
-        manager.onStateChange = { [weak self] state in
-            self?.agentState = state
-            self?.options.onAgentStateChange?(state)
-        }
-        agentStateManager = manager
-    }
-
-    // MARK: - Public API
-
-    /// Start a conversation with an agent using agent ID.
-    ///
-    /// Each call to this method creates a fresh Room object, ensuring clean state
-    /// and preventing any interference from previous conversations.
-    public func startConversation(
-        with agentId: String,
-        options: ConversationOptions = .default
-    ) async throws {
-        let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId, environment: options.environment)
-        try await startConversation(auth: authConfig, options: options)
-    }
-
-    /// Start a conversation using authentication configuration.
-    ///
-    /// Each call to this method creates a fresh Room object, ensuring clean state
-    /// and preventing any interference from previous conversations.
-    public func startConversation(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions = .default
-    ) async throws {
-        guard state == .idle || state.isEnded else {
+    /// Connect this single-use conversation. Throws
+    /// ``ConversationError/alreadyActive`` unless `.idle` (it connects exactly
+    /// once). `auth` is consumed here so TTL'd tokens stay fresh.
+    func connect(auth: ConversationAuth) async throws {
+        guard state == .idle else {
             throw ConversationError.alreadyActive
         }
 
-        let result: StartupResult = if options.conversationOverrides.textOnly {
-            try await startTextOnlyConversation(auth: auth, options: options, provider: dependencyProvider)
+        let provider = self.provider
+
+        // Each transport drives its own startup phases and returns once the
+        // init handshake has been sent.
+        if config.textOnly {
+            try await startTextOnlyConversation(auth: auth, config: config, provider: provider)
         } else {
-            try await startVoiceConversation(auth: auth, options: options, provider: dependencyProvider)
+            try await startVoiceConversation(auth: auth, config: config, provider: provider)
         }
 
-        state = .active(.init(agentId: result.agentId))
-        startupMetrics = result.metrics
-        updateStartupState(.active(CallInfo(agentId: result.agentId), result.metrics))
-        options.onAgentReady?()
+        // Startup may have already ended the session (user ended mid-connect,
+        // or the agent dropped); don't override that terminal state.
+        guard state.isConnecting else {
+            throw CancellationError()
+        }
+
+        // Startup completes only when the agent acknowledges the handshake with
+        // `conversation_initiation_metadata`. Block until it arrives, bounded by
+        // `conversationInitTimeout`; a timeout surfaces as `.initializationTimeout`
+        // (distinct from `.agentTimeout`, the voice room-join wait).
+        state = .connecting(phase: .waitingForInitData)
+        let metadataReceived = await awaitConversationMetadata(
+            timeout: config.conversationInitTimeout
+        )
+
+        // Teardown while waiting resolves the waiter too; if no longer
+        // connecting, it already set the terminal state — don't clobber it.
+        guard state.isConnecting else {
+            throw CancellationError()
+        }
+        // A cooperative cancel (e.g. the caller cancelled the start task) breaks
+        // the metadata wait; unwind as `CancellationError` rather than a spurious
+        // init timeout.
+        if Task.isCancelled {
+            if let connectionManager = activeConnectionManager {
+                await handleStartupCancellation(disconnecting: connectionManager)
+            }
+            throw CancellationError()
+        }
+        guard metadataReceived else {
+            if let connectionManager = activeConnectionManager {
+                await handleStartupFailure(
+                    .conversationInit(.initializationTimeout),
+                    disconnecting: connectionManager
+                )
+            }
+            throw ConversationError.initializationTimeout
+        }
+
+        state = .connected
+        callbacks.onAgentReady?()
+    }
+
+    /// Suspend until `conversation_initiation_metadata` arrives, `timeout`
+    /// elapses, or the surrounding task is cancelled; returns whether the
+    /// metadata arrived. Single main-actor waiter resolved exactly once (the
+    /// continuation nil-check in `resolveMetadataWaiter` enforces this) by the
+    /// event handler, the timeout task, teardown, or cooperative cancellation.
+    /// On cancellation it resumes promptly with `false`; `connect` then checks
+    /// `Task.isCancelled` and unwinds as `CancellationError`.
+    private func awaitConversationMetadata(timeout: TimeInterval) async -> Bool {
+        if conversationMetadata != nil { return true }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                metadataContinuation = continuation
+                // Cancelled before we suspended: resolve now rather than waiting
+                // out the full timeout.
+                if Task.isCancelled {
+                    resolveMetadataWaiter(false)
+                    return
+                }
+                metadataTimeoutTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    self?.resolveMetadataWaiter(false)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resolveMetadataWaiter(false) }
+        }
+    }
+
+    /// Resolve the in-flight metadata waiter (if any) as succeeded. Called from
+    /// the event handler when `conversation_initiation_metadata` is received.
+    func resumeConversationMetadataWaiter() {
+        resolveMetadataWaiter(true)
+    }
+
+    /// Resolve the in-flight metadata waiter exactly once and tear down its
+    /// timeout task. Idempotent via the continuation nil-check, so the event
+    /// handler, timeout, teardown, and cancellation can all call it racelessly
+    /// on the main actor. `received` is `true` only when the metadata arrived.
+    private func resolveMetadataWaiter(_ received: Bool) {
+        metadataTimeoutTask?.cancel()
+        metadataTimeoutTask = nil
+        guard let pending = metadataContinuation else { return }
+        metadataContinuation = nil
+        pending.resume(returning: received)
     }
 
     private func startVoiceConversation(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions,
+        auth: ConversationAuth,
+        config: ConversationConfig,
         provider: any ConversationDependencyProvider
-    ) async throws -> StartupResult {
+    ) async throws {
         let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
-            auth: auth, options: options,
+            auth: auth, config: config,
             connectionManager: webRTCConnectionManager
         )
 
@@ -188,98 +238,133 @@ public final class Conversation: ObservableObject {
             }
         }
 
+        // Build/configure the audio pipeline (pre-warms the capture engine; see
+        // `ConversationAudioManager.configure`).
         if audioManager == nil {
-            setupAudioManager()
+            audioManager = ConversationAudioManager(logger: logger)
         }
-        await audioManager?.configure(with: options)
+        await audioManager?.configure(with: config) { [weak self] speaking in
+            Task { @MainActor in self?.isSpeakingWhileMuted = speaking }
+        }
 
-        let result: StartupResult
         do {
-            result = try await webRTCConnectionManager.connect(
+            try await webRTCConnectionManager.connect(
                 auth: auth,
-                options: options,
-                onStartupStateChange: { [weak self] newState in
-                    self?.updateStartupState(newState)
-                }
+                config: config
             )
-        } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: webRTCConnectionManager, suggestLocalNetworkPermission: true)
-            throw failure.error
+        } catch let failure as ConversationStartupFailure {
+            let committed = await handleStartupFailure(failure, disconnecting: webRTCConnectionManager)
+            // If the session was already ended concurrently, the failure was
+            // suppressed — surface cancellation rather than a stale failure.
+            throw committed ? failure.error : CancellationError()
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: webRTCConnectionManager)
             throw CancellationError()
         }
 
-        if let pendingMute = pendingMuteState {
-            pendingMuteState = nil
-            do {
-                try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
-                isMuted = pendingMute
-            } catch {
-                logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
-            }
-        }
+        await reconcileMicMuteAfterConnect(webRTCConnectionManager)
+    }
 
-        isMuted = webRTCConnectionManager.isMicrophoneMuted
-        return result
+    /// Reconcile the published mute flag with the live pipeline once the
+    /// transport is up, applying any mute requested mid-connect through the
+    /// *active mute mode*. Software mute keeps the capture track open, so the
+    /// hardware mic flag is not its source of truth — the software gate is.
+    private func reconcileMicMuteAfterConnect(
+        _ webRTCConnectionManager: any WebRTCConnectionManaging
+    ) async {
+        let pendingMute = pendingMuteState
+        pendingMuteState = nil
+        if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
+            if let pendingMute {
+                softwareMuteProcessor.setMuted(pendingMute)
+            }
+            isMicMuted = softwareMuteProcessor.muted
+        } else {
+            if let pendingMute {
+                do {
+                    try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
+                } catch {
+                    logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
+                }
+            }
+            isMicMuted = webRTCConnectionManager.isMicrophoneMuted
+        }
     }
 
     private func startTextOnlyConversation(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions,
+        auth: ConversationAuth,
+        config: ConversationConfig,
         provider: ConversationDependencyProvider
-    ) async throws -> StartupResult {
+    ) async throws {
         let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
-            auth: auth, options: options,
+            auth: auth, config: config,
             connectionManager: connectionManager
         )
 
-        updateStartupState(.connectingRoom)
-
         do {
-            return try await connectionManager.connect(auth: auth, options: options)
-        } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: connectionManager, suggestLocalNetworkPermission: false)
-            throw failure.error
+            try await connectionManager.connect(auth: auth, config: config)
+        } catch let failure as ConversationStartupFailure {
+            let committed = await handleStartupFailure(failure, disconnecting: connectionManager)
+            // If the session was already ended concurrently, the failure was
+            // suppressed — surface cancellation rather than a stale failure.
+            throw committed ? failure.error : CancellationError()
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: connectionManager)
             throw CancellationError()
         }
     }
 
-    /// End and clean up.
-    /// Can be called during connection phase to cancel, or during active conversation to end.
-    public func endConversation() async {
-        await endConversation(disconnectReason: .user, endReason: .userEnded)
+    /// End the conversation (also cancels an in-progress connect).
+    func endConversation() async {
+        await endConversation(reason: .userEnded)
     }
 
-    private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
-        // Allow ending during both active and connecting states
-        guard state.isActive || state == .connecting else { return }
+    /// Clear a terminated session back to `.idle`, discarding the transcript,
+    /// metadata, and tool/MCP state that ``endConversation()`` deliberately
+    /// preserves. Lets a UI dismiss a startup failure or a finished transcript
+    /// without immediately starting a new conversation.
+    ///
+    /// No-op unless the session has terminated (`.ended` or `.startupFailed`);
+    /// end a connecting/connected session first.
+    func reset() {
+        switch state {
+        case .ended, .startupFailed:
+            break
+        case .idle, .connecting, .connected:
+            return
+        }
+
+        tearDownActiveSession()
+        messages = []
+        conversationMetadata = nil
+        mcpToolCalls = []
+        mcpConnectionStatus = nil
+        state = .idle
+    }
+
+    /// `reason` is the single source of truth for why the session ended; the
+    /// coarse ``DisconnectionReason`` handed to `onDisconnect` is derived from it.
+    private func endConversation(reason: EndReason) async {
+        guard !state.isInactive else { return }
         guard let connectionManager = activeConnectionManager else {
-            // No connection manager yet, just reset state
-            if state == .connecting {
+            // No transport yet; just reset.
+            if state.isConnecting {
                 state = .idle
                 tearDownActiveSession()
             }
             return
         }
-        state = .ended(reason: endReason)
+        state = .ended(reason: reason)
 
-        // Disconnect synchronously to ensure clean state
         await connectionManager.disconnect()
-
         tearDownActiveSession()
-
-        // Call user's onDisconnect callback if provided
-        options.onDisconnect?(disconnectReason)
-        options.onCanSendFeedbackChange?(false)
+        callbacks.onDisconnect?(DisconnectionReason(reason))
     }
 
     /// Send a text message to the agent.
-    public func sendMessage(_ text: String) async throws {
-        guard state.isActive else {
+    func sendMessage(_ text: String) async throws {
+        guard state == .connected else {
             throw ConversationError.notConnected
         }
         let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
@@ -287,265 +372,228 @@ public final class Conversation: ObservableObject {
         appendMessage(role: .user, content: text)
     }
 
-    /// Toggle / set microphone
-    public func toggleMute() async throws {
-        try await setMuted(!isMuted)
-    }
-
-    public func setMuted(_ muted: Bool) async throws {
-        if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
-            softwareMuteProcessor.setMuted(muted)
-            isMuted = muted
-            return
-        }
-        try await setMicrophoneMuted(muted)
-    }
-
-    /// Mute the microphone. Normally calling setMuted will mute the microphone
-    /// but if software mute is enabled, the setMuted call will just toggle
-    /// the software mute. If you still want to explicitly mute the microphone
-    /// you can use this method.
-    public func setMicrophoneMuted(_ muted: Bool) async throws {
-        if state.isActive {
-            guard let webRTCConnectionManager = activeWebRTCConnectionManager else {
-                throw ConversationError.notConnected
-            }
-            do {
-                try await webRTCConnectionManager.setMicrophoneMuted(muted)
-                isMuted = muted
-                pendingMuteState = nil
-            } catch WebRTCConnectionManagerError.roomUnavailable {
-                throw ConversationError.notConnected
-            } catch {
-                throw ConversationError.microphoneToggleFailed(error)
-            }
-        } else if state == .connecting {
-            // Buffer the mute state to apply after connection completes
-            pendingMuteState = muted
-            isMuted = muted
-        } else {
-            throw ConversationError.notConnected
-        }
-    }
-
     /// Interrupt the agent while speaking.
-    public func interruptAgent() async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+    func interruptAgent() async throws {
+        guard state == .connected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.userActivity
         try await publish(event)
     }
 
-    /// Contextual update to agent (system prompt-ish).
-    public func updateContext(_ context: String) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+    /// Send a silent contextual update to the agent.
+    func updateContext(_ context: String) async throws {
+        guard state == .connected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.contextualUpdate(ContextualUpdateEvent(text: context))
         try await publish(event)
     }
 
     /// Send feedback (like/dislike) for an event/message id.
-    public func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
-        guard state.isActive else {
+    func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
+        guard state == .connected else {
             throw ConversationError.notConnected
         }
 
         let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
         try await publish(event)
-        lastFeedbackSubmittedEventId = eventId
-        options.onCanSendFeedbackChange?(false)
     }
 
     /// Approve or reject an MCP tool call request from the agent.
     /// - Parameters:
     ///   - toolCallId: The tool call identifier from `MCPToolCallEvent`.
     ///   - isApproved: Pass `true` to approve, `false` to reject.
-    public func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+    func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
+        guard state == .connected else { throw ConversationError.notConnected }
         let approval = MCPToolApprovalResultEvent(toolCallId: toolCallId, isApproved: isApproved)
         try await publish(.mcpToolApprovalResult(approval))
     }
 
     /// Send the result of a client tool call back to the agent.
-    ///
-    /// The `Encodable` result is JSON-encoded before sending.
-    public func sendToolResult(
-        for toolCallId: String,
-        result: some Encodable,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        let json = try String(decoding: JSONEncoder().encode(result), as: UTF8.self)
-        // `json` is statically a String, so this dispatches to the String overload
-        // below (a concrete match beats the generic) — not a recursive call.
-        try await sendToolResult(for: toolCallId, result: json, isError: isError, errorType: errorType)
-    }
-
-    /// Send a client tool result that is already a string (sent verbatim).
-    public func sendToolResult(
-        for toolCallId: String,
-        result: String,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
-        let toolResult = ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError, errorType: errorType
-        )
-        try await publish(.clientToolResult(toolResult))
-        pendingToolCalls.removeAll { $0.toolCallId == toolResult.toolCallId }
-    }
-
-    @available(*, deprecated, message: "Use the Encodable overload; the Any overload can send a result the agent can't parse.")
-    public func sendToolResult(
+    func sendToolResult(
         for toolCallId: String,
         result: Any,
         isError: Bool = false,
         errorType: ClientToolErrorType? = nil
-    ) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+    )
+        async throws
+    {
+        guard state == .connected else { throw ConversationError.notConnected }
         let toolResult = try ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError, errorType: errorType
+            toolCallId: toolCallId,
+            result: result,
+            isError: isError,
+            errorType: errorType
         )
-        try await publish(.clientToolResult(toolResult))
-        pendingToolCalls.removeAll { $0.toolCallId == toolResult.toolCallId }
+        let event = OutgoingEvent.clientToolResult(toolResult)
+        try await publish(event)
+
+        pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
 
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
-    public func markToolCallCompleted(_ toolCallId: String) {
+    func markToolCallCompleted(_ toolCallId: String) {
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
 
     // MARK: - Private
 
-    private let dependencyProvider: any ConversationDependencyProvider
+    private let provider: any ConversationDependencyProvider
     private var activeConnectionManager: (any ConnectionManaging)?
-    private var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
+    /// `internal` (not `private`) because the audio controls in
+    /// `Conversation+Audio` reach the WebRTC transport through it.
+    var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
         activeConnectionManager as? any WebRTCConnectionManaging
     }
 
-    var options: ConversationOptions
+    let config: ConversationConfig
+    let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
 
-    private func updateStartupState(_ newState: ConversationStartupState) {
-        startupState = newState
-        options.onStartupStateChange?(newState)
-    }
+    /// In-flight waiter for `conversation_initiation_metadata` during startup.
+    private var metadataContinuation: CheckedContinuation<Bool, Never>?
+
+    /// Times out the metadata wait; cancelled when the waiter resolves for any
+    /// reason (metadata, teardown, or cooperative cancellation).
+    private var metadataTimeoutTask: Task<Void, Never>?
+
+    /// Serializes incoming events through a single consumer so handlers run in
+    /// strict arrival order (see `prepareConversationStart`).
+    private var eventStreamContinuation: AsyncStream<IncomingEvent>.Continuation?
+    private var eventConsumerTask: Task<Void, Never>?
 
     /// Common preparation shared by voice and text-only startup paths.
     private func prepareConversationStart(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions,
+        auth: ConversationAuth,
+        config: ConversationConfig,
         connectionManager: any ConnectionManaging
     ) async {
-        let previousConnectionManager = activeConnectionManager
-        state = .connecting
-
-        if let previousConnectionManager, previousConnectionManager !== connectionManager {
-            await previousConnectionManager.disconnect()
-        }
+        state = .connecting(phase: .authorizing)
 
         activeConnectionManager = connectionManager
-        // Reset the target manager too; dependency providers may reuse manager instances across starts.
+        // Reset in case the provider reuses a manager instance (e.g. test
+        // mocks); a fresh Conversation otherwise starts clean.
         await connectionManager.disconnect()
-        cleanupPreviousConversation()
-        self.options = options
 
-        activeContext = ["agentId": auth.agentId]
-        let mode = options.conversationOverrides.textOnly ? "text-only" : "voice"
-        logger.info("Starting \(mode) conversation", context: activeContext)
+        // Agent id is only known client-side for public-agent / signed-URL auth;
+        // omit it for conversation-token auth rather than logging a placeholder.
+        let agentId: String? = switch auth.authSource {
+        case let .publicAgentId(id): id
+        case let .signedWebSocketURL(_, id): id
+        case .conversationToken: nil
+        }
+        let mode = config.textOnly ? "text-only" : "voice"
+        logger.info("Starting \(mode) conversation", context: agentId.map { ["agentId": $0] })
 
-        options.onCanSendFeedbackChange?(false)
-        setupAgentStateManager()
-
-        connectionManager.onEventReceived = { [weak self, weak connectionManager] event in
-            Task { @MainActor [weak self, weak connectionManager] in
-                guard let self,
-                      let connectionManager,
+        connectionManager.onStartupPhaseChange = { [weak self] phase in
+            self?.state = .connecting(phase: phase)
+        }
+        // Serialize incoming events through one consumer so handlers run in
+        // strict arrival order: yielding is synchronous and ordered, so handlers
+        // can't interleave across their `await` points (e.g. ping → pong).
+        var continuation: AsyncStream<IncomingEvent>.Continuation!
+        let eventStream = AsyncStream<IncomingEvent> { continuation = $0 }
+        let streamContinuation: AsyncStream<IncomingEvent>.Continuation = continuation
+        eventStreamContinuation = streamContinuation
+        eventConsumerTask = Task { @MainActor [weak self, weak connectionManager] in
+            for await event in eventStream {
+                guard let self else { return }
+                guard let connectionManager,
                       activeConnectionManager === connectionManager,
-                      state == .connecting || state.isActive
+                      !state.isInactive
                 else {
-                    return
+                    continue
                 }
-
                 await handleIncomingEvent(event)
             }
         }
+        connectionManager.onEventReceived = { event in
+            streamContinuation.yield(event)
+        }
+        // Raw wire tap → public `onMessage`. Capture only the (Sendable)
+        // callbacks, never `self`, and skip building the string when no
+        // consumer is attached so the receive path stays allocation-free.
+        connectionManager.onRawMessage = { [callbacks] data, event in
+            guard let onMessage = callbacks.onMessage else { return }
+            onMessage(Conversation.messageSource(for: event), String(decoding: data, as: UTF8.self))
+        }
         connectionManager.onDisconnected = { [weak self] in
             guard let self else { return }
-            await endConversation(disconnectReason: .agent, endReason: .remoteDisconnected)
+            await endConversation(reason: .remoteDisconnected)
         }
     }
 
+    /// Maps an incoming frame to the `source` value surfaced through
+    /// ``ConversationCallbacks/onMessage``: `"user"` for user transcripts,
+    /// `"ai"` for everything else (including unknown/unparseable frames).
+    private nonisolated static func messageSource(for event: IncomingEvent?) -> String {
+        switch event {
+        case .userTranscript?, .tentativeUserTranscript?:
+            return "user"
+        default:
+            return "ai"
+        }
+    }
+
+    /// Move the session into ``ConversationState/startupFailed(_:)`` and fire
+    /// `onError`. Returns `false` (leaving state untouched, no `onError`) if the
+    /// session was already torn down concurrently, so the caller can surface
+    /// cancellation instead of a stale failure.
+    @discardableResult
     private func handleStartupFailure(
-        _ failure: StartupFailure,
-        disconnecting connectionManager: any ConnectionManaging,
-        suggestLocalNetworkPermission: Bool
-    ) async {
+        _ failure: ConversationStartupFailure,
+        disconnecting connectionManager: any ConnectionManaging
+    ) async -> Bool {
         cleanupTransientResources()
         await connectionManager.disconnect()
 
-        startupMetrics = failure.metrics
-        state = .idle
-        updateStartupState(.failed(failure.reason, failure.metrics))
-        options.onError?(failure.error)
+        // Re-check after the `disconnect` suspension: only own the transition
+        // while still connecting. No `await` between here and the mutation, so
+        // this is race-free on the main actor.
+        guard state.isConnecting else { return false }
 
-        if suggestLocalNetworkPermission,
-           case .room = failure.reason,
-           LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission()
-        {
-            options.onError?(ConversationError.localNetworkPermissionRequired)
-        }
+        state = .startupFailed(failure)
+        callbacks.onError?(failure.error)
+        return true
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
         cleanupTransientResources()
         await connectionManager.disconnect()
-        startupMetrics = nil
+        // Don't clobber a terminal state set by a concurrent teardown.
+        guard state.isConnecting else { return }
         state = .idle
-        updateStartupState(.idle)
-    }
-
-    /// Clean up state from any previous conversation to ensure a fresh start.
-    /// Called when starting a new session; wipes both operational and display state.
-    private func cleanupPreviousConversation() {
-        tearDownActiveSession()
-
-        messages.removeAll()
-        mcpToolCalls.removeAll()
-        mcpConnectionStatus = nil
-        conversationMetadata = nil
-
-        startupState = .idle
-        startupMetrics = nil
-
-        logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
     }
 
     /// Tear down operational state when an active session ends.
     /// Preserves user-visible display state (messages, MCP activity, conversation
-    /// metadata, startup metrics) so the transcript remains visible until a new
-    /// conversation is started.
+    /// metadata) so the transcript remains visible until a new conversation is
+    /// started.
     private func tearDownActiveSession() {
         cleanupTransientResources()
 
         pendingToolCalls.removeAll()
-
-        lastAgentEventId = nil
-        lastFeedbackSubmittedEventId = nil
-        options.onCanSendFeedbackChange?(false)
-        latestAudioEvent = nil
-        latestAudioAlignment = nil
     }
 
     private func cleanupTransientResources() {
         speakingTimer?.cancel()
         speakingTimer = nil
         pendingMuteState = nil
+
+        // Stop draining incoming events; the session is terminal from here.
+        eventStreamContinuation?.finish()
+        eventStreamContinuation = nil
+        eventConsumerTask?.cancel()
+        eventConsumerTask = nil
+
+        // Resolve any in-flight startup metadata waiter so its continuation and
+        // timeout task don't leak if the session is torn down mid-wait.
+        resolveMetadataWaiter(false)
+        isAgentSpeaking = false
         agentState = .listening
-        isMuted = true
+        isMicMuted = true
+        isAgentMuted = false
+        isSpeakingWhileMuted = false
 
         audioManager?.cleanup()
-        agentStateManager = nil
     }
 
     // MARK: - Testing Hooks
@@ -566,14 +614,36 @@ public final class Conversation: ObservableObject {
         activeConnectionManager = manager
     }
 
-    private func scheduleBackToListening(delay: TimeInterval = 0.5) {
+    // MARK: - Agent speaking state
+
+    func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
+        agentStateManager?.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+        if isSpeaking {
+            speakingTimer?.cancel()
+            isAgentSpeaking = true
+            if agentStateManager == nil { agentState = .speaking }
+        } else {
+            // Fast attack / slow release: LiveKit's energy-based `isSpeaking`
+            // toggles off across natural pauses, so hold "speaking" briefly to
+            // bridge them rather than flickering. The agent resuming within the
+            // window cancels the pending flip.
+            scheduleAgentStoppedSpeaking()
+        }
+    }
+
+    /// How long to hold `isAgentSpeaking` after LiveKit reports the agent
+    /// stopped (see `handleRemoteSpeakingUpdate`).
+    private static let agentStoppedSpeakingDelay: TimeInterval = 0.5
+
+    private func scheduleAgentStoppedSpeaking() {
         speakingTimer?.cancel()
-        speakingTimer = Task {
+        speakingTimer = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                self.agentState = .listening
+                try await Task.sleep(nanoseconds: UInt64(Self.agentStoppedSpeakingDelay * 1_000_000_000))
+                self?.isAgentSpeaking = false
+                if self?.agentStateManager == nil { self?.agentState = .listening }
             } catch {
-                // Task was cancelled, do nothing
+                // Cancelled; nothing to do.
             }
         }
     }
@@ -598,6 +668,108 @@ public final class Conversation: ObservableObject {
                 eventId: eventId
             )
         )
+    }
+}
+
+/// Audio-facing controls for a `Conversation`:
+/// - microphone (input) mute, and
+/// - agent (output) mute.
+///
+/// Split out of `Conversation` to keep that type focused on connection and
+/// protocol logic. The backing stored state (`audioManager`, `pendingMuteState`)
+/// lives on `Conversation` as `internal`.
+@MainActor
+extension Conversation {
+    // MARK: - Live tracks
+    //
+    // Kept internal: consumers control agent playback via `setAgentMuted(_:)`,
+    // so the LiveKit track types never cross the public boundary.
+
+    private var agentAudioTrack: RemoteAudioTrack? {
+        activeWebRTCConnectionManager?.agentAudioTrack
+    }
+
+    // MARK: - Microphone (input) mute
+    //
+    // Stops the user's audio from reaching the agent. Distinct from agent
+    // (output) muting — see `setAgentMuted(_:)` below.
+
+    /// Toggle the local microphone mute state.
+    func toggleMicMute() async throws {
+        try await setMicMuted(!isMicMuted)
+    }
+
+    /// Mute or unmute the local microphone. This is the single mute control.
+    ///
+    /// With the `.software` mute mode (see `MicrophoneMuteMode`) this toggles the
+    /// software gate and keeps the capture track open; for every other mode it
+    /// hardware-mutes the underlying capture track. When there is no live session
+    /// to toggle (idle/ended/startup-failed) this is a best-effort no-op rather
+    /// than an error, mirroring the agent-mute controls.
+    func setMicMuted(_ muted: Bool) async throws {
+        if !muted { isSpeakingWhileMuted = false }
+        if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
+            softwareMuteProcessor.setMuted(muted)
+            isMicMuted = muted
+            return
+        }
+        try await setHardwareMicMuted(muted)
+    }
+
+    /// Hardware-mute the underlying capture track. Internal implementation detail
+    /// of ``setMicMuted(_:)`` for the non-software mute modes.
+    func setHardwareMicMuted(_ muted: Bool) async throws {
+        if state == .connected {
+            guard let webRTCConnectionManager = activeWebRTCConnectionManager else {
+                throw ConversationError.notConnected
+            }
+            do {
+                try await webRTCConnectionManager.setMicrophoneMuted(muted)
+                isMicMuted = muted
+                pendingMuteState = nil
+            } catch ConnectionManagerError.notConnected {
+                throw ConversationError.notConnected
+            } catch {
+                throw ConversationError.microphoneToggleFailed(error)
+            }
+        } else if state.isConnecting {
+            // Buffer the mute state to apply after connection completes
+            pendingMuteState = muted
+            isMicMuted = muted
+        } else {
+            // Not connected with nothing to apply to (idle/ended/startupFailed):
+            // best-effort no-op rather than throwing, mirroring the non-throwing
+            // agent-mute controls. There's no capture track to toggle here.
+        }
+    }
+
+    // MARK: - Agent (output) mute
+    //
+    // Silences the agent's playback by setting the remote track's gain to zero —
+    // a pure playback preference, independent of the mic and with no
+    // hardware/permission coupling. `isAgentMuted` is the source of truth and is
+    // applied once the agent track arrives.
+
+    /// Toggle whether the agent's audio output (playback) is muted.
+    func toggleAgentMute() {
+        setAgentMuted(!isAgentMuted)
+    }
+
+    /// Mute or unmute the agent's audio output (playback).
+    ///
+    /// Sets the remote audio track's gain to `0` (muted) or `1` (unmuted). Safe
+    /// to call at any time: if the agent track is not available yet, the
+    /// preference is stored in ``isAgentMuted`` and applied automatically once
+    /// the track arrives.
+    func setAgentMuted(_ muted: Bool) {
+        isAgentMuted = muted
+        applyAgentMute()
+    }
+
+    /// Apply the current ``isAgentMuted`` preference to the live agent track.
+    /// Idempotent and a no-op when no agent track is present.
+    private func applyAgentMute() {
+        agentAudioTrack?.volume = isAgentMuted ? 0 : 1
     }
 }
 

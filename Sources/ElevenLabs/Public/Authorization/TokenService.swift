@@ -1,116 +1,79 @@
 import Foundation
 
-// A service for fetching ElevenLabs authentication tokens
-//
-// This service supports two authentication methods:
-// 1. Public Agent ID - Fetches a token from ElevenLabs API using a public agent ID
-// 2. Conversation Token - Uses a pre-generated conversation token from your backend
-//
-// SECURITY NOTE:
-// NEVER include your ElevenLabs API key in a client application!
-// API keys should only be used server-side. For production apps:
-// - Use public agents (no authentication required)
-// - OR implement a backend endpoint that generates conversation tokens
-
 // MARK: - Token Service
 
-/// Service for managing ElevenLabs authentication
-/// This is designed to be stateless and SDK-friendly
-public struct TokenService: Sendable {
-    public struct ConnectionDetails: Codable, Sendable {
-        public let serverUrl: String
-        public let roomName: String
-        public let participantName: String
-        public let participantToken: String
-    }
+/// Stateless service for obtaining ElevenLabs auth tokens: public agents mint a
+/// room token from the API; otherwise a conversation token from your backend is
+/// used directly.
+///
+/// SECURITY: never ship an ElevenLabs API key in a client app — use public
+/// agents or a backend endpoint that generates conversation tokens.
+public struct TokenService: TokenServicing, Sendable {
+    /// Path of the conversation-token endpoint, relative to `apiBase`.
+    private static let conversationTokenPath = "/v1/convai/conversation/token"
 
-    /// Optional configuration for advanced use cases
-    public struct Configuration: Sendable {
-        /// Custom API endpoint (for testing or enterprise deployments)
-        public let apiEndpoint: String?
-        /// Custom WebSocket URL (for testing or enterprise deployments)
-        public let websocketURL: String?
-
-        public init(apiEndpoint: String? = nil, websocketURL: String? = nil) {
-            self.apiEndpoint = apiEndpoint
-            self.websocketURL = websocketURL
-        }
-
-        public static let `default` = Configuration()
-    }
-
-    private let configuration: Configuration
     private let urlSession: URLSession
 
     // Development-only API key for testing private agents
     // This should only be set in debug builds for local testing
     #if DEBUG
+    private static let debugLogger: any Logging = SDKLogger()
     public let debugApiKey: String?
 
     public init(
-        configuration: Configuration = .default,
         urlSession: URLSession = .shared,
         debugApiKey: String? = nil
     ) {
-        self.configuration = configuration
         self.urlSession = urlSession
         self.debugApiKey = debugApiKey
     }
     #else
     public init(
-        configuration: Configuration = .default,
         urlSession: URLSession = .shared
     ) {
-        self.configuration = configuration
         self.urlSession = urlSession
     }
     #endif
 
-    /// Fetch connection details for ElevenLabs conversation.
-    ///
-    /// Translates internal `TokenError`s into public `ConversationError`s so
-    /// callers only ever deal with one error type.
-    public func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> ConnectionDetails {
-        do {
-            let token: String = switch configuration.authSource {
-            case let .publicAgentId(agentId):
-                try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
-            case let .conversationToken(conversationToken):
-                conversationToken
-            case .signedWebSocketURL:
-                throw ConversationError.authenticationFailed(
-                    "Signed WebSocket URLs are only supported for text-only conversations."
-                )
-            case let .customTokenProvider(provider):
-                try await provider()
-            }
-
-            let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.voiceConversationUrl
-
-            // ElevenLabs tokens contain room name and participant identity in the JWT
-            // LiveKit will extract these automatically, so we provide empty values
-            return ConnectionDetails(
-                serverUrl: websocketURL,
-                roomName: "", // LiveKit extracts from JWT
-                participantName: "", // LiveKit extracts from JWT
-                participantToken: token
+    /// Fetch a LiveKit room token for an ElevenLabs conversation.
+    public func fetchRoomToken(
+        auth: ConversationAuth,
+        apiBase: URL,
+        environment: String? = nil
+    ) async throws -> String {
+        switch auth.authSource {
+        case let .publicAgentId(agentId):
+            return try await fetchRoomTokenFromElevenlabsAPI(
+                agentId: agentId,
+                apiBase: apiBase,
+                environment: environment
             )
-        } catch let error as ConversationError {
-            throw error
-        } catch let error as TokenError {
-            throw ConversationError.authenticationFailed(error.localizedDescription)
-        } catch {
-            throw ConversationError.connectionFailed(error)
+        case let .conversationToken(conversationToken):
+            return conversationToken
+        case .signedWebSocketURL:
+            throw ConversationError.authenticationFailed("Signed WebSocket URLs are only supported for text-only conversations.")
         }
     }
 
-    private func fetchTokenFromAPI(agentId: String, environment: String? = nil) async throws -> String {
-        // Build URL with agent ID as query parameter
-        let apiUrl = configuration.apiEndpoint ?? ConnectionConstants.tokenUrl
-
-        guard var components = URLComponents(string: apiUrl) else {
+    /// Mint a room token for a public agent via
+    /// `GET /v1/convai/conversation/token?agent_id=…`. Throws ``TokenError``
+    /// (mapped onto the user-facing `ConversationError` by the caller).
+    ///
+    /// `debugApiKey` forwards an `xi-api-key` for local private-agent testing;
+    /// it is always `nil` in release builds — never ship a key.
+    private func fetchRoomTokenFromElevenlabsAPI(
+        agentId: String,
+        apiBase: URL,
+        environment: String?
+    ) async throws -> String {
+        // Join the token path onto apiBase, tolerating a trailing slash.
+        guard var components = URLComponents(url: apiBase, resolvingAgainstBaseURL: false) else {
             throw TokenError.invalidURL
         }
+        let base = components.percentEncodedPath
+        let trimmedBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        components.percentEncodedPath = trimmedBase + Self.conversationTokenPath
+
         var queryItems = [
             URLQueryItem(name: "agent_id", value: agentId),
             URLQueryItem(name: "source", value: "swift_sdk"),
@@ -127,39 +90,33 @@ public struct TokenService: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-
-        // DEVELOPMENT ONLY: Check for API key
-        // This is ONLY for local development/testing. NEVER ship an app with an API key!
         #if DEBUG
-        if let apiKey = debugApiKey {
-            let logger = SDKLogger(logLevel: .warning)
-            logger.warning("Using API key in client - DEVELOPMENT ONLY!")
-            logger.warning("For production, implement a backend service to generate tokens")
-            request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+        if let debugApiKey {
+            Self.debugLogger.warning("Using API key in client - DEVELOPMENT ONLY!")
+            Self.debugLogger.warning("For production, implement a backend service to generate tokens")
+            request.setValue(debugApiKey, forHTTPHeaderField: "xi-api-key")
         }
         #endif
 
         let (data, response) = try await urlSession.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard let http = response as? HTTPURLResponse else {
             throw TokenError.invalidResponse
         }
-
-        guard httpResponse.statusCode == 200 else {
-            if httpResponse.statusCode == 401 {
+        guard http.statusCode == 200 else {
+            if http.statusCode == 401 {
                 throw TokenError.authenticationFailed
             }
-            throw TokenError.httpError(statusCode: httpResponse.statusCode)
+            throw TokenError.httpError(statusCode: http.statusCode)
         }
 
-        // Parse response - ElevenLabs returns {"token": "..."}
+        // ElevenLabs returns {"token": "..."}.
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = json["token"] as? String,
               !token.isEmpty
         else {
             throw TokenError.invalidTokenResponse
         }
-
         return token
     }
 }

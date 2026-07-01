@@ -3,9 +3,8 @@ import Foundation
 // MARK: - Outgoing Events (to ElevenLabs)
 
 /// Events that can be sent to the ElevenLabs agent
-public enum OutgoingEvent {
+public enum OutgoingEvent: Sendable {
     case pong(PongEvent)
-    case userAudio(UserAudioEvent)
     case conversationInit(ConversationInitEvent)
     case feedback(FeedbackEvent)
     case clientToolResult(ClientToolResultEvent)
@@ -21,15 +20,6 @@ public struct PongEvent: Sendable {
 
     public init(eventId: Int) {
         self.eventId = eventId
-    }
-}
-
-/// User audio chunk
-public struct UserAudioEvent: Sendable {
-    public let audioChunk: String // base64 encoded
-
-    public init(audioChunk: String) {
-        self.audioChunk = audioChunk
     }
 }
 
@@ -58,28 +48,21 @@ public struct FeedbackEvent: Sendable {
     }
 }
 
-/// Categorizes a client tool failure for the orchestrator.
+/// Client tool execution result
 public enum ClientToolErrorType: String, Sendable {
     case userRejected = "user_rejected"
     case externalServer = "external_server"
     case externalClient = "external_client"
     case customerAuth = "customer_auth"
-    case clientTimeout = "client_timeout"
     case unknown
 }
 
-/// Client tool execution result
 public struct ClientToolResultEvent: Sendable {
     public let toolCallId: String
     public let result: String
     public let isError: Bool
     public let errorType: ClientToolErrorType?
 
-    @available(
-        *,
-        deprecated,
-        message: "Use init(toolCallId:result:) with a String, or Conversation.sendToolResult with an Encodable value."
-    )
     public init(
         toolCallId: String,
         result: Any,
@@ -92,22 +75,27 @@ public struct ClientToolResultEvent: Sendable {
 
         if let stringResult = result as? String {
             self.result = stringResult
-        } else if JSONSerialization.isValidJSONObject(result) {
-            let jsonData = try JSONSerialization.data(withJSONObject: result)
-            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                throw NSError(
-                    domain: "ClientToolResultEvent",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"]
-                )
+        } else if let numberResult = result as? NSNumber {
+            // Emit scalars as JSON literals. The `CFBoolean` check disambiguates a
+            // boolean from a 0/1 number, which `as? Bool`/`as? Int` conflate.
+            if CFGetTypeID(numberResult) == CFBooleanGetTypeID() {
+                self.result = numberResult.boolValue ? "true" : "false"
+            } else {
+                self.result = numberResult.stringValue
             }
-            self.result = jsonString
+        } else if JSONSerialization.isValidJSONObject(result) {
+            // `JSONSerialization` always emits valid UTF-8, so decoding can't fail.
+            let jsonData = try JSONSerialization.data(withJSONObject: result)
+            self.result = String(decoding: jsonData, as: UTF8.self)
         } else {
-            self.result = String(describing: result)
+            // Never silently ship a Swift debug description (`String(describing:)`)
+            // the agent can't parse — surface the encoding failure to the caller.
+            throw ConversationError.invalidToolResult(
+                "a value of type \(type(of: result)) is not encodable; return a String, a JSON object/array, or a numeric/boolean scalar"
+            )
         }
     }
 
-    /// `result` is a simple string or a JSON string
     public init(
         toolCallId: String,
         result: String,

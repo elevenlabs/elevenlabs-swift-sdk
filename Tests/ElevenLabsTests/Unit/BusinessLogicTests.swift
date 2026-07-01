@@ -25,19 +25,53 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     // MARK: - Tool Call Tests
 
+    func testClientToolCallIsAppendedBeforeCallbackFires() async throws {
+        // Snapshot what a handler observes at the instant `onClientToolCall`
+        // fires. The callback is `@Sendable`; it runs synchronously on the main
+        // actor inside the handler, so `assumeIsolated` is safe here.
+        final class OrderBox: @unchecked Sendable {
+            weak var conversation: Conversation?
+            var pendingCountAtCallback: Int?
+        }
+        let box = OrderBox()
+        var callbacks = ConversationCallbacks()
+        callbacks.onClientToolCall = { _ in
+            MainActor.assumeIsolated {
+                box.pendingCountAtCallback = box.conversation?.pendingToolCalls.count
+            }
+        }
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
+        box.conversation = conversation
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.connected)
+
+        let toolCall = try ClientToolCallEvent(
+            toolName: "test_tool",
+            toolCallId: "call_order",
+            parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
+            eventId: 1
+        )
+        await conversation._testing_handleIncomingEvent(.clientToolCall(toolCall))
+
+        XCTAssertEqual(
+            box.pendingCountAtCallback, 1,
+            "onClientToolCall must fire after the call is appended to pendingToolCalls"
+        )
+        XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_order")
+    }
+
     func testToolCallLifecycle() async throws {
         // Set up active state with room first
         mockWebRTCConnectionManager.room = Room()
         conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
-        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+        conversation._testing_setState(.connected)
 
         // 1. Receive a tool call
         let toolCall = try ClientToolCallEvent(
             toolName: "test_tool",
             toolCallId: "call_123",
             parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
-            eventId: 1,
-            expectsResponse: false
+            eventId: 1
         )
 
         await conversation._testing_handleIncomingEvent(.clientToolCall(toolCall))
@@ -59,28 +93,27 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertTrue(lastPayloadString.contains("success"))
     }
 
-    func testSendToolResultEncodesEncodableResult() async throws {
-        struct Weather: Encodable {
-            let temperature: Int
-            let condition: String
-        }
-        mockWebRTCConnectionManager.room = Room()
-        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
-        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+    // MARK: - Reset
 
-        try await conversation.sendToolResult(
-            for: "call_42",
-            result: Weather(temperature: 25, condition: "Sunny")
-        )
+    func testResetClearsTerminalStateAndTranscript() async {
+        // Seed a transcript, then land in a terminal failed state.
+        let part = AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 1)
+        await conversation._testing_handleIncomingEvent(.agentChatResponsePart(part))
+        XCTAssertEqual(conversation.messages.count, 1)
 
-        let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
-        let envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
-        XCTAssertEqual(envelope["type"] as? String, "client_tool_result")
-        // The Encodable value is JSON-encoded into the `result` string.
-        let resultString = try XCTUnwrap(envelope["result"] as? String)
-        let parsed = try JSONSerialization.jsonObject(with: XCTUnwrap(resultString.data(using: .utf8))) as? [String: Any]
-        XCTAssertEqual(parsed?["temperature"] as? Int, 25)
-        XCTAssertEqual(parsed?["condition"] as? String, "Sunny")
+        conversation._testing_setState(.startupFailed(.token(.authenticationFailed("denied"))))
+
+        conversation.reset()
+
+        XCTAssertEqual(conversation.state, .idle)
+        XCTAssertTrue(conversation.messages.isEmpty, "reset() must clear the preserved transcript")
+        XCTAssertNil(conversation.conversationMetadata)
+    }
+
+    func testResetIsNoOpWhenIdle() {
+        XCTAssertEqual(conversation.state, .idle)
+        conversation.reset()
+        XCTAssertEqual(conversation.state, .idle)
     }
 
     // MARK: - Streaming Message Tests
@@ -113,7 +146,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
     func testAutomaticEndCallHandling() async {
         mockWebRTCConnectionManager.room = Room()
-        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+        conversation._testing_setState(.connected)
 
         let toolResponse = AgentToolResponseEvent(
             toolName: "end_call",
@@ -125,35 +158,38 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
         await conversation._testing_handleIncomingEvent(.agentToolResponse(toolResponse))
 
-        // Verify conversation is still active (endConversation guards state.isActive so won't change from idle)
-        XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "test")))
+        // Verify conversation remains connected (end_call handling does not force-end here)
+        XCTAssertEqual(conversation.state, .connected)
     }
 
     // MARK: - Concurrency & Responsiveness
 
     func testStateTransitionsImmediatelyToConnecting() async throws {
-        // Simulate a previously ended conversation
-        conversation._testing_setState(.ended(reason: .userEnded))
-
-        // Start a new one
+        // A fresh (single-use) conversation starts in `.idle`.
         let startTask = Task {
             try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
         }
 
         // Check state immediately
         await Task.yield()
-        XCTAssertEqual(conversation.state, .connecting, "Should be connecting immediately, even if disconnect() is slow")
+        XCTAssertTrue(conversation.state.isConnecting, "Should be connecting immediately, even if disconnect() is slow")
 
         // Complete the start
         mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
 
-        XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "new-agent")))
+        XCTAssertEqual(conversation.state, .connected)
     }
 
     // MARK: - Audio Alignment
 
-    func testAudioAlignmentUpdatesProperty() async {
+    func testAudioAlignmentInvokesCallback() async {
+        final class AlignmentBox: @unchecked Sendable { var value: AudioAlignment? }
+        let box = AlignmentBox()
+        var callbacks = ConversationCallbacks()
+        callbacks.onAudioAlignment = { box.value = $0 }
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
+
         let alignment = AudioAlignment(
             chars: ["H", "e", "l", "l", "o"],
             charStartTimesMs: [0, 100, 200, 300, 400],
@@ -163,28 +199,6 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
 
         await conversation._testing_handleIncomingEvent(.audio(audioEvent))
 
-        XCTAssertEqual(conversation.latestAudioAlignment?.chars, ["H", "e", "l", "l", "o"])
-    }
-
-    func testEndConversationClearsLatestAudioState() async {
-        mockWebRTCConnectionManager.room = Room()
-        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
-        conversation._testing_setState(.active(CallInfo(agentId: "test")))
-
-        let alignment = AudioAlignment(
-            chars: ["H"],
-            charStartTimesMs: [0],
-            charDurationsMs: [100]
-        )
-        let audioEvent = AudioEvent(audioBase64: "base64", eventId: 1, alignment: alignment)
-
-        await conversation._testing_handleIncomingEvent(.audio(audioEvent))
-        XCTAssertNotNil(conversation.latestAudioEvent)
-        XCTAssertNotNil(conversation.latestAudioAlignment)
-
-        await conversation.endConversation()
-
-        XCTAssertNil(conversation.latestAudioEvent)
-        XCTAssertNil(conversation.latestAudioAlignment)
+        XCTAssertEqual(box.value?.chars, ["H", "e", "l", "l", "o"])
     }
 }

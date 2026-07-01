@@ -5,31 +5,26 @@ enum ConnectionManagerError: Error {
     case notConnected
 }
 
+@MainActor
 protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
     var onDisconnected: (() async -> Void)? { get set }
-    var errorHandler: ((Swift.Error?) -> Void)? { get set }
+    var onStartupPhaseChange: ((StartupPhase) -> Void)? { get set }
 
+    func connect(auth: ConversationAuth, config: ConversationConfig) async throws
     func disconnect() async
     func send(data: Data) async throws
 }
 
-protocol WebSocketConnectionManaging: ConnectionManaging {
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult
-}
+@MainActor
+protocol WebSocketConnectionManaging: ConnectionManaging {}
 
+@MainActor
 protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     var inputTrack: LocalAudioTrack? { get }
     var agentAudioTrack: RemoteAudioTrack? { get }
     var isMicrophoneMuted: Bool { get }
-
-    @MainActor
-    func connect(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions,
-        onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult
 
     func setMicrophoneMuted(_ muted: Bool) async throws
 }
