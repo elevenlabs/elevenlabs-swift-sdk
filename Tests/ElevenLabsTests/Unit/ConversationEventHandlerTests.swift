@@ -5,14 +5,11 @@ import XCTest
 final class ConversationEventHandlerTests: XCTestCase {
     var conversation: Conversation!
     var mockDependencyProvider: TestDependencyProvider!
-    var mockTokenService: MockTokenService!
     var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
 
     override func setUp() async throws {
-        mockTokenService = MockTokenService()
         mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         mockDependencyProvider = TestDependencyProvider(
-            tokenService: mockTokenService,
             webRTCConnectionManager: mockWebRTCConnectionManager
         )
         conversation = Conversation(dependencyProvider: mockDependencyProvider)
@@ -21,7 +18,6 @@ final class ConversationEventHandlerTests: XCTestCase {
     override func tearDown() {
         conversation = nil
         mockDependencyProvider = nil
-        mockTokenService = nil
         mockWebRTCConnectionManager = nil
     }
 

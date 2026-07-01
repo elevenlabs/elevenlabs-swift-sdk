@@ -99,23 +99,10 @@ public final class Conversation: ObservableObject {
     // MARK: - Init
 
     init(
-        dependencies: Task<Dependencies, Never>,
-        options: ConversationOptions = .default
-    ) {
-        dependenciesTask = dependencies
-        dependencyProvider = nil
-        self.options = options
-        // Temporary logger until dependencies are resolved
-        logger = SDKLogger(logLevel: ElevenLabs.Global.shared.configuration.logLevel)
-        setupAudioManager()
-    }
-
-    init(
         dependencyProvider: any ConversationDependencyProvider,
         options: ConversationOptions = .default
     ) {
         self.dependencyProvider = dependencyProvider
-        dependenciesTask = nil
         self.options = options
         logger = dependencyProvider.logger
         setupAudioManager()
@@ -172,12 +159,10 @@ public final class Conversation: ObservableObject {
             throw ConversationError.alreadyActive
         }
 
-        let provider = await resolveDependencyProvider()
-
         let result: StartupResult = if options.conversationOverrides.textOnly {
-            try await startTextOnlyConversation(auth: auth, options: options, provider: provider)
+            try await startTextOnlyConversation(auth: auth, options: options, provider: dependencyProvider)
         } else {
-            try await startVoiceConversation(auth: auth, options: options, provider: provider)
+            try await startVoiceConversation(auth: auth, options: options, provider: dependencyProvider)
         }
 
         state = .active(.init(agentId: result.agentId))
@@ -191,10 +176,10 @@ public final class Conversation: ObservableObject {
         options: ConversationOptions,
         provider: any ConversationDependencyProvider
     ) async throws -> StartupResult {
-        let webRTCConnectionManager = await provider.webRTCConnectionManager()
+        let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
-            connectionManager: webRTCConnectionManager, provider: provider
+            connectionManager: webRTCConnectionManager
         )
 
         webRTCConnectionManager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
@@ -244,10 +229,10 @@ public final class Conversation: ObservableObject {
         options: ConversationOptions,
         provider: ConversationDependencyProvider
     ) async throws -> StartupResult {
-        let connectionManager = await provider.webSocketConnectionManager()
+        let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
             auth: auth, options: options,
-            connectionManager: connectionManager, provider: provider
+            connectionManager: connectionManager
         )
 
         updateStartupState(.connectingRoom)
@@ -431,8 +416,7 @@ public final class Conversation: ObservableObject {
 
     // MARK: - Private
 
-    private var dependencyProvider: (any ConversationDependencyProvider)?
-    private let dependenciesTask: Task<Dependencies, Never>?
+    private let dependencyProvider: any ConversationDependencyProvider
     private var activeConnectionManager: (any ConnectionManaging)?
     private var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
         activeConnectionManager as? any WebRTCConnectionManaging
@@ -441,25 +425,6 @@ public final class Conversation: ObservableObject {
     var options: ConversationOptions
 
     var speakingTimer: Task<Void, Never>?
-
-    private func resolveDependencyProvider() async -> any ConversationDependencyProvider {
-        if let provider = dependencyProvider {
-            return provider
-        }
-
-        if let dependenciesTask {
-            let deps = await dependenciesTask.value
-            dependencyProvider = deps
-            // Note: errorHandler setup is handled when webRTCConnectionManager is retrieved
-            return deps
-        }
-
-        guard let dependencyProvider else {
-            logger.error("Conversation dependency provider not configured")
-            fatalError("Conversation dependency provider not configured")
-        }
-        return dependencyProvider
-    }
 
     private func updateStartupState(_ newState: ConversationStartupState) {
         startupState = newState
@@ -470,8 +435,7 @@ public final class Conversation: ObservableObject {
     private func prepareConversationStart(
         auth: ElevenLabsConfiguration,
         options: ConversationOptions,
-        connectionManager: any ConnectionManaging,
-        provider: any ConversationDependencyProvider
+        connectionManager: any ConnectionManaging
     ) async {
         let previousConnectionManager = activeConnectionManager
         state = .connecting
@@ -506,7 +470,6 @@ public final class Conversation: ObservableObject {
                 await handleIncomingEvent(event)
             }
         }
-        connectionManager.errorHandler = provider.errorHandler
         connectionManager.onDisconnected = { [weak self] in
             guard let self else { return }
             await endConversation(disconnectReason: .agent, endReason: .remoteDisconnected)

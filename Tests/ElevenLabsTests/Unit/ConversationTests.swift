@@ -9,7 +9,6 @@ final class ConversationTests: XCTestCase {
     private var conversation: Conversation!
     private var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
     private var mockWebSocketConnectionManager: MockWebSocketConnectionManager!
-    private var mockTokenService: MockTokenService!
     private var dependencyProvider: TestDependencyProvider!
     private let capturedErrors = ValueRecorder<ConversationError>()
 
@@ -17,9 +16,7 @@ final class ConversationTests: XCTestCase {
         mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         mockWebRTCConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
         mockWebSocketConnectionManager = MockWebSocketConnectionManager()
-        mockTokenService = MockTokenService()
         dependencyProvider = TestDependencyProvider(
-            tokenService: mockTokenService,
             webRTCConnectionManager: mockWebRTCConnectionManager,
             webSocketConnectionManager: mockWebSocketConnectionManager
         )
@@ -31,7 +28,6 @@ final class ConversationTests: XCTestCase {
         conversation = nil
         mockWebRTCConnectionManager = nil
         mockWebSocketConnectionManager = nil
-        mockTokenService = nil
         dependencyProvider = nil
         await capturedErrors.reset()
     }

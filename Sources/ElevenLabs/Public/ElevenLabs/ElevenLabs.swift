@@ -207,8 +207,7 @@ public enum ElevenLabs {
     /// Creates a new Conversation instance with proper dependency injection.
     @MainActor
     private static func createConversation(options: ConversationOptions = .default) -> Conversation {
-        let depsTask = Task { Dependencies.shared }
-        return Conversation(dependencies: depsTask, options: options)
+        Conversation(dependencyProvider: Dependencies(), options: options)
     }
 
     // MARK: - Re-exports
