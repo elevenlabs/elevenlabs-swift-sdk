@@ -133,7 +133,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         return StartupResult(agentId: auth.agentId, metrics: metrics)
     }
 
-    /// Race the delegate's "agent audio track subscribed" signal against `timeout`.
+    /// Race the delegate's "first remote participant joined" signal against `timeout`.
     /// A `.timedOut` result makes `connect` fail with `StartupFailure.agentTimeout`.
     private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
@@ -143,7 +143,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         return await withTaskGroup(of: AgentReadyWaitResult.self) { group in
             group.addTask {
                 do {
-                    try await delegate.awaitSubscription()
+                    try await delegate.awaitRemoteParticipant()
                     return .success(elapsed: Date().timeIntervalSince(start))
                 } catch {
                     return .timedOut(elapsed: Date().timeIntervalSince(start))
@@ -370,101 +370,68 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
 
 // MARK: – Readiness delegate
 
-/// Observes LiveKit and signals exactly one event: the agent's audio track is
-/// subscribed (the real "safe to send" signal). Holds no timing policy; callers
-/// race `awaitSubscription()` against their own timeout.
+/// Observes LiveKit and signals exactly one event: the first remote participant
+/// has joined the room (the "safe to send" signal). Holds no timing policy; callers
+/// race `awaitRemoteParticipant()` against their own timeout.
 @MainActor
-private final class LiveKitReadinessDelegate: RoomDelegate {
-    private enum Stage { case waiting, ready, released }
-
+final class LiveKitReadinessDelegate: RoomDelegate {
     private let logger: any Logging
-    private var stage: Stage = .waiting
-    private var awaiter: CheckedContinuation<Void, Error>?
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var outcome: Result<Void, Error>?
 
     init(logger: any Logging) {
         self.logger = logger
     }
 
-    /// Suspend until the agent's audio track is subscribed. Throws `CancellationError`
+    /// Suspend until the first remote participant joins. Throws `CancellationError`
     /// if the awaiting task is cancelled or `release()` is called (e.g. on disconnect).
     /// Single-caller — there's exactly one `waitForAgentReady` per connection lifetime.
-    func awaitSubscription() async throws {
-        switch stage {
-        case .ready: return
-        case .released: throw CancellationError()
-        case .waiting: break
-        }
+    func awaitRemoteParticipant() async throws {
+        if let outcome { return try outcome.get() }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                if Task.isCancelled {
+                if let outcome {
+                    cont.resume(with: outcome)
+                } else if Task.isCancelled {
                     cont.resume(throwing: CancellationError())
-                    return
-                }
-                switch stage {
-                case .ready: cont.resume()
-                case .released: cont.resume(throwing: CancellationError())
-                case .waiting: awaiter = cont
+                } else {
+                    continuation = cont
                 }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in
-                if let cont = self?.awaiter {
-                    self?.awaiter = nil
-                    cont.resume(throwing: CancellationError())
-                }
-            }
+            Task { @MainActor [weak self] in self?.finish(.failure(CancellationError())) }
         }
     }
 
     /// Resolve the in-flight awaiter (if any) with `CancellationError`. Called by
     /// the manager on disconnect (or before swapping in a fresh delegate on reconnect).
     func release() {
-        guard stage != .released else { return }
-        stage = .released
-        if let cont = awaiter {
-            awaiter = nil
-            cont.resume(throwing: CancellationError())
-        }
+        finish(.failure(CancellationError()))
     }
 
     // MARK: - RoomDelegate
 
     nonisolated func roomDidConnect(_ room: Room) {
-        Task { @MainActor in self.checkForSubscribedAudio(in: room) }
-    }
-
-    nonisolated func room(_ room: Room, participantDidConnect _: RemoteParticipant) {
-        Task { @MainActor in self.checkForSubscribedAudio(in: room) }
-    }
-
-    nonisolated func room(
-        _: Room,
-        participant _: RemoteParticipant,
-        didSubscribeTrack publication: RemoteTrackPublication
-    ) {
         Task { @MainActor in
-            guard publication.kind == .audio else { return }
-            self.markReady()
+            if !room.remoteParticipants.isEmpty { self.markReady() }
         }
+    }
+
+    nonisolated func room(_: Room, participantDidConnect _: RemoteParticipant) {
+        Task { @MainActor in self.markReady() }
     }
 
     // MARK: - Private
 
-    private func checkForSubscribedAudio(in room: Room) {
-        guard stage == .waiting else { return }
-        let hasSubscribed = room.remoteParticipants.values.contains { participant in
-            participant.audioTracks.contains { $0.isSubscribed && $0.track != nil }
-        }
-        if hasSubscribed { markReady() }
+    private func markReady() {
+        logger.debug("Remote participant joined")
+        finish(.success(()))
     }
 
-    private func markReady() {
-        guard stage == .waiting else { return }
-        stage = .ready
-        logger.debug("Agent audio track subscribed")
-        if let cont = awaiter {
-            awaiter = nil
-            cont.resume()
-        }
+    private func finish(_ result: Result<Void, Error>) {
+        guard outcome == nil else { return }
+        outcome = result
+        continuation?.resume(with: result)
+        continuation = nil
     }
 }
