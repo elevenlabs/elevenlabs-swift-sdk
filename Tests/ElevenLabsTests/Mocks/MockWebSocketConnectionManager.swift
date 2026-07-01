@@ -1,13 +1,21 @@
 @testable import ElevenLabs
 import Foundation
 
+@MainActor
 final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
+    var onRawMessage: (@Sendable (Data, IncomingEvent?) -> Void)?
     var onDisconnected: (() async -> Void)?
-    var errorHandler: ((Swift.Error?) -> Void)?
+    var onStartupPhaseChange: ((StartupPhase) -> Void)?
 
-    var connectError: Error?
-    var sendError: Error?
+    var connectError: Swift.Error?
+    var sendError: Swift.Error?
+
+    /// When true, `connect` synthesizes a `conversation_initiation_metadata`
+    /// event on success so the production startup gate (which blocks until the
+    /// metadata arrives) completes. Set to false to drive metadata manually.
+    var autoDeliverMetadata = true
+    var metadataConversationId = "mock-conversation-id"
 
     private(set) var connectCallCount = 0
     private(set) var disconnectCallCount = 0
@@ -15,49 +23,46 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     private(set) var sentPayloads: [Data] = []
     private(set) var isConnected = false
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
+    func connect(auth: ConversationAuth, config: ConversationConfig) async throws {
         connectCallCount += 1
-        let startTime = Date()
-        var metrics = ConversationStartupMetrics()
 
         do {
-            lastConnectedURL = try WebSocketConnectionManager.url(for: auth)
+            lastConnectedURL = try WebSocketConnectionManager.url(
+                for: auth,
+                base: config.endpoints.textWebSocket,
+                environment: config.environment
+            )
         } catch {
-            metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw ConversationStartupFailure.token(convError)
         }
 
         if let connectError {
-            errorHandler?(connectError)
-            metrics.total = Date().timeIntervalSince(startTime)
             let convError = connectError as? ConversationError ?? .connectionFailed(connectError)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw ConversationStartupFailure.conversationInit(convError)
         }
 
         isConnected = true
 
         do {
-            let initEvent = ConversationInitEvent(config: options.toConversationConfig())
+            let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw ConversationStartupFailure.conversationInit(convError)
         }
 
-        metrics.conversationInitAttempts = 1
-        metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        deliverMetadataIfNeeded()
     }
 
     func disconnect() async {
         disconnectCallCount += 1
         onEventReceived = nil
+        onRawMessage = nil
         onDisconnected = nil
-        errorHandler = nil
+        onStartupPhaseChange = nil
         isConnected = false
     }
 
@@ -66,13 +71,21 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             throw ConnectionManagerError.notConnected
         }
         if let sendError {
-            errorHandler?(sendError)
             throw sendError
         }
         sentPayloads.append(data)
     }
 
     func receive(data: Data) {
-        handleIncomingData(data, logger: SDKLogger(logLevel: .error))
+        handleIncomingData(data, logger: SDKLogger(levelOverride: .error))
+    }
+
+    private func deliverMetadataIfNeeded() {
+        guard autoDeliverMetadata else { return }
+        onEventReceived?(.conversationMetadata(ConversationMetadataEvent(
+            conversationId: metadataConversationId,
+            agentOutputAudioFormat: "pcm_16000",
+            userInputAudioFormat: "pcm_16000"
+        )))
     }
 }

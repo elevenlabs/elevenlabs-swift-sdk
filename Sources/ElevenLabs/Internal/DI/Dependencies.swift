@@ -1,4 +1,5 @@
 import Foundation
+import LiveKit
 
 @MainActor
 protocol ConversationDependencyProvider: AnyObject {
@@ -7,21 +8,23 @@ protocol ConversationDependencyProvider: AnyObject {
     var webSocketConnectionManager: any WebSocketConnectionManaging { get }
 }
 
-/// A minimalistic dependency container for internal SDK use.
 @MainActor
 final class Dependencies: ConversationDependencyProvider {
-    let logger: any Logging
     let webRTCConnectionManager: any WebRTCConnectionManaging
+
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
-    init() {
-        let globalConfig = ElevenLabs.Global.shared.configuration
-        let tokenService = TokenService(configuration: TokenService.Configuration(
-            apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
-            websocketURL: globalConfig.websocketUrl
-        ))
-        let logger = SDKLogger(logLevel: globalConfig.logLevel)
-        self.logger = logger
+    let logger: any Logging
+
+    init(logLevel: LogLevel = .warning) {
+        let tokenService: any TokenServicing = TokenService()
+        logger = SDKLogger(levelOverride: logLevel)
+        // Only the dedicated `.debugWithRTC` tier forwards LiveKit + underlying
+        // WebRTC logs (ICE server list, candidate gathering, TURN allocation).
+        // Kept off `.debug`/`.trace` since the RTC firehose is very noisy.
+        if logLevel.forwardsRTCLogs {
+            LiveKitSDK.setLogger(OSLogger(minLevel: .debug, rtc: true))
+        }
         webRTCConnectionManager = WebRTCConnectionManager(logger: logger, tokenService: tokenService)
         webSocketConnectionManager = WebSocketConnectionManager(logger: logger)
     }

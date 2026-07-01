@@ -28,8 +28,8 @@ final class ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(config.agentOverrides?.language, .english)
     }
 
-    func testConversationStateTransitions() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+    func testConversationStateTransitions() async throws {
+        let conversation = Conversation()
 
         // Initial state
         XCTAssertEqual(conversation.state, .idle)
@@ -40,10 +40,10 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv.sendMessage("Hello")
         }
 
-        // Mute operations also require active state
-        await assertThrowsConversationError(.notConnected) {
-            try await conv.toggleMute()
-        }
+        // Mic mute is lenient: a best-effort no-op when not connected.
+        let micMutedBefore = conv.isMicMuted
+        try await conv.toggleMicMute()
+        XCTAssertEqual(conv.isMicMuted, micMutedBefore, "Mic mute must be a no-op when not connected")
 
         await assertThrowsConversationError(.notConnected) {
             try await conv.interruptAgent()
@@ -51,7 +51,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testMessageStreamHandling() {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+        let conversation = Conversation()
 
         // Test that message streams are empty initially
         XCTAssertTrue(conversation.messages.isEmpty)
@@ -63,21 +63,15 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify message ordering
     }
 
-    func testAudioIntegration() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+    func testAudioIntegration() async throws {
+        let conversation = Conversation()
 
         // Test initial mute state
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertTrue(conversation.isMicMuted)
 
-        // Test mute operations when not connected - should throw
-        do {
-            try await conversation.setMuted(true)
-            XCTFail("Should throw error when not connected")
-        } catch let error as ConversationError {
-            XCTAssertEqual(error, .notConnected)
-        } catch {
-            XCTFail("Unexpected error type")
-        }
+        // Mic mute is lenient when not connected: a best-effort no-op, not an error.
+        try await conversation.setMicMuted(false)
+        XCTAssertTrue(conversation.isMicMuted, "Mic mute must be a no-op when not connected")
 
         // In a real integration test:
         // - Test microphone permissions
@@ -87,7 +81,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testToolCallIntegration() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+        let conversation = Conversation()
 
         // Test tool response when not connected
         let conv2 = conversation
@@ -107,7 +101,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testContextUpdateIntegration() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+        let conversation = Conversation()
 
         // Test context update when not connected
         let conv3 = conversation
@@ -123,7 +117,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testFeedbackIntegration() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+        let conversation = Conversation()
 
         // Test feedback when not connected
         let conv4 = conversation
@@ -151,7 +145,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testConcurrentOperations() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+        let conversation = Conversation()
 
         // Test that multiple operations handle not-connected state consistently
         await withTaskGroup(of: Void.self) { group in
@@ -175,7 +169,7 @@ final class ConversationIntegrationTests: XCTestCase {
         weak var weakConversation: Conversation?
 
         do {
-            let conversation = Conversation(dependencyProvider: Dependencies())
+            let conversation = Conversation()
             weakConversation = conversation
 
             // In a real test, we'd start and end conversation
