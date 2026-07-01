@@ -29,10 +29,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testConversationStateTransitions() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Initial state
         XCTAssertEqual(conversation.state, .idle)
@@ -54,10 +51,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testMessageStreamHandling() {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test that message streams are empty initially
         XCTAssertTrue(conversation.messages.isEmpty)
@@ -70,10 +64,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testAudioIntegration() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test initial mute state
         XCTAssertTrue(conversation.isMuted)
@@ -96,10 +87,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testToolCallIntegration() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test tool response when not connected
         let conv2 = conversation
@@ -119,10 +107,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testContextUpdateIntegration() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test context update when not connected
         let conv3 = conversation
@@ -138,10 +123,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testFeedbackIntegration() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test feedback when not connected
         let conv4 = conversation
@@ -169,10 +151,7 @@ final class ConversationIntegrationTests: XCTestCase {
     }
 
     func testConcurrentOperations() async {
-        let mockDependencies = Task<Dependencies, Never> {
-            Dependencies.shared
-        }
-        let conversation = Conversation(dependencies: mockDependencies)
+        let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test that multiple operations handle not-connected state consistently
         await withTaskGroup(of: Void.self) { group in
@@ -196,10 +175,7 @@ final class ConversationIntegrationTests: XCTestCase {
         weak var weakConversation: Conversation?
 
         do {
-            let mockDependencies = Task<Dependencies, Never> {
-                Dependencies.shared
-            }
-            let conversation = Conversation(dependencies: mockDependencies)
+            let conversation = Conversation(dependencyProvider: Dependencies())
             weakConversation = conversation
 
             // In a real test, we'd start and end conversation
