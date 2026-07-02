@@ -92,7 +92,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
 
         // 2. Request microphone permission (denial doesn't block startup).
-        let permissionGranted = await Self.requestMicrophonePermission()
+        let permissionGranted = await requestMicrophonePermission()
 
         // 3. Connect the LiveKit room.
         onStartupStateChange(.connectingRoom)
@@ -295,7 +295,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
     }
 
-    private static func requestMicrophonePermission() async -> Bool {
+    private func requestMicrophonePermission() async -> Bool {
         #if os(macOS)
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
