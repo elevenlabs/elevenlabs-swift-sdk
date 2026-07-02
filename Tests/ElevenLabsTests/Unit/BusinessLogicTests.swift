@@ -12,7 +12,6 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     override func setUp() async throws {
         mockWebRTCConnectionManager = MockWebRTCConnectionManager()
         dependencyProvider = TestDependencyProvider(
-            tokenService: MockTokenService(),
             webRTCConnectionManager: mockWebRTCConnectionManager
         )
         conversation = Conversation(dependencyProvider: dependencyProvider)
