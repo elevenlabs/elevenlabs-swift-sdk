@@ -66,29 +66,42 @@ public struct TokenService: Sendable {
     }
     #endif
 
-    /// Fetch connection details for ElevenLabs conversation
+    /// Fetch connection details for ElevenLabs conversation.
+    ///
+    /// Translates internal `TokenError`s into public `ConversationError`s so
+    /// callers only ever deal with one error type.
     public func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> ConnectionDetails {
-        let token: String = switch configuration.authSource {
-        case let .publicAgentId(agentId):
-            try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
-        case let .conversationToken(conversationToken):
-            conversationToken
-        case .signedWebSocketURL:
-            throw ConversationError.authenticationFailed("Signed WebSocket URLs are only supported for text-only conversations.")
-        case let .customTokenProvider(provider):
-            try await provider()
+        do {
+            let token: String = switch configuration.authSource {
+            case let .publicAgentId(agentId):
+                try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
+            case let .conversationToken(conversationToken):
+                conversationToken
+            case .signedWebSocketURL:
+                throw ConversationError.authenticationFailed(
+                    "Signed WebSocket URLs are only supported for text-only conversations."
+                )
+            case let .customTokenProvider(provider):
+                try await provider()
+            }
+
+            let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.voiceConversationUrl
+
+            // ElevenLabs tokens contain room name and participant identity in the JWT
+            // LiveKit will extract these automatically, so we provide empty values
+            return ConnectionDetails(
+                serverUrl: websocketURL,
+                roomName: "", // LiveKit extracts from JWT
+                participantName: "", // LiveKit extracts from JWT
+                participantToken: token
+            )
+        } catch let error as ConversationError {
+            throw error
+        } catch let error as TokenError {
+            throw ConversationError.authenticationFailed(error.localizedDescription)
+        } catch {
+            throw ConversationError.connectionFailed(error)
         }
-
-        let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.voiceConversationUrl
-
-        // ElevenLabs tokens contain room name and participant identity in the JWT
-        // LiveKit will extract these automatically, so we provide empty values
-        return ConnectionDetails(
-            serverUrl: websocketURL,
-            roomName: "", // LiveKit extracts from JWT
-            participantName: "", // LiveKit extracts from JWT
-            participantToken: token
-        )
     }
 
     private func fetchTokenFromAPI(agentId: String, environment: String? = nil) async throws -> String {

@@ -24,14 +24,13 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     var agentAudioTrack: RemoteAudioTrack? { get }
     var isMicrophoneMuted: Bool { get }
 
+    @MainActor
     func connect(
-        details: TokenService.ConnectionDetails,
-        enableMic: Bool,
-        throwOnMicrophoneFailure: Bool,
-        networkConfiguration: LiveKitNetworkConfiguration
-    ) async throws
+        auth: ElevenLabsConfiguration,
+        options: ConversationOptions,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> StartupResult
 
-    func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult
     func setMicrophoneMuted(_ muted: Bool) async throws
 }
 
