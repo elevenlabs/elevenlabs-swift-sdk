@@ -12,9 +12,6 @@ extension Conversation {
             agentStateManager?.processSignal(.userTranscript)
             options.onUserTranscript?(e.transcript, e.eventId)
 
-        case .tentativeAgentResponse:
-            agentStateManager?.processSignal(.agentResponse)
-
         case let .agentResponse(e):
             upsertAgentMessage(content: e.response, eventId: e.eventId)
             lastAgentEventId = e.eventId
@@ -101,10 +98,6 @@ extension Conversation {
         case let .mcpConnectionStatus(status):
             // Update MCP connection status
             mcpConnectionStatus = status
-
-        case .asrInitiationMetadata:
-            // ASR initiation metadata is available in the event stream
-            break
 
         case let .error(errorEvent):
             logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")

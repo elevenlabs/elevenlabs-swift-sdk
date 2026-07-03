@@ -13,7 +13,6 @@ public enum IncomingEvent: Sendable {
     case audio(AudioEvent)
     case interruption(InterruptionEvent)
     case vadScore(VadScoreEvent)
-    case tentativeAgentResponse(TentativeAgentResponseEvent)
     case conversationMetadata(ConversationMetadataEvent)
     case ping(PingEvent)
     case clientToolCall(ClientToolCallEvent)
@@ -21,7 +20,6 @@ public enum IncomingEvent: Sendable {
     case agentToolResponse(AgentToolResponseEvent)
     case mcpToolCall(MCPToolCallEvent)
     case mcpConnectionStatus(MCPConnectionStatusEvent)
-    case asrInitiationMetadata(ASRInitiationMetadataEvent)
     case error(ErrorEvent)
 }
 
@@ -85,11 +83,6 @@ public struct AudioEvent: Sendable {
 /// Interruption detected
 public struct InterruptionEvent: Sendable {
     public let eventId: Int
-}
-
-/// Tentative agent response (before finalization)
-public struct TentativeAgentResponseEvent: Sendable {
-    public let tentativeResponse: String
 }
 
 /// Conversation initialization metadata
@@ -195,15 +188,6 @@ public struct MCPConnectionStatusEvent: Sendable {
     }
 
     public let integrations: [Integration]
-}
-
-/// ASR initiation metadata event
-public struct ASRInitiationMetadataEvent: Sendable {
-    public let metadataData: Data
-
-    public func getMetadata() throws -> [String: Any] {
-        try JSONSerialization.jsonObject(with: metadataData) as? [String: Any] ?? [:]
-    }
 }
 
 /// Server error event with code, optional name, and message.
