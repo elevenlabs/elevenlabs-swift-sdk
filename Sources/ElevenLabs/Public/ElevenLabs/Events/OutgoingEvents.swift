@@ -3,9 +3,8 @@ import Foundation
 // MARK: - Outgoing Events (to ElevenLabs)
 
 /// Events that can be sent to the ElevenLabs agent
-public enum OutgoingEvent {
+public enum OutgoingEvent: Sendable {
     case pong(PongEvent)
-    case userAudio(UserAudioEvent)
     case conversationInit(ConversationInitEvent)
     case feedback(FeedbackEvent)
     case clientToolResult(ClientToolResultEvent)
@@ -21,15 +20,6 @@ public struct PongEvent: Sendable {
 
     public init(eventId: Int) {
         self.eventId = eventId
-    }
-}
-
-/// User audio chunk
-public struct UserAudioEvent: Sendable {
-    public let audioChunk: String // base64 encoded
-
-    public init(audioChunk: String) {
-        self.audioChunk = audioChunk
     }
 }
 
@@ -58,17 +48,15 @@ public struct FeedbackEvent: Sendable {
     }
 }
 
-/// Categorizes a client tool failure for the orchestrator.
+/// Client tool execution result
 public enum ClientToolErrorType: String, Sendable {
     case userRejected = "user_rejected"
     case externalServer = "external_server"
     case externalClient = "external_client"
     case customerAuth = "customer_auth"
-    case clientTimeout = "client_timeout"
     case unknown
 }
 
-/// Client tool execution result
 public struct ClientToolResultEvent: Sendable {
     public let toolCallId: String
     public let result: String

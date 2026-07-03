@@ -10,9 +10,6 @@ enum EventSerializer {
             json["type"] = "pong"
             json["event_id"] = pongEvent.eventId
 
-        case let .userAudio(audioEvent):
-            json["user_audio_chunk"] = audioEvent.audioChunk
-
         case let .conversationInit(initEvent):
             json["type"] = "conversation_initiation_client_data"
             if let config = initEvent.config {
@@ -29,7 +26,9 @@ enum EventSerializer {
             json["tool_call_id"] = resultEvent.toolCallId
             json["result"] = resultEvent.result
             json["is_error"] = resultEvent.isError
-            json["error_type"] = resultEvent.errorType?.rawValue
+            if let errorType = resultEvent.errorType {
+                json["error_type"] = errorType.rawValue
+            }
 
         case let .contextualUpdate(updateEvent):
             json["type"] = "contextual_update"
@@ -93,32 +92,19 @@ enum EventSerializer {
         }
 
         // Conversation overrides
-        if let conversationOverrides = config.conversationOverrides {
-            var conversation: [String: Any] = [:]
-            if conversationOverrides.textOnly {
-                conversation["text_only"] = true
-            }
-            if let clientEvents = conversationOverrides.clientEvents {
-                conversation["client_events"] = clientEvents
-            }
-            if !conversation.isEmpty {
-                configOverride["conversation"] = conversation
-            }
+        if config.textOnly {
+            configOverride["conversation"] = ["text_only": true]
         }
 
         if !configOverride.isEmpty {
             json["conversation_config_override"] = configOverride
         }
 
-        if let customBody = config.customLlmExtraBody {
-            json["custom_llm_extra_body"] = customBody
-        }
-
         if let dynamicVars = config.dynamicVariables {
-            json["dynamic_variables"] = dynamicVars
+            json["dynamic_variables"] = dynamicVars.mapValues(\.jsonObject)
         }
 
-        // Add source_info (equivalent to client in React Native)
+        // Identify the SDK to the orchestrator.
         var sourceInfo: [String: Any] = [:]
         sourceInfo["source"] = "swift_sdk"
         sourceInfo["version"] = SDKVersion.version

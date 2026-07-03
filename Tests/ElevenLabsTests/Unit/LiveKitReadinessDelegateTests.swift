@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class LiveKitReadinessDelegateTests: XCTestCase {
     private func makeDelegate() -> RoomDelegate {
-        LiveKitReadinessDelegate(logger: SDKLogger(logLevel: .warning))
+        LiveKitReadinessDelegate(logger: SDKLogger(levelOverride: .warning))
     }
 
     func testImplementsGenuineRoomDelegateMethods() {
