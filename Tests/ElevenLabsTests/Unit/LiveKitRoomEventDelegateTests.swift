@@ -2,7 +2,7 @@
 import LiveKit
 import XCTest
 
-/// Verifies delegate callbacks implement correct `RoomDelegate` methods
+/// Verifies delegate callbacks implement the `RoomDelegate` methods LiveKit actually calls.
 final class LiveKitRoomEventDelegateTests: XCTestCase {
     private func makeDelegate(
         onData: @escaping @Sendable (Data) -> Void = { _ in },

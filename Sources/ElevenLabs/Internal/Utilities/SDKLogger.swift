@@ -37,16 +37,18 @@ extension Logging {
 struct SDKLogger: Logging {
     private let subsystem: String
     private let category: String
-    private let logLevel: ElevenLabs.LogLevel
+    /// The fixed threshold for this logger. Set from `ConversationConfig.logLevel`
+    /// via `Dependencies`; defaults to `.warning` for loggers created without one.
+    private let logLevel: LogLevel
 
     init(
         subsystem: String = "com.elevenlabs.sdk",
         category: String = "ElevenLabs",
-        logLevel: ElevenLabs.LogLevel = .info
+        levelOverride: LogLevel? = nil
     ) {
         self.subsystem = subsystem
         self.category = category
-        self.logLevel = logLevel
+        self.logLevel = (levelOverride ?? .warning).sdkVerbosity
     }
 
     /// Helper to log safely
@@ -54,7 +56,8 @@ struct SDKLogger: Logging {
         let prefix = "[ElevenLabs]"
         let finalMessage: String
         if let context, !context.isEmpty {
-            // ensure stable order in logs
+            // Sort by key so a given log line's context is stably ordered rather
+            // than reflecting `Dictionary`'s nondeterministic iteration order.
             let contextString = context
                 .sorted { $0.key < $1.key }
                 .map { "\($0.key)=\($0.value)" }
