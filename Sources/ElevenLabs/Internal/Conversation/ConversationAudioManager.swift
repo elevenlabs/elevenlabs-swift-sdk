@@ -4,12 +4,11 @@ import Foundation
 import LiveKit
 #endif
 
-/// Manages audio device configuration and speech activity handling for conversations.
-/// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
+/// Owns this conversation's `AudioManager.shared` configuration (mute mode, voice
+/// processing, capture pre-warm) and speech-activity handling, keeping
+/// `Conversation` focused on conversation logic.
 @MainActor
 final class ConversationAudioManager {
-    private(set) var audioDevices: [AudioDevice] = []
-    private(set) var selectedAudioDeviceID: String = ""
     private(set) var softwareMuteProcessor: SoftwareMuteProcessor?
 
     private let audioManager = AudioManager.shared
@@ -17,134 +16,130 @@ final class ConversationAudioManager {
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
 
-    /// Callback when audio devices list changes
-    var onDevicesChanged: (([AudioDevice]) -> Void)?
-
-    /// Callback when selected device changes
-    var onSelectedDeviceChanged: ((String) -> Void)?
+    // Snapshots of process-global `AudioManager.shared` state this instance
+    // overwrote in `configure`, so `cleanup`/`deinit` can restore it instead of
+    // leaking settings across sessions or clobbering the host app's values. A
+    // `nil` entry means this instance never changed that setting.
+    //
+    // `previousCaptureDelegate` is only meaningful while `softwareMuteProcessor`
+    // is non-nil.
+    private var previousCaptureDelegate: AudioCustomProcessingDelegate?
+    private var previousVoiceProcessingBypassed: Bool?
+    private var previousVoiceProcessingAGCEnabled: Bool?
 
     init(logger: any Logging) {
         self.logger = logger
-        audioDevices = audioManager.inputDevices
-        selectedAudioDeviceID = audioManager.inputDevice.deviceId
-        setupInitialConfiguration()
     }
 
     deinit {
-        // Reset callbacks directly since we can't call MainActor methods from deinit
-        audioManager.onDeviceUpdate = nil
+        // Best-effort restore if torn down without a clean `cleanup()`. We can't
+        // call MainActor methods here, but these `AudioManager.shared` accessors
+        // are safe off the main actor.
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+        }
+        // Only revert the capture delegate if ours is still the installed one; a
+        // process-wide last-write-wins slot means something else may have taken
+        // over after us, and we must not stomp that.
+        if let processor = softwareMuteProcessor,
+           audioManager.capturePostProcessingDelegate.map({ $0 as AnyObject }) === processor
+        {
+            audioManager.capturePostProcessingDelegate = previousCaptureDelegate
+        }
+        if let bypass = previousVoiceProcessingBypassed {
+            audioManager.isVoiceProcessingBypassed = bypass
+        }
+        if let agc = previousVoiceProcessingAGCEnabled {
+            audioManager.isVoiceProcessingAGCEnabled = agc
         }
     }
 
     // MARK: - Configuration
 
     /// Apply audio pipeline configuration from conversation options.
-    func configure(with options: ConversationOptions) async {
-        let config = options.audioConfiguration
+    ///
+    /// This is the single configuration entry point: it establishes the baseline
+    /// device state (mute mode + engine pre-warm) and applies any caller overrides.
+    func configure(
+        with config: ConversationConfig,
+        onSpeakingWhileMutedChange: @escaping @Sendable (Bool) -> Void
+    ) async {
+        let audioConfig = config.audioConfiguration
+        let muteMode = audioConfig?.microphoneMuteMode ?? .inputMixer
 
-        if let mode = config?.microphoneMuteMode {
-            do {
-                try audioManager.set(microphoneMuteMode: mode)
-            } catch {
-                logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
-            }
+        do {
+            try audioManager.set(microphoneMuteMode: muteMode.toLiveKit())
+        } catch {
+            logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
         }
 
-        if let bypass = config?.voiceProcessingBypassed {
+        // Snapshot before overwriting so `cleanup` can restore the prior value
+        // rather than leaking our override into later sessions / other consumers.
+        if let bypass = audioConfig?.voiceProcessingBypassed {
+            previousVoiceProcessingBypassed = audioManager.isVoiceProcessingBypassed
             audioManager.isVoiceProcessingBypassed = bypass
         }
 
-        if let agc = config?.voiceProcessingAGCEnabled {
+        if let agc = audioConfig?.voiceProcessingAGCEnabled {
+            previousVoiceProcessingAGCEnabled = audioManager.isVoiceProcessingAGCEnabled
             audioManager.isVoiceProcessingAGCEnabled = agc
         }
 
-        if let prepared = config?.recordingAlwaysPrepared {
-            do {
-                try await audioManager.setRecordingAlwaysPreparedMode(prepared)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
+        // Pre-warm the capture engine via "recording always prepared" mode so the
+        // first `setMicrophone(enabled:)` reuses a warm engine. Without it the
+        // engine cold-starts at publish time and the first VPIO init fails with
+        // audio-engine error -4010 (reproducible on the simulator after a fresh
+        // permission grant).
+        //
+        // Intentionally NOT reverted in `cleanup`: keeping it prepared lets
+        // back-to-back conversations reuse the warm engine, and is a benign global.
+        do {
+            try await audioManager.setRecordingAlwaysPreparedMode(true)
+        } catch {
+            logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
         }
 
-        configureSpeechHandler(options: options)
-        configureSoftwareMuteProcessor(options: options)
+        configureSpeechHandler(onSpeakingWhileMutedChange: onSpeakingWhileMutedChange)
+        configureSoftwareMuteProcessor(muteMode: muteMode, onSpeakingWhileMutedChange: onSpeakingWhileMutedChange)
     }
 
     /// Cleanup audio state when conversation ends.
     func cleanup() {
         cleanupSpeechHandler()
         cleanupSoftwareMuteProcessor()
+        restoreVoiceProcessingState()
     }
 
     // MARK: - Private
 
-    private func setupInitialConfiguration() {
-        // Set initial microphone mute mode
-        do {
-            try audioManager.set(microphoneMuteMode: .inputMixer)
-        } catch {
-            logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
+    private func configureSpeechHandler(onSpeakingWhileMutedChange: @escaping @Sendable (Bool) -> Void) {
+        if !audioSpeechHandlerInstalled {
+            previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
+            audioSpeechHandlerInstalled = true
         }
-
-        // Set recording always prepared mode asynchronously
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await audioManager.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-
-        // Setup device change observer
-        audioManager.onDeviceUpdate = { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.audioDevices = self.audioManager.inputDevices
-                self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
-                self.onDevicesChanged?(self.audioDevices)
-                self.onSelectedDeviceChanged?(self.selectedAudioDeviceID)
-            }
+        audioManager.onMutedSpeechActivity = { _, event in
+            // Handlers are @Sendable, they manage their own synchronization.
+            onSpeakingWhileMutedChange(event == .started)
         }
     }
 
-    private func configureSpeechHandler(options: ConversationOptions) {
-        let config = options.audioConfiguration
-        let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
-
-        if needsSpeechHandler {
-            if !audioSpeechHandlerInstalled {
-                previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
-                audioSpeechHandlerInstalled = true
-            }
-            audioManager.onMutedSpeechActivity = { _, event in
-                // Handlers are @Sendable, they manage their own synchronization
-                if let handler = config?.onSpeechActivity {
-                    handler(event)
-                }
-                if let handler = options.onSpeechActivity {
-                    handler(event)
-                }
-            }
-        } else if audioSpeechHandlerInstalled {
-            cleanupSpeechHandler()
-        }
-    }
-
-    private func configureSoftwareMuteProcessor(options: ConversationOptions) {
-        guard options.audioConfiguration?.useSoftwareMute == true else {
+    private func configureSoftwareMuteProcessor(
+        muteMode: MicrophoneMuteMode,
+        onSpeakingWhileMutedChange: @escaping @Sendable (Bool) -> Void
+    ) {
+        guard case let .software(speechThreshold) = muteMode else {
             return
         }
 
-        let audioConfig = options.audioConfiguration
-        softwareMuteProcessor = SoftwareMuteProcessor(
-            onMutedSpeech: audioConfig?.onMutedSpeech,
-            mutedSpeechThresholdInDb: audioConfig?.mutedSpeechThreshold ?? -35,
-            mutedSpeechThrottleInSeconds: 3.0
+        let processor = SoftwareMuteProcessor(
+            onSpeakingWhileMutedChange: onSpeakingWhileMutedChange,
+            mutedSpeechThresholdInDb: speechThreshold
         )
-        AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
+        softwareMuteProcessor = processor
+        // Snapshot any pre-existing delegate so `cleanup` restores it rather than
+        // nilling out a delegate this instance never owned.
+        previousCaptureDelegate = audioManager.capturePostProcessingDelegate
+        audioManager.capturePostProcessingDelegate = processor
     }
 
     private func cleanupSpeechHandler() {
@@ -156,7 +151,44 @@ final class ConversationAudioManager {
     }
 
     private func cleanupSoftwareMuteProcessor() {
-        AudioManager.shared.capturePostProcessingDelegate = nil
+        guard let processor = softwareMuteProcessor else { return }
+        // Restore the delegate we displaced — but only if ours is still the one
+        // installed. The slot is process-wide last-write-wins, so if another
+        // component set its own delegate after us, leave that in place.
+        if audioManager.capturePostProcessingDelegate.map({ $0 as AnyObject }) === processor {
+            audioManager.capturePostProcessingDelegate = previousCaptureDelegate
+        }
+        previousCaptureDelegate = nil
         softwareMuteProcessor = nil
     }
+
+    /// Restore the VPIO flags this instance overrode in `configure`. The capture
+    /// pre-warm (`setRecordingAlwaysPreparedMode(true)`) is intentionally left
+    /// enabled process-wide (see `configure`), so it is not restored here.
+    private func restoreVoiceProcessingState() {
+        if let bypass = previousVoiceProcessingBypassed {
+            audioManager.isVoiceProcessingBypassed = bypass
+            previousVoiceProcessingBypassed = nil
+        }
+        if let agc = previousVoiceProcessingAGCEnabled {
+            audioManager.isVoiceProcessingAGCEnabled = agc
+            previousVoiceProcessingAGCEnabled = nil
+        }
+    }
 }
+
+// MARK: - LiveKit mapping
+
+private extension MicrophoneMuteMode {
+    /// Maps to LiveKit's hardware mute mode. Software mute has no LiveKit
+    /// equivalent — the track is kept open and muting happens in
+    /// `SoftwareMuteProcessor`, so the engine runs with `.inputMixer` underneath.
+    func toLiveKit() -> LiveKit.MicrophoneMuteMode {
+        switch self {
+        case .voiceProcessing: .voiceProcessing
+        case .restart: .restart
+        case .inputMixer, .software: .inputMixer
+        }
+    }
+}
+
