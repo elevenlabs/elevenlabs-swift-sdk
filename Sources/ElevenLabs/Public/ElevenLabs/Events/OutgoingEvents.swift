@@ -75,38 +75,6 @@ public struct ClientToolResultEvent: Sendable {
     public let isError: Bool
     public let errorType: ClientToolErrorType?
 
-    @available(
-        *,
-        deprecated,
-        message: "Use init(toolCallId:result:) with a String, or Conversation.sendToolResult with an Encodable value."
-    )
-    public init(
-        toolCallId: String,
-        result: Any,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) throws {
-        self.toolCallId = toolCallId
-        self.isError = isError || errorType != nil
-        self.errorType = errorType
-
-        if let stringResult = result as? String {
-            self.result = stringResult
-        } else if JSONSerialization.isValidJSONObject(result) {
-            let jsonData = try JSONSerialization.data(withJSONObject: result)
-            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-                throw NSError(
-                    domain: "ClientToolResultEvent",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to convert result to JSON string"]
-                )
-            }
-            self.result = jsonString
-        } else {
-            self.result = String(describing: result)
-        }
-    }
-
     /// `result` is a simple string or a JSON string
     public init(
         toolCallId: String,
