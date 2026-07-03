@@ -7,7 +7,7 @@ final class ConversationConfigTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertNil(config.conversationOverrides)
+        XCTAssertFalse(config.textOnly)
     }
 
     func testConfigurationWithOverrides() {
@@ -23,13 +23,11 @@ final class ConversationConfigTests: XCTestCase {
             voiceId: "voice123"
         )
 
-        config.conversationOverrides = ConversationOverrides(
-            textOnly: true
-        )
+        config.textOnly = true
 
         XCTAssertNotNil(config.agentOverrides)
         XCTAssertNotNil(config.ttsOverrides)
-        XCTAssertNotNil(config.conversationOverrides)
+        XCTAssertTrue(config.textOnly)
     }
 
     func testAgentOverrides() {
@@ -52,12 +50,10 @@ final class ConversationConfigTests: XCTestCase {
         XCTAssertEqual(overrides.voiceId, "voice123")
     }
 
-    func testConversationOverrides() {
-        let overrides = ConversationOverrides(
-            textOnly: true
-        )
+    func testTextOnlyConfiguration() {
+        let config = ConversationConfig(textOnly: true)
 
-        XCTAssertEqual(overrides.textOnly, true)
+        XCTAssertTrue(config.textOnly)
     }
 
     func testLanguageEnum() {
