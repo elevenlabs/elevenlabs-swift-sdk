@@ -112,7 +112,7 @@ final class ElevenLabsSDKTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertNil(config.conversationOverrides)
+        XCTAssertFalse(config.conversationOverrides.textOnly)
     }
 
     func testAuthenticationMethods() {

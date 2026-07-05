@@ -42,18 +42,18 @@ final class ConversationTests: XCTestCase {
     func testStartConversationSuccessUpdatesStartupState() async throws {
         let stateExpectation = expectation(description: "startup becomes active")
 
-        let options = makeConfig()
+        let config = makeConfig()
         let callbacks = makeCallbacks(onStartupStateChange: { state in
             if case .active = state {
                 stateExpectation.fulfill()
             }
         })
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options, callbacks: callbacks)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, config: config, callbacks: callbacks)
 
         let startTask = Task {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: options
+                config: config
             )
         }
 
@@ -81,7 +81,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: makeConfig()
+                config: makeConfig()
             )
         }
 
@@ -112,7 +112,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: makeConfig()
+                config: makeConfig()
             )
         }
 
@@ -151,7 +151,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: makeConfig()
+                config: makeConfig()
             )
         }
 
@@ -176,7 +176,7 @@ final class ConversationTests: XCTestCase {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: makeConfig()
+                config: makeConfig()
             )
         }
 
@@ -194,13 +194,13 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartTextOnlyPublicAgentUsesWebSocketConnectionManager() async throws {
-        let options = makeConfig(configure: { options in
-            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        let config = makeConfig(configure: { config in
+            config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
         try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-            options: options
+            config: config
         )
 
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 0)
@@ -239,13 +239,13 @@ final class ConversationTests: XCTestCase {
         conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
         conversation._testing_setState(.ended(reason: .userEnded))
 
-        let options = makeConfig(configure: { options in
-            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        let config = makeConfig(configure: { config in
+            config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
         try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-            options: options
+            config: config
         )
 
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
@@ -258,13 +258,13 @@ final class ConversationTests: XCTestCase {
 
     func testStartTextOnlySignedURLUsesProvidedWebSocketURL() async throws {
         let signedURL = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-private&conversation_signature=sig"
-        let options = makeConfig(configure: { options in
-            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        let config = makeConfig(configure: { config in
+            config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
         try await conversation.startConversation(
             auth: .signedWebSocketURL(signedURL),
-            options: options
+            config: config
         )
 
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 0)
@@ -286,14 +286,14 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartTextOnlyRejectsConversationTokenAuth() async throws {
-        let options = makeConfig(configure: { options in
-            options.conversationOverrides = ConversationOverrides(textOnly: true)
+        let config = makeConfig(configure: { config in
+            config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
         do {
             try await conversation.startConversation(
                 auth: .conversationToken("livekit-token"),
-                options: options
+                config: config
             )
             XCTFail("Expected text-only startup to reject LiveKit token auth")
         } catch let error as ConversationError {
@@ -392,13 +392,13 @@ final class ConversationTests: XCTestCase {
     func testStartConversationTokenFailure() async {
         mockWebRTCConnectionManager.tokenError = .authenticationFailed("Mock authentication failed")
 
-        let options = makeConfig()
+        let config = makeConfig()
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                config: config
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
@@ -418,13 +418,13 @@ final class ConversationTests: XCTestCase {
     func testStartConversationConnectionFailure() async {
         mockWebRTCConnectionManager.shouldFailConnection = true
 
-        let options = makeConfig()
+        let config = makeConfig()
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                config: config
             )
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
@@ -442,15 +442,15 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationAgentTimeoutFailure() async {
-        let options = ConversationStartupConfiguration(agentReadyTimeout: 0.05)
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 0.05)
 
-        let conversationConfig = makeConfig(startupConfiguration: options)
+        let config = makeConfig(startupConfiguration: startupConfig)
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: conversationConfig
+                config: config
             )
         }
 
@@ -482,14 +482,14 @@ final class ConversationTests: XCTestCase {
     func testStartConversationConversationInitFailure() async {
         mockWebRTCConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
 
-        let options = makeConfig()
+        let config = makeConfig()
 
         guard let conversation else { return }
 
         let startTask = Task {
             try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
-                options: options
+                config: config
             )
         }
 
@@ -671,18 +671,18 @@ final class ConversationTests: XCTestCase {
 
     func testAgentDisconnectEndsConversation() async throws {
         let disconnectReasons = ValueRecorder<DisconnectionReason>()
-        let options = makeConfig()
+        let config = makeConfig()
         let callbacks = makeCallbacks(configure: { callbacks in
             callbacks.onDisconnect = { reason in
                 Task { await disconnectReasons.append(reason) }
             }
         })
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options, callbacks: callbacks)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, config: config, callbacks: callbacks)
 
         let startTask = Task {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-                options: options
+                config: config
             )
         }
         await Task.yield()
@@ -768,11 +768,11 @@ actor ValueRecorder<Value> {
 extension ConversationTests {
     private func makeConfig(
         startupConfiguration: ConversationStartupConfiguration = .default,
-        configure: ((inout ConversationOptions) -> Void)? = nil
-    ) -> ConversationOptions {
-        var options = ConversationOptions(startupConfiguration: startupConfiguration)
-        configure?(&options)
-        return options
+        configure: ((inout ConversationConfig) -> Void)? = nil
+    ) -> ConversationConfig {
+        var config = ConversationConfig(startupConfiguration: startupConfiguration)
+        configure?(&config)
+        return config
     }
 
     private func makeCallbacks(

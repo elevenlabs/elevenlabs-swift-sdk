@@ -12,12 +12,16 @@ public enum DisconnectionReason: Sendable {
 public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
-    public var conversationOverrides: ConversationOverrides?
+    public var conversationOverrides: ConversationOverrides
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
     public var userId: String?
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
+
+    /// How to handle microphone setup failures during connection.
+    /// When `false` (default), a microphone failure throws. When `true`, startup continues without a microphone.
+    public var continueWithoutMicrophoneOnFailure: Bool
 
     /// Controls timings and retry behavior for the initialization handshake
     public var startupConfiguration: ConversationStartupConfiguration
@@ -35,11 +39,12 @@ public struct ConversationConfig: Sendable {
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
-        conversationOverrides: ConversationOverrides? = nil,
+        conversationOverrides: ConversationOverrides = .init(),
         customLlmExtraBody: [String: String]? = nil,
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         environment: String? = nil,
+        continueWithoutMicrophoneOnFailure: Bool = false,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
         networkConfiguration: LiveKitNetworkConfiguration = .default,
@@ -52,6 +57,7 @@ public struct ConversationConfig: Sendable {
         self.dynamicVariables = dynamicVariables
         self.userId = userId
         self.environment = environment
+        self.continueWithoutMicrophoneOnFailure = continueWithoutMicrophoneOnFailure
         self.startupConfiguration = startupConfiguration
         self.audioConfiguration = audioConfiguration
         self.networkConfiguration = networkConfiguration
@@ -107,26 +113,5 @@ public struct ConversationOverrides: Sendable {
     ) {
         self.textOnly = textOnly
         self.clientEvents = clientEvents
-    }
-}
-
-// MARK: - Conversion Extension
-
-extension ConversationConfig {
-    /// Convert ConversationConfig to ConversationOptions for internal use
-    func toConversationOptions() -> ConversationOptions {
-        ConversationOptions(
-            conversationOverrides: conversationOverrides ?? ConversationOverrides(),
-            agentOverrides: agentOverrides,
-            ttsOverrides: ttsOverrides,
-            customLlmExtraBody: customLlmExtraBody,
-            dynamicVariables: dynamicVariables,
-            userId: userId,
-            environment: environment,
-            startupConfiguration: startupConfiguration,
-            audioConfiguration: audioConfiguration,
-            networkConfiguration: networkConfiguration,
-            agentStateConfiguration: agentStateConfiguration
-        )
     }
 }

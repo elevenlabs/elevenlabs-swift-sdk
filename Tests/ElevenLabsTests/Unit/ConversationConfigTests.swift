@@ -7,7 +7,7 @@ final class ConversationConfigTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertNil(config.conversationOverrides)
+        XCTAssertFalse(config.conversationOverrides.textOnly)
     }
 
     func testConfigurationWithOverrides() {
@@ -29,7 +29,7 @@ final class ConversationConfigTests: XCTestCase {
 
         XCTAssertNotNil(config.agentOverrides)
         XCTAssertNotNil(config.ttsOverrides)
-        XCTAssertNotNil(config.conversationOverrides)
+        XCTAssertTrue(config.conversationOverrides.textOnly)
     }
 
     func testAgentOverrides() {

@@ -76,7 +76,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     @MainActor
     func connect(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {
         let startTime = Date()
@@ -96,7 +96,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
         // 3. Connect the LiveKit room.
         onStartupStateChange(.connectingRoom)
-        let throwOnMicFailure = options.microphoneFailureHandling == .throwError
+        let throwOnMicFailure = !config.continueWithoutMicrophoneOnFailure
         try await runPhase(
             timing: \.roomConnect, metrics: &metrics, startTime: startTime, failure: StartupFailure.room
         ) {
@@ -104,12 +104,12 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 details: connectionDetails,
                 enableMic: permissionGranted,
                 throwOnMicrophoneFailure: throwOnMicFailure,
-                networkConfiguration: options.networkConfiguration
+                networkConfiguration: config.networkConfiguration
             )
         }
 
         // 4. Wait for the agent to be ready (fails outright if it doesn't join in time).
-        let agentTimeout = options.startupConfiguration.agentReadyTimeout
+        let agentTimeout = config.startupConfiguration.agentReadyTimeout
         onStartupStateChange(.waitingForAgent(timeout: agentTimeout))
         guard case let .success(elapsed) = await waitForAgentReady(timeout: agentTimeout) else {
             metrics.total = Date().timeIntervalSince(startTime)
@@ -125,7 +125,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             timing: \.conversationInit, metrics: &metrics, startTime: startTime,
             failure: StartupFailure.conversationInit
         ) {
-            try await send(event: .conversationInit(ConversationInitEvent(config: options.toConversationConfig())))
+            try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
         metrics.conversationInitAttempts = 1
 
