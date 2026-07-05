@@ -10,27 +10,27 @@ extension Conversation {
         case let .userTranscript(e):
             insertUserTranscript(content: e.transcript, eventId: e.eventId)
             agentStateManager?.processSignal(.userTranscript)
-            options.onUserTranscript?(e.transcript, e.eventId)
+            callbacks.onUserTranscript?(e.transcript, e.eventId)
 
         case let .agentResponse(e):
             upsertAgentMessage(content: e.response, eventId: e.eventId)
             lastAgentEventId = e.eventId
             agentStateManager?.processSignal(.agentResponse)
-            options.onAgentResponse?(e.response, e.eventId)
+            callbacks.onAgentResponse?(e.response, e.eventId)
             if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
-                options.onCanSendFeedbackChange?(true)
+                callbacks.onCanSendFeedbackChange?(true)
             }
 
         case let .agentResponseCorrection(correction):
             upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
-            options.onAgentResponseCorrection?(
+            callbacks.onAgentResponseCorrection?(
                 correction.originalAgentResponse,
                 correction.correctedAgentResponse,
                 correction.eventId
             )
 
         case let .agentResponseMetadata(metadata):
-            options.onAgentResponseMetadata?(
+            callbacks.onAgentResponseMetadata?(
                 metadata.metadataData,
                 metadata.eventId
             )
@@ -43,19 +43,19 @@ extension Conversation {
             latestAudioEvent = audioEvent
             latestAudioAlignment = audioEvent.alignment
             if let alignment = audioEvent.alignment {
-                options.onAudioAlignment?(alignment)
+                callbacks.onAudioAlignment?(alignment)
             }
 
         case let .interruption(interruptionEvent):
             speakingTimer?.cancel()
             applyStateSignal(.interruption, fallback: .listening)
-            options.onInterruption?(interruptionEvent.eventId)
-            options.onCanSendFeedbackChange?(false)
+            callbacks.onInterruption?(interruptionEvent.eventId)
+            callbacks.onCanSendFeedbackChange?(false)
 
         case let .conversationMetadata(metadata):
             // Store the conversation metadata for public access
             conversationMetadata = metadata
-            options.onConversationMetadata?(metadata)
+            callbacks.onConversationMetadata?(metadata)
 
         case let .ping(p):
             // Respond to ping with pong
@@ -64,12 +64,12 @@ extension Conversation {
 
         case let .clientToolCall(toolCall):
             // Add to pending tool calls for the app to handle
-            options.onUnhandledClientToolCall?(toolCall)
+            callbacks.onUnhandledClientToolCall?(toolCall)
             pendingToolCalls.append(toolCall)
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))
-            options.onVadScore?(vad.vadScore)
+            callbacks.onVadScore?(vad.vadScore)
 
         case let .agentToolResponse(toolResponse):
             applyStateSignal(.agentToolResponse, fallback: .listening)
@@ -77,11 +77,11 @@ extension Conversation {
             if toolResponse.toolName == "end_call" {
                 await endConversation()
             }
-            options.onAgentToolResponse?(toolResponse)
+            callbacks.onAgentToolResponse?(toolResponse)
 
         case let .agentToolRequest(toolRequest):
             applyStateSignal(.agentToolRequest, fallback: .thinking)
-            options.onAgentToolRequest?(toolRequest)
+            callbacks.onAgentToolRequest?(toolRequest)
 
         case .tentativeUserTranscript:
             // Tentative user transcript (in-progress transcription)
@@ -101,7 +101,7 @@ extension Conversation {
 
         case let .error(errorEvent):
             logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")
-            options.onError?(.serverError(errorEvent))
+            callbacks.onError?(.serverError(errorEvent))
         }
     }
 

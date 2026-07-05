@@ -20,7 +20,7 @@ final class ConversationTests: XCTestCase {
             webRTCConnectionManager: mockWebRTCConnectionManager,
             webSocketConnectionManager: mockWebSocketConnectionManager
         )
-        conversation = Conversation(dependencyProvider: dependencyProvider)
+        conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: makeCallbacks())
         await capturedErrors.reset()
     }
 
@@ -42,16 +42,15 @@ final class ConversationTests: XCTestCase {
     func testStartConversationSuccessUpdatesStartupState() async throws {
         let stateExpectation = expectation(description: "startup becomes active")
 
-        let options = makeConfig(
-            onStartupStateChange: { state in
-                if case .active = state {
-                    stateExpectation.fulfill()
-                }
+        let options = makeConfig()
+        let callbacks = makeCallbacks(onStartupStateChange: { state in
+            if case .active = state {
+                stateExpectation.fulfill()
             }
-        )
+        })
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options, callbacks: callbacks)
 
         let startTask = Task {
-            guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: options
@@ -522,16 +521,16 @@ final class ConversationTests: XCTestCase {
         let receivedResponses = ValueRecorder<(String, Int)>()
         let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeConfig(configure: { options in
-            options.onAgentResponse = { text, eventId in
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onAgentResponse = { text, eventId in
                 Task { await receivedResponses.append((text, eventId)) }
             }
-            options.onCanSendFeedbackChange = { canSend in
+            callbacks.onCanSendFeedbackChange = { canSend in
                 Task { await feedbackStates.append(canSend) }
             }
         })
 
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
 
         // Set up mock connection manager with a room and active state so sendFeedback can publish
         mockWebRTCConnectionManager.room = Room()
@@ -563,13 +562,13 @@ final class ConversationTests: XCTestCase {
 
     func testVadScoreCallbackReceivesScores() async {
         let vadScores = ValueRecorder<Double>()
-        let options = makeConfig(configure: { options in
-            options.onVadScore = { score in
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onVadScore = { score in
                 Task { await vadScores.append(score) }
             }
         })
 
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
         await conversation._testing_handleIncomingEvent(IncomingEvent.vadScore(VadScoreEvent(vadScore: 0.87)))
 
         // Allow async callbacks to complete
@@ -581,13 +580,13 @@ final class ConversationTests: XCTestCase {
 
     func testAgentToolResponseCallbackReceivesEvent() async {
         let capturedToolNames = ValueRecorder<String>()
-        let options = makeConfig(configure: { options in
-            options.onAgentToolResponse = { (event: AgentToolResponseEvent) in
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onAgentToolResponse = { (event: AgentToolResponseEvent) in
                 Task { await capturedToolNames.append(event.toolName) }
             }
         })
 
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
         let toolEvent = AgentToolResponseEvent(toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 10)
 
         await conversation._testing_handleIncomingEvent(IncomingEvent.agentToolResponse(toolEvent))
@@ -603,16 +602,16 @@ final class ConversationTests: XCTestCase {
         let interruptionIds = ValueRecorder<Int>()
         let feedbackStates = ValueRecorder<Bool>()
 
-        let options = makeConfig(configure: { options in
-            options.onInterruption = { id in
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onInterruption = { id in
                 Task { await interruptionIds.append(id) }
             }
-            options.onCanSendFeedbackChange = { canSend in
+            callbacks.onCanSendFeedbackChange = { canSend in
                 Task { await feedbackStates.append(canSend) }
             }
         })
 
-        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options)
+        let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
         await conversation._testing_handleIncomingEvent(IncomingEvent.interruption(InterruptionEvent(eventId: 7)))
 
         // Allow async callbacks to complete
@@ -672,14 +671,15 @@ final class ConversationTests: XCTestCase {
 
     func testAgentDisconnectEndsConversation() async throws {
         let disconnectReasons = ValueRecorder<DisconnectionReason>()
-        let options = makeConfig(configure: { options in
-            options.onDisconnect = { reason in
+        let options = makeConfig()
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onDisconnect = { reason in
                 Task { await disconnectReasons.append(reason) }
             }
         })
+        let conversation = Conversation(dependencyProvider: dependencyProvider, options: options, callbacks: callbacks)
 
         let startTask = Task {
-            guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: options
@@ -768,20 +768,25 @@ actor ValueRecorder<Value> {
 extension ConversationTests {
     private func makeConfig(
         startupConfiguration: ConversationStartupConfiguration = .default,
-        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         configure: ((inout ConversationOptions) -> Void)? = nil
     ) -> ConversationOptions {
-        var options = ConversationOptions(
-            onStartupStateChange: onStartupStateChange,
-            startupConfiguration: startupConfiguration
-        )
+        var options = ConversationOptions(startupConfiguration: startupConfiguration)
+        configure?(&options)
+        return options
+    }
 
-        options.onError = { [capturedErrors] error in
+    private func makeCallbacks(
+        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        configure: ((inout ConversationCallbacks) -> Void)? = nil
+    ) -> ConversationCallbacks {
+        var callbacks = ConversationCallbacks(onStartupStateChange: onStartupStateChange)
+
+        callbacks.onError = { [capturedErrors] error in
             Task { await capturedErrors.append(error) }
         }
 
-        configure?(&options)
-        return options
+        configure?(&callbacks)
+        return callbacks
     }
 }
 

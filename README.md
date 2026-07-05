@@ -231,16 +231,16 @@ ElevenLabs.configure(
 
 ### Fine-Grained Callbacks
 
-Want to handle events without Combine? Use `ConversationConfig`:
+Want to handle events without Combine? Use `ConversationCallbacks`:
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onAgentResponse: { text, _ in print("Agent said: \(text)") },
     onUserTranscript: { text, _ in print("User said: \(text)") },
     onVadScore: { score in print("Voice intensity: \(score)") }
 )
 
-let conversation = try await ElevenLabs.startConversation(agentId: "id", config: config)
+let conversation = try await ElevenLabs.startConversation(agentId: "id", callbacks: callbacks)
 ```
 
 ---

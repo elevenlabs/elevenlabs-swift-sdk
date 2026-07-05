@@ -112,21 +112,15 @@ final class ConversationAudioManager {
 
     private func configureSpeechHandler(options: ConversationOptions) {
         let config = options.audioConfiguration
-        let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
 
-        if needsSpeechHandler {
+        if config?.onSpeechActivity != nil {
             if !audioSpeechHandlerInstalled {
                 previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
                 audioSpeechHandlerInstalled = true
             }
             audioManager.onMutedSpeechActivity = { _, event in
                 // Handlers are @Sendable, they manage their own synchronization
-                if let handler = config?.onSpeechActivity {
-                    handler(event)
-                }
-                if let handler = options.onSpeechActivity {
-                    handler(event)
-                }
+                config?.onSpeechActivity?(event)
             }
         } else if audioSpeechHandlerInstalled {
             cleanupSpeechHandler()

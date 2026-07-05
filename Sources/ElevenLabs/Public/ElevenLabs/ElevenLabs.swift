@@ -41,8 +41,7 @@ public enum ElevenLabs {
     /// - Parameters:
     ///   - agentId: The public ElevenLabs agent ID to connect to
     ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - onAgentReady: Optional callback triggered when the agent is ready and conversation can begin
-    ///   - onDisconnect: Optional callback triggered when the agent disconnects or conversation ends
+    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
     /// - Returns: An active `Conversation` instance ready for interaction
     /// - Throws: `ConversationError` if connection fails, agent not found, or configuration invalid
     ///
@@ -59,26 +58,24 @@ public enum ElevenLabs {
     /// // Conversation with event handlers
     /// let conversation = try await ElevenLabs.startConversation(
     ///     agentId: "agent_123",
-    ///     onAgentReady: {
-    ///         print("Agent is ready!")
-    ///     },
-    ///     onDisconnect: {
-    ///         print("Agent disconnected")
-    ///     }
+    ///     callbacks: .init(
+    ///         onAgentReady: {
+    ///             print("Agent is ready!")
+    ///         },
+    ///         onDisconnect: { reason in
+    ///             print("Agent disconnected: \(reason)")
+    ///         }
+    ///     )
     /// )
     /// ```
     @MainActor
     public static func startConversation(
         agentId: String,
         config: ConversationConfig = .init(),
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
+        callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        var updatedConfig = config
-        updatedConfig.onAgentReady = onAgentReady
-        updatedConfig.onDisconnect = onDisconnect
-        return try await startConversation(auth: authConfig, config: updatedConfig)
+        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
     }
 
     /// Start a conversation using a conversation token from your backend - for private agents.
@@ -91,8 +88,7 @@ public enum ElevenLabs {
     /// - Parameters:
     ///   - conversationToken: The conversation token from your backend
     ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - onAgentReady: Optional callback triggered when the agent is ready and conversation can begin
-    ///   - onDisconnect: Optional callback triggered when the agent disconnects or conversation ends
+    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
     /// - Returns: An active `Conversation` instance ready for interaction
     /// - Throws: `ConversationError` if connection fails or token is invalid
     ///
@@ -112,14 +108,10 @@ public enum ElevenLabs {
     public static func startConversation(
         conversationToken: String,
         config: ConversationConfig = .init(),
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
+        callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let authConfig = ConversationCredentials.conversationToken(conversationToken, environment: config.environment)
-        var updatedConfig = config
-        updatedConfig.onAgentReady = onAgentReady
-        updatedConfig.onDisconnect = onDisconnect
-        return try await startConversation(auth: authConfig, config: updatedConfig)
+        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
     }
 
     /// Start a conversation using a custom token provider - for advanced authentication scenarios.
@@ -129,8 +121,7 @@ public enum ElevenLabs {
     /// - Parameters:
     ///   - tokenProvider: An async closure that returns a conversation token
     ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - onAgentReady: Optional callback triggered when the agent is ready and conversation can begin
-    ///   - onDisconnect: Optional callback triggered when the agent disconnects or conversation ends
+    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
     /// - Returns: An active `Conversation` instance ready for interaction
     /// - Throws: `ConversationError` if connection fails or token provider throws
     ///
@@ -149,14 +140,10 @@ public enum ElevenLabs {
     public static func startConversation(
         tokenProvider: @escaping @Sendable () async throws -> String,
         config: ConversationConfig = .init(),
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
+        callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let authConfig = ConversationCredentials.customTokenProvider(tokenProvider, environment: config.environment)
-        var updatedConfig = config
-        updatedConfig.onAgentReady = onAgentReady
-        updatedConfig.onDisconnect = onDisconnect
-        return try await startConversation(auth: authConfig, config: updatedConfig)
+        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
     }
 
     /// Start a text-only conversation using a signed WebSocket URL from your backend.
@@ -167,17 +154,14 @@ public enum ElevenLabs {
     public static func startConversation(
         signedWebSocketURL: String,
         config: ConversationConfig = .init(conversationOverrides: .init(textOnly: true)),
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
+        callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let authConfig = try ConversationCredentials.signedWebSocketURL(signedWebSocketURL)
         var updatedConfig = config
         var overrides = updatedConfig.conversationOverrides ?? ConversationOverrides()
         overrides.textOnly = true
         updatedConfig.conversationOverrides = overrides
-        updatedConfig.onAgentReady = onAgentReady
-        updatedConfig.onDisconnect = onDisconnect
-        return try await startConversation(auth: authConfig, config: updatedConfig)
+        return try await startConversation(auth: authConfig, config: updatedConfig, callbacks: callbacks)
     }
 
     /// Advanced: Start a conversation with full authentication control.
@@ -192,10 +176,11 @@ public enum ElevenLabs {
     @MainActor
     public static func startConversation(
         auth: ConversationCredentials,
-        config: ConversationConfig = .init()
+        config: ConversationConfig = .init(),
+        callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let options = config.toConversationOptions()
-        let conversation = createConversation(options: options)
+        let conversation = createConversation(options: options, callbacks: callbacks)
         try await conversation.startConversation(
             auth: auth, options: options
         )
@@ -206,8 +191,11 @@ public enum ElevenLabs {
 
     /// Creates a new Conversation instance with proper dependency injection.
     @MainActor
-    private static func createConversation(options: ConversationOptions = .default) -> Conversation {
-        Conversation(dependencyProvider: Dependencies(), options: options)
+    private static func createConversation(
+        options: ConversationOptions = .default,
+        callbacks: ConversationCallbacks = .init()
+    ) -> Conversation {
+        Conversation(dependencyProvider: Dependencies(), options: options, callbacks: callbacks)
     }
 
     // MARK: - Re-exports

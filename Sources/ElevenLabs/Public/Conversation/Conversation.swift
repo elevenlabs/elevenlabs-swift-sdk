@@ -100,10 +100,12 @@ public final class Conversation: ObservableObject {
 
     init(
         dependencyProvider: any ConversationDependencyProvider,
-        options: ConversationOptions = .default
+        options: ConversationOptions = .default,
+        callbacks: ConversationCallbacks = .init()
     ) {
         self.dependencyProvider = dependencyProvider
         self.options = options
+        self.callbacks = callbacks
         logger = dependencyProvider.logger
         setupAudioManager()
     }
@@ -128,7 +130,7 @@ public final class Conversation: ObservableObject {
         let manager = AgentStateManager(configuration: configuration)
         manager.onStateChange = { [weak self] state in
             self?.agentState = state
-            self?.options.onAgentStateChange?(state)
+            self?.callbacks.onAgentStateChange?(state)
         }
         agentStateManager = manager
     }
@@ -168,7 +170,7 @@ public final class Conversation: ObservableObject {
         state = .active(.init(agentId: result.agentId))
         startupMetrics = result.metrics
         updateStartupState(.active(CallInfo(agentId: result.agentId), result.metrics))
-        options.onAgentReady?()
+        callbacks.onAgentReady?()
     }
 
     private func startVoiceConversation(
@@ -273,8 +275,8 @@ public final class Conversation: ObservableObject {
         tearDownActiveSession()
 
         // Call user's onDisconnect callback if provided
-        options.onDisconnect?(disconnectReason)
-        options.onCanSendFeedbackChange?(false)
+        callbacks.onDisconnect?(disconnectReason)
+        callbacks.onCanSendFeedbackChange?(false)
     }
 
     /// Send a text message to the agent.
@@ -351,7 +353,7 @@ public final class Conversation: ObservableObject {
         let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
         try await publish(event)
         lastFeedbackSubmittedEventId = eventId
-        options.onCanSendFeedbackChange?(false)
+        callbacks.onCanSendFeedbackChange?(false)
     }
 
     /// Approve or reject an MCP tool call request from the agent.
@@ -408,12 +410,13 @@ public final class Conversation: ObservableObject {
     }
 
     var options: ConversationOptions
+    let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
 
     private func updateStartupState(_ newState: ConversationStartupState) {
         startupState = newState
-        options.onStartupStateChange?(newState)
+        callbacks.onStartupStateChange?(newState)
     }
 
     /// Common preparation shared by voice and text-only startup paths.
@@ -439,7 +442,7 @@ public final class Conversation: ObservableObject {
         let mode = options.conversationOverrides.textOnly ? "text-only" : "voice"
         logger.info("Starting \(mode) conversation", context: activeContext)
 
-        options.onCanSendFeedbackChange?(false)
+        callbacks.onCanSendFeedbackChange?(false)
         setupAgentStateManager()
 
         connectionManager.onEventReceived = { [weak self, weak connectionManager] event in
@@ -472,13 +475,13 @@ public final class Conversation: ObservableObject {
         startupMetrics = failure.metrics
         state = .idle
         updateStartupState(.failed(failure.reason, failure.metrics))
-        options.onError?(failure.error)
+        callbacks.onError?(failure.error)
 
         if suggestLocalNetworkPermission,
            case .room = failure.reason,
            LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission()
         {
-            options.onError?(ConversationError.localNetworkPermissionRequired)
+            callbacks.onError?(ConversationError.localNetworkPermissionRequired)
         }
     }
 
@@ -517,7 +520,7 @@ public final class Conversation: ObservableObject {
 
         lastAgentEventId = nil
         lastFeedbackSubmittedEventId = nil
-        options.onCanSendFeedbackChange?(false)
+        callbacks.onCanSendFeedbackChange?(false)
         latestAudioEvent = nil
         latestAudioAlignment = nil
     }

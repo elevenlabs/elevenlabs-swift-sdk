@@ -132,7 +132,7 @@ class AudioControlViewModel: ObservableObject {
     func startConversation(agentId: String) async throws {
         conversation = try await ElevenLabs.startConversation(
             agentId: agentId,
-            config: .init(
+            callbacks: .init(
                 onAgentReady: { [weak self] in
                     Task { @MainActor in
                         self?.isAgentReady = true
@@ -468,10 +468,10 @@ struct MCPApprovalView: View {
 
 ## Event Callbacks
 
-For non-reactive integrations, use fine-grained callbacks in `ConversationConfig`.
+For non-reactive integrations, use fine-grained callbacks via `ConversationCallbacks`.
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onAgentResponse: { text, eventId in 
         print("Agent finalized response: \(text)")
     },
@@ -547,7 +547,7 @@ Handle feedback (like/dislike) and contextual updates to the agent.
 // 1) Setup: react to feedback availability
 var canSendFeedback = false
 
-let cfg = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onAgentResponse: { text, eventId in
         print("Agent:", text, "(event:", eventId, ")")
     },
@@ -557,7 +557,7 @@ let cfg = ConversationConfig(
     }
 )
 
-let conversation = try await ElevenLabs.startConversation(agentId: "agent_123", config: cfg)
+let conversation = try await ElevenLabs.startConversation(agentId: "agent_123", callbacks: callbacks)
 
 // 2) Sending feedback from your UI
 func thumbsUp(latestEventId: Int) {
@@ -672,7 +672,7 @@ struct ConversationView: View {
 Monitor the user's voice intensity for custom animations or meters.
 
 ```swift
-let config = ConversationConfig(
+let callbacks = ConversationCallbacks(
     onVadScore: { score in
         // score is a float from 0.0 to 1.0
         // 0.0 = Silence, 1.0 = Loud Speech
