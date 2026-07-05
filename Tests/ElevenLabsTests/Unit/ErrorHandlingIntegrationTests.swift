@@ -35,7 +35,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Error callback should be called")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions()
+        let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 Startup state: \(state)")
@@ -50,7 +50,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -59,7 +59,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "invalid_agent_id_12345"),
-                options: options
+                config: config
             )
             XCTFail("Should have thrown an error")
         } catch {
@@ -96,7 +96,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         // Use automatic network strategy for faster test connections (allows all connection types)
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
             startupConfiguration: startupConfig,
             networkConfiguration: networkConfig
         )
@@ -117,7 +117,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -125,7 +125,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
-                options: options
+                config: config
             )
 
             await fulfillment(of: [readyExpectation], timeout: 15.0)
@@ -175,7 +175,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         // Use automatic network strategy for faster test connections
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
             startupConfiguration: startupConfig,
             networkConfiguration: networkConfig
         )
@@ -191,14 +191,14 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
 
         try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: testAgentId),
-            options: options
+            config: config
         )
 
         await fulfillment(of: [readyExpectation], timeout: 15.0)
@@ -235,7 +235,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         for attempt in 1 ... 3 {
             print("\n--- Attempt \(attempt) ---")
 
-            let options = ConversationOptions(
+            let config = ConversationConfig(
                 startupConfiguration: startupConfig,
                 networkConfiguration: networkConfig
             )
@@ -250,14 +250,14 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
             let conversation = Conversation(
                 dependencyProvider: Dependencies(),
-                options: options,
+                config: config,
                 callbacks: callbacks
             )
 
             do {
                 try await conversation.startConversation(
                     auth: ConversationCredentials.publicAgent(id: testAgentId),
-                    options: options
+                    config: config
                 )
 
                 print("  ✅ Connection \(attempt) successful")
@@ -282,7 +282,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Should receive error state")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions()
+        let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 State transition: \(state)")
@@ -299,7 +299,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -308,7 +308,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "invalid_agent"),
-                options: options
+                config: config
             )
         } catch {
             // Expected
@@ -340,7 +340,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Should receive error")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions()
+        let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
             onError: { error in
                 print("❌ Token provider error: \(error)")
@@ -351,7 +351,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -364,7 +364,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                         NSLocalizedDescriptionKey: "Custom token provider failed"
                     ])
                 },
-                options: options
+                config: config
             )
             XCTFail("Should have thrown error")
         } catch {
@@ -384,7 +384,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         print("ℹ️ This test verifies error callbacks work for network issues")
 
         let collector = ErrorCollector()
-        let options = ConversationOptions()
+        let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 State: \(state)")
@@ -397,7 +397,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -406,7 +406,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         do {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
-                options: options
+                config: config
             )
             print("✅ Connection succeeded (network available)")
             await conversation.endConversation()
@@ -445,7 +445,7 @@ extension ErrorHandlingIntegrationTests {
         // Use automatic network strategy for faster test connections
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
             startupConfiguration: startupConfig,
             networkConfiguration: networkConfig
         )
@@ -479,7 +479,7 @@ extension ErrorHandlingIntegrationTests {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options,
+            config: config,
             callbacks: callbacks
         )
         self.conversation = conversation
@@ -489,7 +489,7 @@ extension ErrorHandlingIntegrationTests {
         do {
             try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
-                options: options
+                config: config
             )
 
             print("\n✅ CONNECTION SUCCESSFUL")

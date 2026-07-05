@@ -15,7 +15,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     private(set) var sentPayloads: [Data] = []
     private(set) var isConnected = false
 
-    func connect(auth: ConversationCredentials, options: ConversationOptions) async throws -> StartupResult {
+    func connect(auth: ConversationCredentials, config: ConversationConfig) async throws -> StartupResult {
         connectCallCount += 1
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
@@ -38,7 +38,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         isConnected = true
 
         do {
-            let initEvent = ConversationInitEvent(config: options.toConversationConfig())
+            let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
         } catch is CancellationError {
             throw CancellationError()

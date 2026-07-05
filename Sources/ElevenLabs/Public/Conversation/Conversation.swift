@@ -100,18 +100,18 @@ public final class Conversation: ObservableObject {
 
     init(
         dependencyProvider: any ConversationDependencyProvider,
-        options: ConversationOptions = .default,
+        config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init()
     ) {
         self.dependencyProvider = dependencyProvider
-        self.options = options
+        self.config = config
         self.callbacks = callbacks
         logger = dependencyProvider.logger
         setupAudioManager()
     }
 
     private func setupAudioManager() {
-        guard !options.conversationOverrides.textOnly else { return }
+        guard !config.conversationOverrides.textOnly else { return }
         let manager = ConversationAudioManager(logger: logger)
         manager.onDevicesChanged = { [weak self] devices in
             self?.audioDevices = devices
@@ -126,7 +126,7 @@ public final class Conversation: ObservableObject {
     }
 
     private func setupAgentStateManager() {
-        guard let configuration = options.agentStateConfiguration else { return }
+        guard let configuration = config.agentStateConfiguration else { return }
         let manager = AgentStateManager(configuration: configuration)
         manager.onStateChange = { [weak self] state in
             self?.agentState = state
@@ -143,10 +143,10 @@ public final class Conversation: ObservableObject {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         with agentId: String,
-        options: ConversationOptions = .default
+        config: ConversationConfig = .init()
     ) async throws {
-        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: options.environment)
-        try await startConversation(auth: authConfig, options: options)
+        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
+        try await startConversation(auth: authConfig, config: config)
     }
 
     /// Start a conversation using authentication configuration.
@@ -155,16 +155,16 @@ public final class Conversation: ObservableObject {
     /// and preventing any interference from previous conversations.
     public func startConversation(
         auth: ConversationCredentials,
-        options: ConversationOptions = .default
+        config: ConversationConfig = .init()
     ) async throws {
         guard state == .idle || state.isEnded else {
             throw ConversationError.alreadyActive
         }
 
-        let result: StartupResult = if options.conversationOverrides.textOnly {
-            try await startTextOnlyConversation(auth: auth, options: options, provider: dependencyProvider)
+        let result: StartupResult = if config.conversationOverrides.textOnly {
+            try await startTextOnlyConversation(auth: auth, config: config, provider: dependencyProvider)
         } else {
-            try await startVoiceConversation(auth: auth, options: options, provider: dependencyProvider)
+            try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
         }
 
         state = .active(.init(agentId: result.agentId))
@@ -175,12 +175,12 @@ public final class Conversation: ObservableObject {
 
     private func startVoiceConversation(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         provider: any ConversationDependencyProvider
     ) async throws -> StartupResult {
         let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
-            auth: auth, options: options,
+            auth: auth, config: config,
             connectionManager: webRTCConnectionManager
         )
 
@@ -193,13 +193,13 @@ public final class Conversation: ObservableObject {
         if audioManager == nil {
             setupAudioManager()
         }
-        await audioManager?.configure(with: options)
+        await audioManager?.configure(with: config)
 
         let result: StartupResult
         do {
             result = try await webRTCConnectionManager.connect(
                 auth: auth,
-                options: options,
+                config: config,
                 onStartupStateChange: { [weak self] newState in
                     self?.updateStartupState(newState)
                 }
@@ -228,19 +228,19 @@ public final class Conversation: ObservableObject {
 
     private func startTextOnlyConversation(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         provider: ConversationDependencyProvider
     ) async throws -> StartupResult {
         let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
-            auth: auth, options: options,
+            auth: auth, config: config,
             connectionManager: connectionManager
         )
 
         updateStartupState(.connectingRoom)
 
         do {
-            return try await connectionManager.connect(auth: auth, options: options)
+            return try await connectionManager.connect(auth: auth, config: config)
         } catch let failure as StartupFailure {
             await handleStartupFailure(failure, disconnecting: connectionManager, suggestLocalNetworkPermission: false)
             throw failure.error
@@ -409,7 +409,7 @@ public final class Conversation: ObservableObject {
         activeConnectionManager as? any WebRTCConnectionManaging
     }
 
-    var options: ConversationOptions
+    var config: ConversationConfig
     let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
@@ -422,7 +422,7 @@ public final class Conversation: ObservableObject {
     /// Common preparation shared by voice and text-only startup paths.
     private func prepareConversationStart(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         connectionManager: any ConnectionManaging
     ) async {
         let previousConnectionManager = activeConnectionManager
@@ -436,10 +436,10 @@ public final class Conversation: ObservableObject {
         // Reset the target manager too; dependency providers may reuse manager instances across starts.
         await connectionManager.disconnect()
         cleanupPreviousConversation()
-        self.options = options
+        self.config = config
 
         activeContext = ["agentId": auth.agentId]
-        let mode = options.conversationOverrides.textOnly ? "text-only" : "voice"
+        let mode = config.conversationOverrides.textOnly ? "text-only" : "voice"
         logger.info("Starting \(mode) conversation", context: activeContext)
 
         callbacks.onCanSendFeedbackChange?(false)

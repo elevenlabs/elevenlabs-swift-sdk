@@ -158,9 +158,7 @@ public enum ElevenLabs {
     ) async throws -> Conversation {
         let authConfig = try ConversationCredentials.signedWebSocketURL(signedWebSocketURL)
         var updatedConfig = config
-        var overrides = updatedConfig.conversationOverrides ?? ConversationOverrides()
-        overrides.textOnly = true
-        updatedConfig.conversationOverrides = overrides
+        updatedConfig.conversationOverrides.textOnly = true
         return try await startConversation(auth: authConfig, config: updatedConfig, callbacks: callbacks)
     }
 
@@ -179,10 +177,9 @@ public enum ElevenLabs {
         config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
-        let options = config.toConversationOptions()
-        let conversation = createConversation(options: options, callbacks: callbacks)
+        let conversation = createConversation(config: config, callbacks: callbacks)
         try await conversation.startConversation(
-            auth: auth, options: options
+            auth: auth, config: config
         )
         return conversation
     }
@@ -192,10 +189,10 @@ public enum ElevenLabs {
     /// Creates a new Conversation instance with proper dependency injection.
     @MainActor
     private static func createConversation(
-        options: ConversationOptions = .default,
+        config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init()
     ) -> Conversation {
-        Conversation(dependencyProvider: Dependencies(), options: options, callbacks: callbacks)
+        Conversation(dependencyProvider: Dependencies(), config: config, callbacks: callbacks)
     }
 
     // MARK: - Re-exports

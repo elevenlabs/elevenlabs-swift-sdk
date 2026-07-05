@@ -15,7 +15,7 @@ protocol ConnectionManaging: AnyObject {
 }
 
 protocol WebSocketConnectionManaging: ConnectionManaging {
-    func connect(auth: ConversationCredentials, options: ConversationOptions) async throws -> StartupResult
+    func connect(auth: ConversationCredentials, config: ConversationConfig) async throws -> StartupResult
 }
 
 protocol WebRTCConnectionManaging: ConnectionManaging {
@@ -27,7 +27,7 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     @MainActor
     func connect(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult
 

@@ -41,11 +41,11 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     @MainActor
     func connect(
         auth: ConversationCredentials,
-        options: ConversationOptions,
+        config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {
         connectCallCount += 1
-        lastNetworkConfiguration = options.networkConfiguration
+        lastNetworkConfiguration = config.networkConfiguration
         var metrics = ConversationStartupMetrics()
 
         onStartupStateChange(.resolvingToken)
@@ -60,8 +60,8 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         }
         room = Room()
 
-        onStartupStateChange(.waitingForAgent(timeout: options.startupConfiguration.agentReadyTimeout))
-        switch await waitForAgentReady(timeout: options.startupConfiguration.agentReadyTimeout) {
+        onStartupStateChange(.waitingForAgent(timeout: config.startupConfiguration.agentReadyTimeout))
+        switch await waitForAgentReady(timeout: config.startupConfiguration.agentReadyTimeout) {
         case let .success(elapsed):
             metrics.agentReady = elapsed
             onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
@@ -72,7 +72,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
         onStartupStateChange(.sendingConversationInit(attempt: 1))
         do {
-            try await send(event: .conversationInit(ConversationInitEvent(config: options.toConversationConfig())))
+            try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         } catch {
             throw StartupFailure.conversationInit(error as? ConversationError ?? .connectionFailed(error), metrics)
         }

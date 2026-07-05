@@ -40,11 +40,11 @@ final class ConversationAudioManager {
 
     // MARK: - Configuration
 
-    /// Apply audio pipeline configuration from conversation options.
-    func configure(with options: ConversationOptions) async {
-        let config = options.audioConfiguration
+    /// Apply audio pipeline configuration from conversation config.
+    func configure(with config: ConversationConfig) async {
+        let audioConfig = config.audioConfiguration
 
-        if let mode = config?.microphoneMuteMode {
+        if let mode = audioConfig?.microphoneMuteMode {
             do {
                 try audioManager.set(microphoneMuteMode: mode)
             } catch {
@@ -52,15 +52,15 @@ final class ConversationAudioManager {
             }
         }
 
-        if let bypass = config?.voiceProcessingBypassed {
+        if let bypass = audioConfig?.voiceProcessingBypassed {
             audioManager.isVoiceProcessingBypassed = bypass
         }
 
-        if let agc = config?.voiceProcessingAGCEnabled {
+        if let agc = audioConfig?.voiceProcessingAGCEnabled {
             audioManager.isVoiceProcessingAGCEnabled = agc
         }
 
-        if let prepared = config?.recordingAlwaysPrepared {
+        if let prepared = audioConfig?.recordingAlwaysPrepared {
             do {
                 try await audioManager.setRecordingAlwaysPreparedMode(prepared)
             } catch {
@@ -68,8 +68,8 @@ final class ConversationAudioManager {
             }
         }
 
-        configureSpeechHandler(options: options)
-        configureSoftwareMuteProcessor(options: options)
+        configureSpeechHandler(config: config)
+        configureSoftwareMuteProcessor(config: config)
     }
 
     /// Cleanup audio state when conversation ends.
@@ -110,29 +110,29 @@ final class ConversationAudioManager {
         }
     }
 
-    private func configureSpeechHandler(options: ConversationOptions) {
-        let config = options.audioConfiguration
+    private func configureSpeechHandler(config: ConversationConfig) {
+        let audioConfig = config.audioConfiguration
 
-        if config?.onSpeechActivity != nil {
+        if audioConfig?.onSpeechActivity != nil {
             if !audioSpeechHandlerInstalled {
                 previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
                 audioSpeechHandlerInstalled = true
             }
             audioManager.onMutedSpeechActivity = { _, event in
                 // Handlers are @Sendable, they manage their own synchronization
-                config?.onSpeechActivity?(event)
+                audioConfig?.onSpeechActivity?(event)
             }
         } else if audioSpeechHandlerInstalled {
             cleanupSpeechHandler()
         }
     }
 
-    private func configureSoftwareMuteProcessor(options: ConversationOptions) {
-        guard options.audioConfiguration?.useSoftwareMute == true else {
+    private func configureSoftwareMuteProcessor(config: ConversationConfig) {
+        guard config.audioConfiguration?.useSoftwareMute == true else {
             return
         }
 
-        let audioConfig = options.audioConfiguration
+        let audioConfig = config.audioConfiguration
         softwareMuteProcessor = SoftwareMuteProcessor(
             onMutedSpeech: audioConfig?.onMutedSpeech,
             mutedSpeechThresholdInDb: audioConfig?.mutedSpeechThreshold ?? -35,
