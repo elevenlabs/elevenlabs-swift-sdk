@@ -56,7 +56,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         // Use an invalid agent ID to trigger an error
         do {
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent_id_12345"),
+                auth: ConversationCredentials.publicAgent(id: "invalid_agent_id_12345"),
                 options: options
             )
             XCTFail("Should have thrown an error")
@@ -119,7 +119,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         do {
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
+                auth: ConversationCredentials.publicAgent(id: testAgentId),
                 options: options
             )
 
@@ -189,7 +189,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         self.conversation = conversation
 
         try await conversation.startConversation(
-            auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
+            auth: ConversationCredentials.publicAgent(id: testAgentId),
             options: options
         )
 
@@ -245,7 +245,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
             do {
                 try await conversation.startConversation(
-                    auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
+                    auth: ConversationCredentials.publicAgent(id: testAgentId),
                     options: options
                 )
 
@@ -294,7 +294,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         // Use invalid agent to trigger failure
         do {
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent"),
+                auth: ConversationCredentials.publicAgent(id: "invalid_agent"),
                 options: options
             )
         } catch {
@@ -388,7 +388,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         // Attempt connection - may succeed or fail depending on network
         do {
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
+                auth: ConversationCredentials.publicAgent(id: testAgentId),
                 options: options
             )
             print("✅ Connection succeeded (network available)")
@@ -468,7 +468,7 @@ extension ErrorHandlingIntegrationTests {
 
         do {
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
+                auth: ConversationCredentials.publicAgent(id: testAgentId),
                 options: options
             )
 

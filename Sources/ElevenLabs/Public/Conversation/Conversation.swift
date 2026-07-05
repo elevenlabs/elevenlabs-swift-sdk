@@ -143,7 +143,7 @@ public final class Conversation: ObservableObject {
         with agentId: String,
         options: ConversationOptions = .default
     ) async throws {
-        let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId, environment: options.environment)
+        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: options.environment)
         try await startConversation(auth: authConfig, options: options)
     }
 
@@ -152,7 +152,7 @@ public final class Conversation: ObservableObject {
     /// Each call to this method creates a fresh Room object, ensuring clean state
     /// and preventing any interference from previous conversations.
     public func startConversation(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions = .default
     ) async throws {
         guard state == .idle || state.isEnded else {
@@ -172,7 +172,7 @@ public final class Conversation: ObservableObject {
     }
 
     private func startVoiceConversation(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         provider: any ConversationDependencyProvider
     ) async throws -> StartupResult {
@@ -225,7 +225,7 @@ public final class Conversation: ObservableObject {
     }
 
     private func startTextOnlyConversation(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         provider: ConversationDependencyProvider
     ) async throws -> StartupResult {
@@ -418,7 +418,7 @@ public final class Conversation: ObservableObject {
 
     /// Common preparation shared by voice and text-only startup paths.
     private func prepareConversationStart(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         connectionManager: any ConnectionManaging
     ) async {

@@ -15,7 +15,7 @@ protocol ConnectionManaging: AnyObject {
 }
 
 protocol WebSocketConnectionManaging: ConnectionManaging {
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult
+    func connect(auth: ConversationCredentials, options: ConversationOptions) async throws -> StartupResult
 }
 
 protocol WebRTCConnectionManaging: ConnectionManaging {
@@ -26,7 +26,7 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
 
     @MainActor
     func connect(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult

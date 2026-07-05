@@ -40,7 +40,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     /// agent-ready continuation (`succeedAgentReady`/`timeoutAgentReady`).
     @MainActor
     func connect(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {

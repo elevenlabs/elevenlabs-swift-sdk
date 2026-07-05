@@ -70,7 +70,7 @@ public struct TokenService: Sendable {
     ///
     /// Translates internal `TokenError`s into public `ConversationError`s so
     /// callers only ever deal with one error type.
-    public func fetchConnectionDetails(configuration: ElevenLabsConfiguration) async throws -> ConnectionDetails {
+    public func fetchConnectionDetails(configuration: ConversationCredentials) async throws -> ConnectionDetails {
         do {
             let token: String = switch configuration.authSource {
             case let .publicAgentId(agentId):

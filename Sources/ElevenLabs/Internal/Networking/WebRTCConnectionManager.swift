@@ -75,7 +75,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// connect room → wait for agent → send conversation_init (sent once).
     @MainActor
     func connect(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         options: ConversationOptions,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult {

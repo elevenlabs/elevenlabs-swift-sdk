@@ -59,7 +59,7 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
 
     func testConversationTokenAuthConfiguration() {
-        let auth = ElevenLabsConfiguration.conversationToken("test-token-123")
+        let auth = ConversationCredentials.conversationToken("test-token-123")
         switch auth.authSource {
         case let .conversationToken(token):
             XCTAssertEqual(token, "test-token-123")
@@ -70,7 +70,7 @@ final class ElevenLabsSDKTests: XCTestCase {
 
     func testSignedWebSocketURLAuthConfiguration() throws {
         let url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&conversation_signature=sig"
-        let auth = try ElevenLabsConfiguration.signedWebSocketURL(url)
+        let auth = try ConversationCredentials.signedWebSocketURL(url)
 
         switch auth.authSource {
         case let .signedWebSocketURL(signedURL, agentId):
@@ -86,7 +86,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         let tokenProvider: @Sendable () async throws -> String = {
             "dynamic-token-123"
         }
-        let auth = ElevenLabsConfiguration.customTokenProvider(tokenProvider)
+        let auth = ConversationCredentials.customTokenProvider(tokenProvider)
         switch auth.authSource {
         case .customTokenProvider:
             break // Success - provider is configured
@@ -116,9 +116,9 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
 
     func testAuthenticationMethods() {
-        let agentAuth = ElevenLabsConfiguration.publicAgent(id: "agent-123")
-        let tokenAuth = ElevenLabsConfiguration.conversationToken("token-456")
-        let providerAuth = ElevenLabsConfiguration.customTokenProvider {
+        let agentAuth = ConversationCredentials.publicAgent(id: "agent-123")
+        let tokenAuth = ConversationCredentials.conversationToken("token-456")
+        let providerAuth = ConversationCredentials.customTokenProvider {
             "provided-token"
         }
 

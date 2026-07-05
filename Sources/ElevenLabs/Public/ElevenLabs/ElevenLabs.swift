@@ -74,7 +74,7 @@ public enum ElevenLabs {
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
-        let authConfig = ElevenLabsConfiguration.publicAgent(id: agentId, environment: config.environment)
+        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
         var updatedConfig = config
         updatedConfig.onAgentReady = onAgentReady
         updatedConfig.onDisconnect = onDisconnect
@@ -115,7 +115,7 @@ public enum ElevenLabs {
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
-        let authConfig = ElevenLabsConfiguration.conversationToken(conversationToken, environment: config.environment)
+        let authConfig = ConversationCredentials.conversationToken(conversationToken, environment: config.environment)
         var updatedConfig = config
         updatedConfig.onAgentReady = onAgentReady
         updatedConfig.onDisconnect = onDisconnect
@@ -152,7 +152,7 @@ public enum ElevenLabs {
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
-        let authConfig = ElevenLabsConfiguration.customTokenProvider(tokenProvider, environment: config.environment)
+        let authConfig = ConversationCredentials.customTokenProvider(tokenProvider, environment: config.environment)
         var updatedConfig = config
         updatedConfig.onAgentReady = onAgentReady
         updatedConfig.onDisconnect = onDisconnect
@@ -170,7 +170,7 @@ public enum ElevenLabs {
         onAgentReady: (@Sendable () -> Void)? = nil,
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil
     ) async throws -> Conversation {
-        let authConfig = try ElevenLabsConfiguration.signedWebSocketURL(signedWebSocketURL)
+        let authConfig = try ConversationCredentials.signedWebSocketURL(signedWebSocketURL)
         var updatedConfig = config
         var overrides = updatedConfig.conversationOverrides ?? ConversationOverrides()
         overrides.textOnly = true
@@ -191,7 +191,7 @@ public enum ElevenLabs {
     /// - Returns: An active `Conversation` instance ready for interaction
     @MainActor
     public static func startConversation(
-        auth: ElevenLabsConfiguration,
+        auth: ConversationCredentials,
         config: ConversationConfig = .init()
     ) async throws -> Conversation {
         let options = config.toConversationOptions()
