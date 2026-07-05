@@ -35,7 +35,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Error callback should be called")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions(
+        let options = ConversationOptions()
+        let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 Startup state: \(state)")
                 Task { await collector.addState(state) }
@@ -49,7 +50,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -95,6 +97,10 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
         let options = ConversationOptions(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 print("✅ Agent ready!")
                 readyExpectation.fulfill()
@@ -103,8 +109,6 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("📊 Startup state: \(state)")
                 Task { await collector.addState(state) }
             },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 print("❌ Unexpected error in success test: \(error)")
                 Task { await collector.addError(error) }
@@ -113,7 +117,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -171,11 +176,13 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
         let options = ConversationOptions(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 readyExpectation.fulfill()
             },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 print("❌ Error reported: \(error)")
                 Task { await collector.addError(error) }
@@ -184,7 +191,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -228,11 +236,13 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             print("\n--- Attempt \(attempt) ---")
 
             let options = ConversationOptions(
+                startupConfiguration: startupConfig,
+                networkConfiguration: networkConfig
+            )
+            let callbacks = ConversationCallbacks(
                 onStartupStateChange: { state in
                     print("  📊 State: \(state)")
                 },
-                startupConfiguration: startupConfig,
-                networkConfiguration: networkConfig,
                 onError: { error in
                     print("  ❌ Error: \(error)")
                 }
@@ -240,7 +250,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
             let conversation = Conversation(
                 dependencyProvider: Dependencies(),
-                options: options
+                options: options,
+                callbacks: callbacks
             )
 
             do {
@@ -271,7 +282,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Should receive error state")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions(
+        let options = ConversationOptions()
+        let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 State transition: \(state)")
                 Task { await collector.addState(state) }
@@ -287,7 +299,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -327,7 +340,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Should receive error")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions(
+        let options = ConversationOptions()
+        let callbacks = ConversationCallbacks(
             onError: { error in
                 print("❌ Token provider error: \(error)")
                 Task { await collector.addError(error) }
@@ -337,7 +351,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -369,7 +384,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         print("ℹ️ This test verifies error callbacks work for network issues")
 
         let collector = ErrorCollector()
-        let options = ConversationOptions(
+        let options = ConversationOptions()
+        let callbacks = ConversationCallbacks(
             onStartupStateChange: { state in
                 print("📊 State: \(state)")
             },
@@ -381,7 +397,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
@@ -429,6 +446,10 @@ extension ErrorHandlingIntegrationTests {
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
 
         let options = ConversationOptions(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 let timestamp = Self.formatTimestamp()
                 print("✅ [\(timestamp)] AGENT READY")
@@ -444,8 +465,6 @@ extension ErrorHandlingIntegrationTests {
                     await errorCollector.addState(state)
                 }
             },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 let timestamp = Self.formatTimestamp()
                 print("\n❌ [\(timestamp)] ERROR CALLBACK INVOKED:")
@@ -460,7 +479,8 @@ extension ErrorHandlingIntegrationTests {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            options: options,
+            callbacks: callbacks
         )
         self.conversation = conversation
 

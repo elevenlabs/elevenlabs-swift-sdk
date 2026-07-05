@@ -19,15 +19,6 @@ public struct ConversationConfig: Sendable {
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
 
-    /// Called when the agent is ready and the conversation can begin
-    public var onAgentReady: (@Sendable () -> Void)?
-
-    /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable (DisconnectionReason) -> Void)?
-
-    /// Called whenever the startup state transitions
-    public var onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)?
-
     /// Controls timings and retry behavior for the initialization handshake
     public var startupConfiguration: ConversationStartupConfiguration
 
@@ -37,54 +28,9 @@ public struct ConversationConfig: Sendable {
     /// Controls LiveKit peer connection behaviour, including ICE policies.
     public var networkConfiguration: LiveKitNetworkConfiguration
 
-    /// Called when a startup-related error occurs
-    public var onError: (@Sendable (ConversationError) -> Void)?
-
-    /// Called when LiveKit detects speech activity while muted.
-    public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
-
-    /// Called for each agent response with the associated event identifier.
-    public var onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
-
-    /// Called when an agent response correction is received.
-    public var onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)?
-
-    /// Called when agent response metadata is received.
-    public var onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)?
-
-    /// Called for each user transcript event.
-    public var onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
-
-    /// Called when conversation metadata arrives.
-    public var onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)?
-
-    /// Called when the agent emits a tool response event.
-    public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
-
-    /// Called when the agent requests a tool execution.
-    public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
-
-    /// Called when the agent detects an interruption.
-    public var onInterruption: (@Sendable (_ eventId: Int) -> Void)?
-
-    /// Called whenever a VAD score is emitted.
-    public var onVadScore: (@Sendable (_ score: Double) -> Void)?
-
-    /// Called when audio alignment metadata is emitted.
-    public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
-
-    /// Called when feedback availability changes.
-    public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
-
-    /// Called when a client tool call is received without a registered handler.
-    public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
-
     /// When provided, agent state is computed from VAD scores and protocol events
     /// instead of relying on LiveKit's isSpeaking detection.
     public var agentStateConfiguration: AgentStateConfiguration?
-
-    /// Called whenever the agent state changes (event-based mode only).
-    public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
 
     public init(
         agentOverrides: AgentOverrides? = nil,
@@ -94,28 +40,10 @@ public struct ConversationConfig: Sendable {
         dynamicVariables: [String: String]? = nil,
         userId: String? = nil,
         environment: String? = nil,
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
-        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
         networkConfiguration: LiveKitNetworkConfiguration = .default,
-        onError: (@Sendable (ConversationError) -> Void)? = nil,
-        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
-        onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
-        onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
-        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
-        onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
-        onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
-        onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
-        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
-        onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
-        onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
-        onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
-        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
-        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
-        agentStateConfiguration: AgentStateConfiguration? = nil,
-        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
+        agentStateConfiguration: AgentStateConfiguration? = nil
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -124,28 +52,10 @@ public struct ConversationConfig: Sendable {
         self.dynamicVariables = dynamicVariables
         self.userId = userId
         self.environment = environment
-        self.onAgentReady = onAgentReady
-        self.onDisconnect = onDisconnect
-        self.onStartupStateChange = onStartupStateChange
         self.startupConfiguration = startupConfiguration
         self.audioConfiguration = audioConfiguration
         self.networkConfiguration = networkConfiguration
-        self.onError = onError
-        self.onSpeechActivity = onSpeechActivity
-        self.onAgentResponse = onAgentResponse
-        self.onAgentResponseCorrection = onAgentResponseCorrection
-        self.onAgentResponseMetadata = onAgentResponseMetadata
-        self.onUserTranscript = onUserTranscript
-        self.onConversationMetadata = onConversationMetadata
-        self.onAgentToolResponse = onAgentToolResponse
-        self.onAgentToolRequest = onAgentToolRequest
-        self.onInterruption = onInterruption
-        self.onVadScore = onVadScore
-        self.onAudioAlignment = onAudioAlignment
-        self.onCanSendFeedbackChange = onCanSendFeedbackChange
-        self.onUnhandledClientToolCall = onUnhandledClientToolCall
         self.agentStateConfiguration = agentStateConfiguration
-        self.onAgentStateChange = onAgentStateChange
     }
 }
 
@@ -213,28 +123,10 @@ extension ConversationConfig {
             dynamicVariables: dynamicVariables,
             userId: userId,
             environment: environment,
-            onAgentReady: onAgentReady,
-            onDisconnect: onDisconnect,
-            onStartupStateChange: onStartupStateChange,
             startupConfiguration: startupConfiguration,
             audioConfiguration: audioConfiguration,
             networkConfiguration: networkConfiguration,
-            onError: onError,
-            onSpeechActivity: onSpeechActivity,
-            onAgentResponse: onAgentResponse,
-            onAgentResponseCorrection: onAgentResponseCorrection,
-            onAgentResponseMetadata: onAgentResponseMetadata,
-            onUserTranscript: onUserTranscript,
-            onConversationMetadata: onConversationMetadata,
-            onAgentToolResponse: onAgentToolResponse,
-            onAgentToolRequest: onAgentToolRequest,
-            onInterruption: onInterruption,
-            onVadScore: onVadScore,
-            onAudioAlignment: onAudioAlignment,
-            onCanSendFeedbackChange: onCanSendFeedbackChange,
-            onUnhandledClientToolCall: onUnhandledClientToolCall,
-            agentStateConfiguration: agentStateConfiguration,
-            onAgentStateChange: onAgentStateChange
+            agentStateConfiguration: agentStateConfiguration
         )
     }
 }

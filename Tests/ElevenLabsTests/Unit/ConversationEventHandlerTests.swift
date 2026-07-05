@@ -29,7 +29,7 @@ final class ConversationEventHandlerTests: XCTestCase {
 
         conversation = Conversation(
             dependencyProvider: mockDependencyProvider,
-            options: ConversationOptions(
+            callbacks: ConversationCallbacks(
                 onUserTranscript: { transcript, eventId in
                     Task { await receivedTranscripts.append((transcript, eventId)) }
                     expectation.fulfill()
@@ -59,7 +59,7 @@ final class ConversationEventHandlerTests: XCTestCase {
 
         conversation = Conversation(
             dependencyProvider: mockDependencyProvider,
-            options: ConversationOptions(
+            callbacks: ConversationCallbacks(
                 onAgentResponse: { response, eventId in
                     XCTAssertEqual(response, "I am an AI")
                     XCTAssertEqual(eventId, 456)
@@ -199,7 +199,7 @@ final class ConversationEventHandlerTests: XCTestCase {
 
         conversation = Conversation(
             dependencyProvider: mockDependencyProvider,
-            options: ConversationOptions(
+            callbacks: ConversationCallbacks(
                 onInterruption: { eventId in
                     XCTAssertEqual(eventId, 789)
                     expectation.fulfill()
