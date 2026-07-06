@@ -351,6 +351,22 @@ final class EventParserTests: XCTestCase {
         XCTAssertEqual(metadata.eventId, 456)
         XCTAssertFalse(metadata.metadataData.isEmpty)
     }
+
+    func testKnownButIgnoredEventTypesParseToNil() throws {
+        let payloads = [
+            #"{"type":"agent_response_complete","agent_response_complete_event":{"event_id":42}}"#,
+            #"{"type":"guardrail_triggered","guardrail_triggered_event":{"guardrail_name":"toxicity"}}"#,
+            #"{"type":"agent_tool_response_full_payload","agent_tool_response_full_payload":{"tool_name":"search","tool_call_id":"abc","tool_type":"system","is_error":false,"event_id":7,"is_called":true,"full_tool_result":"x"}}"#,
+            #"{"type":"asr_initiation_metadata","asr_initiation_metadata_event":{"metadata":{}}}"#
+        ]
+
+        for payload in payloads {
+            let json = try XCTUnwrap(payload.data(using: .utf8))
+            // Intentionally ignored: parsed to nil (dropped), never thrown as unknown.
+            let event = try EventParser.parseIncomingEvent(from: json)
+            XCTAssertNil(event, "Expected \(payload) to be ignored (nil)")
+        }
+    }
 }
 
 // swiftlint:enable line_length force_unwrapping

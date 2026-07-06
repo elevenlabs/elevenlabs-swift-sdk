@@ -96,13 +96,6 @@ enum EventParser {
                 return .vadScore(VadScoreEvent(vadScore: vadScore))
             }
 
-        case "internal_tentative_agent_response":
-            if let event = json["tentative_agent_response_internal_event"] as? [String: Any],
-               let response = event["tentative_agent_response"] as? String
-            {
-                return .tentativeAgentResponse(TentativeAgentResponseEvent(tentativeResponse: response))
-            }
-
         case "conversation_initiation_metadata":
             if let event = json["conversation_initiation_metadata_event"] as? [String: Any],
                let conversationId = event["conversation_id"] as? String,
@@ -250,13 +243,6 @@ enum EventParser {
                 return .mcpConnectionStatus(MCPConnectionStatusEvent(integrations: integrations))
             }
 
-        case "asr_initiation_metadata":
-            if let event = json["asr_initiation_metadata_event"] as? [String: Any],
-               let metadataData = try? JSONSerialization.data(withJSONObject: event)
-            {
-                return .asrInitiationMetadata(ASRInitiationMetadataEvent(metadataData: metadataData))
-            }
-
         case "agent_chat_response_part":
             if let event = json["text_response_part"] as? [String: Any],
                let text = event["text"] as? String,
@@ -275,6 +261,13 @@ enum EventParser {
             let message = event?["message"] as? String
             let errorName = event?["error_name"] as? String
             return .error(ErrorEvent(code: code, message: message, errorName: errorName))
+
+        // Known event types we intentionally don't surface to consumers.
+        case "agent_response_complete",
+             "guardrail_triggered",
+             "agent_tool_response_full_payload",
+             "asr_initiation_metadata":
+            return nil
 
         default:
             throw EventParseError.unknownEventType(type)
