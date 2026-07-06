@@ -394,21 +394,6 @@ public final class Conversation: ObservableObject {
         pendingToolCalls.removeAll { $0.toolCallId == toolResult.toolCallId }
     }
 
-    @available(*, deprecated, message: "Use the Encodable overload; the Any overload can send a result the agent can't parse.")
-    public func sendToolResult(
-        for toolCallId: String,
-        result: Any,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
-        let toolResult = try ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError, errorType: errorType
-        )
-        try await publish(.clientToolResult(toolResult))
-        pendingToolCalls.removeAll { $0.toolCallId == toolResult.toolCallId }
-    }
-
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
     public func markToolCallCompleted(_ toolCallId: String) {
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }

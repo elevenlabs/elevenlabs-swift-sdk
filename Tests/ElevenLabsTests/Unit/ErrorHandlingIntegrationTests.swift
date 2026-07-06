@@ -89,11 +89,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let collector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0, // Increased from default 3.0
-            initRetryDelays: [0, 0.5, 1.0, 2.0], // More retry attempts
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0) // Increased from default 3.0
 
         // Use automatic network strategy for faster test connections (allows all connection types)
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
@@ -169,11 +165,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let collector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
@@ -227,11 +219,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         print("\n🧪 Testing rapid connection attempts...")
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
@@ -435,11 +423,7 @@ extension ErrorHandlingIntegrationTests {
         let errorCollector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
         let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)

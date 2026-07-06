@@ -6,12 +6,6 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
     public var roomConnect: TimeInterval?
     public var agentReady: TimeInterval?
 
-    @available(*, deprecated, message: "Ignored: startup now fails if the agent isn't ready (no grace timeout).")
-    public var agentReadyViaGraceTimeout: Bool = false
-
-    @available(*, deprecated, message: "Ignored: startup now fails (throws) if the agent isn't ready.")
-    public var agentReadyTimedOut: Bool = false
-
     public var agentReadyBuffer: TimeInterval?
     public var conversationInit: TimeInterval?
     public var conversationInitAttempts: Int
