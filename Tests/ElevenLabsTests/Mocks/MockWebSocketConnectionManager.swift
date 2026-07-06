@@ -15,7 +15,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     private(set) var sentPayloads: [Data] = []
     private(set) var isConnected = false
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
+    func connect(auth: ConversationCredentials, options: ConversationOptions) async throws -> StartupResult {
         connectCallCount += 1
         let startTime = Date()
         var metrics = ConversationStartupMetrics()

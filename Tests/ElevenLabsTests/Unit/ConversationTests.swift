@@ -53,7 +53,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: options
             )
         }
@@ -81,7 +81,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: makeConfig()
             )
         }
@@ -112,7 +112,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: makeConfig()
             )
         }
@@ -151,7 +151,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: makeConfig()
             )
         }
@@ -176,7 +176,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: makeConfig()
             )
         }
@@ -200,7 +200,7 @@ final class ConversationTests: XCTestCase {
         })
 
         try await conversation.startConversation(
-            auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+            auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             options: options
         )
 
@@ -245,7 +245,7 @@ final class ConversationTests: XCTestCase {
         })
 
         try await conversation.startConversation(
-            auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+            auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             options: options
         )
 
@@ -277,7 +277,7 @@ final class ConversationTests: XCTestCase {
 
     func testSignedWebSocketURLRejectsURLWithoutAgentId() {
         let urlMissingAgent = "wss://api.elevenlabs.io/v1/convai/conversation?conversation_signature=sig"
-        XCTAssertThrowsError(try ElevenLabsConfiguration.signedWebSocketURL(urlMissingAgent)) { error in
+        XCTAssertThrowsError(try ConversationCredentials.signedWebSocketURL(urlMissingAgent)) { error in
             guard let convError = error as? ConversationError,
                   case .authenticationFailed = convError
             else {
@@ -681,7 +681,7 @@ final class ConversationTests: XCTestCase {
         let startTask = Task {
             guard let conversation = self.conversation else { return }
             try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "test-agent-id"),
+                auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 options: options
             )
         }

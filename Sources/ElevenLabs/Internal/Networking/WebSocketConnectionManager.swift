@@ -29,7 +29,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         urlSession.invalidateAndCancel()
     }
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
+    func connect(auth: ConversationCredentials, options: ConversationOptions) async throws -> StartupResult {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -119,7 +119,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    static func url(for auth: ElevenLabsConfiguration) throws -> URL {
+    static func url(for auth: ConversationCredentials) throws -> URL {
         switch auth.authSource {
         case let .publicAgentId(agentId):
             var components = URLComponents(string: ConnectionConstants.textConversationUrl)
