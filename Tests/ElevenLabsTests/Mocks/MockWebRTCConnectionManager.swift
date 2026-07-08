@@ -9,8 +9,18 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     var onDisconnected: (() async -> Void)?
-    var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
+    var onEventReceived: (@Sendable (IncomingEvent) -> Void)? {
+        didSet {
+            if onEventReceived != nil {
+                eventHandlerInstalled?.resume()
+                eventHandlerInstalled = nil
+            }
+        }
+    }
+
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
+
+    private var eventHandlerInstalled: CheckedContinuation<Void, Never>?
 
     var room: Room?
 
@@ -34,6 +44,10 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     private var waitContinuation: CheckedContinuation<AgentReadyWaitResult, Never>?
     private var pendingWaitResult: AgentReadyWaitResult?
+
+    /// When `true` (the default), `waitForAgentReady` resolves immediately. Set to `false`
+    /// only when a test needs to drive readiness via `succeedAgentReady`/`timeoutAgentReady`.
+    var autoSucceedAgentReady = true
 
     /// Simulates the full WebRTC startup (token → room → agent → init), driven by
     /// the `tokenError`/`shouldFailConnection`/`publishError` flags and the
@@ -96,6 +110,9 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             pendingWaitResult = nil
             return pending
         }
+        if autoSucceedAgentReady {
+            return .success(elapsed: 0)
+        }
 
         return await withCheckedContinuation { continuation in
             waitContinuation = continuation
@@ -128,6 +145,17 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     func receive(data: Data) {
         handleIncomingData(data, logger: SDKLogger(logLevel: .error))
+    }
+
+    /// Delivers an already-decoded event directly to the installed handler
+    func deliver(_ event: IncomingEvent) {
+        onEventReceived?(event)
+    }
+
+    /// Suspends until `onEventReceived` is set.
+    func waitForEventHandlerInstalled() async {
+        if onEventReceived != nil { return }
+        await withCheckedContinuation { eventHandlerInstalled = $0 }
     }
 
     func succeedAgentReady(elapsed: TimeInterval = 0.1) {

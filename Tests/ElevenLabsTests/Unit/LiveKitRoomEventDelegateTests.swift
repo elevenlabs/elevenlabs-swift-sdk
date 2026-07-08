@@ -17,43 +17,46 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     }
 
     func testForwardsReceivedData() async {
-        let received = ValueRecorder<Data>()
-        let delegate = makeDelegate(onData: { value in Task { await received.append(value) } })
+        let got = expectation(description: "data")
         let payload = Data([0x01, 0x02, 0x03])
+        let delegate = makeDelegate(onData: {
+            XCTAssertEqual($0, payload)
+            got.fulfill()
+        })
 
         delegate.room?(Room(), participant: nil, didReceiveData: payload, forTopic: "topic", encryptionType: .none)
 
-        let values = await received.values(waitingFor: 1)
-        XCTAssertEqual(values, [payload])
+        await fulfillment(of: [got], timeout: 1.0)
     }
 
     func testForwardsSpeaking() async {
-        let speaking = ValueRecorder<Bool>()
-        let delegate = makeDelegate(onRemoteSpeaking: { value in Task { await speaking.append(value) } })
+        let got = expectation(description: "speaking")
+        let delegate = makeDelegate(onRemoteSpeaking: {
+            XCTAssertEqual($0, false, "No remote speakers must forward not-speaking.")
+            got.fulfill()
+        })
 
         delegate.room?(Room(), didUpdateSpeakingParticipants: [])
 
-        let values = await speaking.values(waitingFor: 1)
-        XCTAssertEqual(values, [false], "No remote speakers must forward not-speaking.")
+        await fulfillment(of: [got], timeout: 1.0)
     }
 
     func testForwardsDisconnectOnConnectionLoss() async {
-        let disconnects = ValueRecorder<Bool>()
-        let delegate = makeDelegate(onRemoteDisconnect: { await disconnects.append(true) })
+        let got = expectation(description: "disconnect")
+        let delegate = makeDelegate(onRemoteDisconnect: { got.fulfill() })
 
         delegate.room?(Room(), didUpdateConnectionState: .disconnected, from: .connected)
 
-        let values = await disconnects.values(waitingFor: 1)
-        XCTAssertEqual(values, [true])
+        await fulfillment(of: [got], timeout: 1.0)
     }
 
     func testIgnoresNonDisconnectedConnectionState() async {
-        let disconnects = ValueRecorder<Bool>()
-        let delegate = makeDelegate(onRemoteDisconnect: { await disconnects.append(true) })
+        nonisolated(unsafe) var called = false
+        let delegate = makeDelegate(onRemoteDisconnect: { called = true })
 
         delegate.room?(Room(), didUpdateConnectionState: .connected, from: .connecting)
+        await Task { @MainActor in }.value
 
-        let values = await disconnects.values(waitingFor: 1, timeout: 0.2)
-        XCTAssertTrue(values.isEmpty, "Only a disconnected state should signal disconnect.")
+        XCTAssertFalse(called)
     }
 }
