@@ -536,24 +536,6 @@ public final class Conversation: ObservableObject {
         agentStateManager = nil
     }
 
-    // MARK: - Testing Hooks
-
-    @MainActor
-    // swiftlint:disable:next identifier_name
-    func _testing_handleIncomingEvent(_ event: IncomingEvent) async {
-        await handleIncomingEvent(event)
-    }
-
-    // swiftlint:disable:next identifier_name
-    func _testing_setState(_ newState: ConversationState) {
-        state = newState
-    }
-
-    // swiftlint:disable:next identifier_name
-    func _testing_setWebRTCConnectionManager(_ manager: any WebRTCConnectionManaging) {
-        activeConnectionManager = manager
-    }
-
     private func scheduleBackToListening(delay: TimeInterval = 0.5) {
         speakingTimer?.cancel()
         speakingTimer = Task {
