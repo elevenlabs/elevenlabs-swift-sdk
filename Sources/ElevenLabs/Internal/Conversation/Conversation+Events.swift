@@ -53,7 +53,6 @@ extension Conversation {
             callbacks.onCanSendFeedbackChange?(false)
 
         case let .conversationMetadata(metadata):
-            // Store the conversation metadata for public access
             conversationMetadata = metadata
             callbacks.onConversationMetadata?(metadata)
 

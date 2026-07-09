@@ -1,5 +1,4 @@
 import Foundation
-import LiveKit
 
 enum ConnectionManagerError: Error {
     case notConnected
@@ -20,8 +19,6 @@ protocol WebSocketConnectionManaging: ConnectionManaging {
 
 protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
-    var inputTrack: LocalAudioTrack? { get }
-    var agentAudioTrack: RemoteAudioTrack? { get }
     var isMicrophoneMuted: Bool { get }
 
     @MainActor

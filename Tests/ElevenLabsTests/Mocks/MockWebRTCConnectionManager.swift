@@ -24,8 +24,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     var room: Room?
 
-    var inputTrack: LocalAudioTrack?
-    var agentAudioTrack: RemoteAudioTrack?
     var isMicrophoneMuted = true
 
     var errorHandler: ((Swift.Error?) -> Void)?

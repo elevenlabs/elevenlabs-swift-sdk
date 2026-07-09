@@ -72,8 +72,6 @@ final class StartupPerformanceTest: XCTestCase {
             print("  🎯 ACTIVE STATE REACHED in \(String(format: "%.3f", elapsed))s")
         case let .ended(reason):
             print("  [\(String(format: "%.3f", elapsed))s] State: ended (reason: \(reason))")
-        case let .error(error):
-            print("  [\(String(format: "%.3f", elapsed))s] State: error - \(error)")
         }
 
         // Check for existing messages

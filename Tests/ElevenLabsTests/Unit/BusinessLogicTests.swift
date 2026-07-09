@@ -128,27 +128,6 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
     }
 
-    // MARK: - Concurrency & Responsiveness
-
-    func testStateTransitionsImmediatelyToConnecting() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "old-agent"))
-        await conversation.endConversation()
-
-        // Hold agent-ready so we can observe `.connecting` before startup finishes.
-        mockWebRTCConnectionManager.autoSucceedAgentReady = false
-        let startTask = Task {
-            try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
-        }
-
-        await waitForPublished(conversation.$state) { $0 == .connecting }
-        XCTAssertEqual(conversation.state, .connecting, "Should be connecting immediately, even if disconnect() is slow")
-
-        mockWebRTCConnectionManager.succeedAgentReady()
-        try await startTask.value
-
-        XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "new-agent")))
-    }
-
     // MARK: - Audio Alignment
 
     func testAudioAlignmentUpdatesProperty() async throws {

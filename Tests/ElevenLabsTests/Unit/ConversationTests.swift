@@ -207,32 +207,16 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.messages.last?.role, .agent)
     }
 
-    func testTextOnlyStartDisconnectsPreviousActiveManagerBeforeSwitchingTransports() async throws {
+    func testStartAfterEndedThrowsAlreadyActive() async throws {
         try await conversation.startConversation(auth: .publicAgent(id: "test-agent-id"), config: makeConfig())
         await conversation.endConversation()
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
 
-        // Re-arm stale handlers so the transport switch has something to clear.
-        mockWebRTCConnectionManager.onEventReceived = { _ in }
-        mockWebRTCConnectionManager.onDisconnected = {}
-        mockWebRTCConnectionManager.onRemoteSpeakingChanged = { _ in }
-
-        let config = makeConfig(configure: { config in
-            config.conversationOverrides = ConversationOverrides(textOnly: true)
-        })
-
-        try await conversation.startConversation(
-            auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
-            config: config
-        )
-
-        // 1 (reset-before-connect on the first start) + 1 (real endConversation) + 1 (stale
-        // manager disconnected when the second start switches transport) = 3.
-        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 3)
-        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
-        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
-        XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
-        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        await XCTAssertThrowsErrorAsync {
+            try await conversation.startConversation(auth: .publicAgent(id: "test-agent-id"), config: makeConfig())
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, .alreadyActive)
+        }
     }
 
     func testStartTextOnlySignedURLUsesProvidedWebSocketURL() async throws {

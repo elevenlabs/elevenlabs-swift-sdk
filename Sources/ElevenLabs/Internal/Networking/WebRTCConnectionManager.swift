@@ -20,11 +20,6 @@ enum WebRTCConnectionManagerError: Error {
 /// LiveKit observation is split across two `RoomDelegate` instances:
 /// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect
 /// - `LiveKitReadinessDelegate` — signals when the agent's audio track subscribes
-///
-/// Note: `Room`, `LocalAudioTrack`, and `RemoteAudioTrack` are intentionally
-/// exposed on the public SDK surface (e.g. `Conversation.inputTrack`), so this
-/// type does not fully hide LiveKit from callers. It does centralize the
-/// dependency in one place.
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
     var onDisconnected: (() async -> Void)?
@@ -37,17 +32,9 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     var errorHandler: ((Swift.Error?) -> Void)?
 
-    // MARK: – Public state accessors
+    // MARK: – State
 
     private(set) var room: Room?
-
-    var inputTrack: LocalAudioTrack? {
-        room?.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
-    }
-
-    var agentAudioTrack: RemoteAudioTrack? {
-        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? RemoteAudioTrack
-    }
 
     var isMicrophoneMuted: Bool {
         guard let room else { return true }

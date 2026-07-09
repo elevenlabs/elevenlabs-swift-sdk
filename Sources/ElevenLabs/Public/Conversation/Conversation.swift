@@ -1,14 +1,12 @@
 import Combine
 import Foundation
-import LiveKit
 
 // swiftlint:disable file_length type_body_length
 
 /// A single-use conversation session, created by and owned by `ConversationClient`.
 ///
-/// Manages the lifecycle of one conversation: network layer
-/// (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
-/// (`EventParser`), and audio device setup.
+/// Coordinates the network layer (`WebRTCConnectionManager`|`WebSocketConnectionManager`),
+/// protocol parser (`EventParser`), and audio device setup for one conversation.
 @MainActor
 final class Conversation: ObservableObject {
     // MARK: - State
@@ -38,21 +36,14 @@ final class Conversation: ObservableObject {
     /// Latest audio event emitted by the agent.
     @Published var latestAudioEvent: AudioEvent?
 
-    /// Device lists (optional to expose; keep `internal` if you don't want them public)
-    @Published var audioDevices: [AudioDevice] = []
-    @Published var selectedAudioDeviceID: String = ""
-
     var lastAgentEventId: Int?
     var lastFeedbackSubmittedEventId: Int?
 
     /// Pending mute state to apply after connection completes.
-    /// Allows setting mute state during connection phase.
     private var pendingMuteState: Bool?
 
-    /// Audio device management
     private var audioManager: ConversationAudioManager?
 
-    /// Agent state manager for event-based state tracking
     var agentStateManager: AgentStateManager?
 
     /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
@@ -64,7 +55,7 @@ final class Conversation: ObservableObject {
         }
     }
 
-    func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
+    private func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
         if let manager = agentStateManager {
             manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
         } else if isSpeaking {
@@ -80,15 +71,6 @@ final class Conversation: ObservableObject {
 
     /// Context for logging (e.g. agentId)
     private var activeContext: [String: String]?
-
-    /// Audio tracks for advanced use cases
-    var inputTrack: LocalAudioTrack? {
-        activeWebRTCConnectionManager?.inputTrack
-    }
-
-    var agentAudioTrack: RemoteAudioTrack? {
-        activeWebRTCConnectionManager?.agentAudioTrack
-    }
 
     // MARK: - Init
 
@@ -106,17 +88,7 @@ final class Conversation: ObservableObject {
 
     private func setupAudioManager() {
         guard !config.conversationOverrides.textOnly else { return }
-        let manager = ConversationAudioManager(logger: logger)
-        manager.onDevicesChanged = { [weak self] devices in
-            self?.audioDevices = devices
-        }
-        manager.onSelectedDeviceChanged = { [weak self] deviceId in
-            self?.selectedAudioDeviceID = deviceId
-        }
-        audioManager = manager
-        // Sync initial values
-        audioDevices = manager.audioDevices
-        selectedAudioDeviceID = manager.selectedAudioDeviceID
+        audioManager = ConversationAudioManager(logger: logger)
     }
 
     private func setupAgentStateManager() {
@@ -131,21 +103,13 @@ final class Conversation: ObservableObject {
 
     // MARK: - API
 
-    /// Start a conversation with an agent using agent ID.
-    func startConversation(
-        with agentId: String,
-        config: ConversationConfig = .init()
-    ) async throws {
-        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        try await startConversation(auth: authConfig, config: config)
-    }
-
-    /// Start a conversation using authentication configuration.
+    /// Start this single-use session. Only valid from `.idle` (including after a failed start).
+    /// Once the session has `.ended`, create a new `Conversation` via `ConversationClient`.
     func startConversation(
         auth: ConversationCredentials,
         config: ConversationConfig = .init()
     ) async throws {
-        guard state == .idle || state.isEnded else {
+        guard state == .idle else {
             throw ConversationError.alreadyActive
         }
 
@@ -178,9 +142,6 @@ final class Conversation: ObservableObject {
             }
         }
 
-        if audioManager == nil {
-            setupAudioManager()
-        }
         await audioManager?.configure(with: config)
 
         let result: StartupResult
@@ -238,31 +199,24 @@ final class Conversation: ObservableObject {
         }
     }
 
-    /// End and clean up.
-    /// Can be called during connection phase to cancel, or during active conversation to end.
-    func endConversation() async {
-        await endConversation(disconnectReason: .user, endReason: .userEnded)
-    }
-
-    private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
-        // Allow ending during both active and connecting states
+    /// End and clean up. Callable during connect (cancel) or while active.
+    func endConversation(
+        disconnectReason: DisconnectionReason = .user,
+        endReason: EndReason = .userEnded
+    ) async {
         guard state.isActive || state == .connecting else { return }
         guard let connectionManager = activeConnectionManager else {
-            // No connection manager yet, just reset state
             if state == .connecting {
                 state = .idle
-                tearDownActiveSession()
+                tearDown()
             }
             return
         }
         state = .ended(reason: endReason)
 
-        // Disconnect synchronously to ensure clean state
         await connectionManager.disconnect()
+        tearDown()
 
-        tearDownActiveSession()
-
-        // Call user's onDisconnect callback if provided
         callbacks.onDisconnect?(disconnectReason)
         callbacks.onCanSendFeedbackChange?(false)
     }
@@ -397,7 +351,7 @@ final class Conversation: ObservableObject {
         activeConnectionManager as? any WebRTCConnectionManaging
     }
 
-    var config: ConversationConfig
+    private var config: ConversationConfig
     let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
@@ -407,23 +361,17 @@ final class Conversation: ObservableObject {
         callbacks.onStartupStateChange?(newState)
     }
 
-    /// Common preparation shared by voice and text-only startup paths.
+    /// Wire handlers and move to `.connecting`. Dependency providers may reuse
+    /// manager instances across sessions, so disconnect first to clear stale state.
     private func prepareConversationStart(
         auth: ConversationCredentials,
         config: ConversationConfig,
         connectionManager: any ConnectionManaging
     ) async {
-        let previousConnectionManager = activeConnectionManager
         state = .connecting
-
-        if let previousConnectionManager, previousConnectionManager !== connectionManager {
-            await previousConnectionManager.disconnect()
-        }
-
         activeConnectionManager = connectionManager
-        // Reset the target manager too; dependency providers may reuse manager instances across starts.
+        // Providers may reuse manager instances across sessions; clear stale handlers first.
         await connectionManager.disconnect()
-        cleanupPreviousConversation()
         self.config = config
 
         activeContext = ["agentId": auth.agentId]
@@ -433,16 +381,9 @@ final class Conversation: ObservableObject {
         callbacks.onCanSendFeedbackChange?(false)
         setupAgentStateManager()
 
-        connectionManager.onEventReceived = { [weak self, weak connectionManager] event in
-            Task { @MainActor [weak self, weak connectionManager] in
-                guard let self,
-                      let connectionManager,
-                      activeConnectionManager === connectionManager,
-                      state == .connecting || state.isActive
-                else {
-                    return
-                }
-
+        connectionManager.onEventReceived = { [weak self] event in
+            Task { @MainActor [weak self] in
+                guard let self, state == .connecting || state.isActive else { return }
                 await handleIncomingEvent(event)
             }
         }
@@ -457,7 +398,7 @@ final class Conversation: ObservableObject {
         disconnecting connectionManager: any ConnectionManaging,
         suggestLocalNetworkPermission: Bool
     ) async {
-        cleanupTransientResources()
+        tearDown()
         await connectionManager.disconnect()
 
         startupMetrics = failure.metrics
@@ -474,46 +415,17 @@ final class Conversation: ObservableObject {
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
-        cleanupTransientResources()
+        tearDown()
         await connectionManager.disconnect()
         startupMetrics = nil
         state = .idle
         updateStartupState(.idle)
     }
 
-    /// Clean up state from any previous conversation to ensure a fresh start.
-    /// Called when starting a new session; wipes both operational and display state.
-    private func cleanupPreviousConversation() {
-        tearDownActiveSession()
-
-        messages.removeAll()
-        mcpToolCalls.removeAll()
-        mcpConnectionStatus = nil
-        conversationMetadata = nil
-
-        startupState = .idle
-        startupMetrics = nil
-
-        logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
-    }
-
-    /// Tear down operational state when an active session ends.
-    /// Preserves user-visible display state (messages, MCP activity, conversation
-    /// metadata, startup metrics) so the transcript remains visible until a new
-    /// conversation is started.
-    private func tearDownActiveSession() {
-        cleanupTransientResources()
-
-        pendingToolCalls.removeAll()
-
-        lastAgentEventId = nil
-        lastFeedbackSubmittedEventId = nil
-        callbacks.onCanSendFeedbackChange?(false)
-        latestAudioEvent = nil
-        latestAudioAlignment = nil
-    }
-
-    private func cleanupTransientResources() {
+    /// Release operational resources when the session ends or fails.
+    /// On a clean end, display state (messages, MCP, metadata, startup metrics) is kept
+    /// so the client can still show the transcript.
+    private func tearDown() {
         speakingTimer?.cancel()
         speakingTimer = nil
         pendingMuteState = nil
@@ -522,6 +434,13 @@ final class Conversation: ObservableObject {
 
         audioManager?.cleanup()
         agentStateManager = nil
+
+        pendingToolCalls.removeAll()
+        lastAgentEventId = nil
+        lastFeedbackSubmittedEventId = nil
+        callbacks.onCanSendFeedbackChange?(false)
+        latestAudioEvent = nil
+        latestAudioAlignment = nil
     }
 
     private func scheduleBackToListening(delay: TimeInterval = 0.5) {
