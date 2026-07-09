@@ -5,16 +5,17 @@ import LiveKit
 //
 // ```swift
 // // Start a conversation directly - simple and clean
-// let conversation = try await ElevenLabs.startConversation(
+// let client = ConversationClient()
+// try await client.startConversation(
 //     agentId: "agent_123",
 //     config: .init(conversationOverrides: .init(textOnly: false))
 // )
 //
 // // Send a message
-// try await conversation.sendMessage("Hello!")
+// try await client.sendMessage("Hello!")
 //
 // // End the conversation
-// await conversation.endConversation()
+// await client.endConversation()
 // ```
 
 public enum ElevenLabs {
@@ -29,170 +30,6 @@ public enum ElevenLabs {
     @MainActor
     public static func configure(_ configuration: Configuration) {
         Global.shared.configuration = configuration
-    }
-
-    // MARK: - SDK interface
-
-    /// Start a conversation with an ElevenLabs agent using a public agent ID - the most common use case.
-    ///
-    /// This method handles all the complexity of connection setup, authentication,
-    /// and protocol initialization. Simply provide a public agent ID and optional configuration.
-    ///
-    /// - Parameters:
-    ///   - agentId: The public ElevenLabs agent ID to connect to
-    ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
-    /// - Returns: An active `Conversation` instance ready for interaction
-    /// - Throws: `ConversationError` if connection fails, agent not found, or configuration invalid
-    ///
-    /// ```swift
-    /// // Voice conversation (default) - simplest usage
-    /// let conversation = try await ElevenLabs.startConversation(agentId: "agent_123")
-    ///
-    /// // Text-only conversation
-    /// let textConversation = try await ElevenLabs.startConversation(
-    ///     agentId: "agent_123",
-    ///     config: .init(conversationOverrides: .init(textOnly: true))
-    /// )
-    ///
-    /// // Conversation with event handlers
-    /// let conversation = try await ElevenLabs.startConversation(
-    ///     agentId: "agent_123",
-    ///     callbacks: .init(
-    ///         onAgentReady: {
-    ///             print("Agent is ready!")
-    ///         },
-    ///         onDisconnect: { reason in
-    ///             print("Agent disconnected: \(reason)")
-    ///         }
-    ///     )
-    /// )
-    /// ```
-    @MainActor
-    public static func startConversation(
-        agentId: String,
-        config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
-    ) async throws -> Conversation {
-        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
-    }
-
-    /// Start a conversation using a conversation token from your backend - for private agents.
-    ///
-    /// Use this method when you have private agents that require authentication.
-    /// Your backend should generate conversation tokens using your ElevenLabs API key.
-    ///
-    /// Security: Never include your ElevenLabs API key in client apps!
-    ///
-    /// - Parameters:
-    ///   - conversationToken: The conversation token from your backend
-    ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
-    /// - Returns: An active `Conversation` instance ready for interaction
-    /// - Throws: `ConversationError` if connection fails or token is invalid
-    ///
-    /// ```swift
-    /// // Get token from your backend
-    /// let token = try await fetchTokenFromMyBackend()
-    ///
-    /// // Start conversation with private agent
-    /// let conversation = try await ElevenLabs.startConversation(
-    ///     conversationToken: token,
-    ///     config: .init(
-    ///         agentOverrides: .init(firstMessage: "Hello! How can I help you today?")
-    ///     )
-    /// )
-    /// ```
-    @MainActor
-    public static func startConversation(
-        conversationToken: String,
-        config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
-    ) async throws -> Conversation {
-        let authConfig = ConversationCredentials.conversationToken(conversationToken, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
-    }
-
-    /// Start a conversation using a custom token provider - for advanced authentication scenarios.
-    ///
-    /// Use this method when you need dynamic token generation or complex authentication flows.
-    ///
-    /// - Parameters:
-    ///   - tokenProvider: An async closure that returns a conversation token
-    ///   - config: Optional conversation configuration (voice/text mode, overrides, etc.)
-    ///   - callbacks: Optional event hooks (onAgentReady, onDisconnect, etc.), set once for this conversation
-    /// - Returns: An active `Conversation` instance ready for interaction
-    /// - Throws: `ConversationError` if connection fails or token provider throws
-    ///
-    /// ```swift
-    /// // Dynamic token provider
-    /// let conversation = try await ElevenLabs.startConversation(
-    ///     tokenProvider: {
-    ///         // Your custom authentication logic
-    ///         let userAuth = try await authenticateUser()
-    ///         return try await fetchElevenLabsToken(for: userAuth)
-    ///     },
-    ///     config: .init(conversationOverrides: .init(textOnly: false))
-    /// )
-    /// ```
-    @MainActor
-    public static func startConversation(
-        tokenProvider: @escaping @Sendable () async throws -> String,
-        config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
-    ) async throws -> Conversation {
-        let authConfig = ConversationCredentials.customTokenProvider(tokenProvider, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config, callbacks: callbacks)
-    }
-
-    /// Start a text-only conversation using a signed WebSocket URL from your backend.
-    ///
-    /// Use this for private/non-public agents in text-only mode. Signed URLs should be generated
-    /// server-side using your ElevenLabs API key.
-    @MainActor
-    public static func startConversation(
-        signedWebSocketURL: String,
-        config: ConversationConfig = .init(conversationOverrides: .init(textOnly: true)),
-        callbacks: ConversationCallbacks = .init()
-    ) async throws -> Conversation {
-        let authConfig = try ConversationCredentials.signedWebSocketURL(signedWebSocketURL)
-        var updatedConfig = config
-        updatedConfig.conversationOverrides.textOnly = true
-        return try await startConversation(auth: authConfig, config: updatedConfig, callbacks: callbacks)
-    }
-
-    /// Advanced: Start a conversation with full authentication control.
-    ///
-    /// This is the most flexible method that all other convenience methods use internally.
-    /// Most developers should use the simpler `startConversation(agentId:)` method instead.
-    ///
-    /// - Parameters:
-    ///   - auth: The authentication configuration
-    ///   - config: Optional conversation configuration
-    /// - Returns: An active `Conversation` instance ready for interaction
-    @MainActor
-    public static func startConversation(
-        auth: ConversationCredentials,
-        config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
-    ) async throws -> Conversation {
-        let conversation = createConversation(config: config, callbacks: callbacks)
-        try await conversation.startConversation(
-            auth: auth, config: config
-        )
-        return conversation
-    }
-
-    // MARK: - Internal Factory Methods
-
-    /// Creates a new Conversation instance with proper dependency injection.
-    @MainActor
-    private static func createConversation(
-        config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
-    ) -> Conversation {
-        Conversation(dependencyProvider: Dependencies(), config: config, callbacks: callbacks)
     }
 
     // MARK: - Re-exports

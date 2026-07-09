@@ -41,16 +41,13 @@ final class ElevenLabsSDKTests: XCTestCase {
         // This would require exposing the internal configuration for testing
     }
 
+    @MainActor
     func testStartConversationWithAgentId() async {
         let config = ConversationConfig()
+        let client = ConversationClient()
 
         do {
-            let conversation = try await ElevenLabs.startConversation(
-                agentId: "test-agent-123",
-                config: config
-            )
-
-            XCTAssertNotNil(conversation)
+            try await client.startConversation(agentId: "test-agent-123", config: config)
             // In a proper test environment with mocks, we'd verify connection
         } catch {
             // Expected to fail without proper API setup
@@ -147,7 +144,7 @@ final class ElevenLabsSDKTests: XCTestCase {
     func testSDKModuleImports() {
         // Verify that all necessary types are accessible
         XCTAssertNotNil(ElevenLabs.self)
-        XCTAssertNotNil(Conversation.self)
+        XCTAssertNotNil(ConversationClient.self)
         XCTAssertNotNil(ConversationConfig.self)
         XCTAssertNotNil(ConversationError.self)
         XCTAssertNotNil(ConversationState.self)
