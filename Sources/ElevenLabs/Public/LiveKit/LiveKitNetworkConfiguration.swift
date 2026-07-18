@@ -49,18 +49,12 @@ extension LiveKitNetworkConfiguration {
         strategy != .automatic || !customIceServers.isEmpty
     }
 
-    @MainActor
     func makeConnectOptions() -> ConnectOptions? {
         guard requiresCustomConnectOptions else {
             return nil
         }
 
         let policy = resolvedIceTransportPolicy
-        #if os(iOS)
-        if policy == .relay {
-            LocalNetworkPermissionMonitor.shared.recordRelayRequested()
-        }
-        #endif
 
         return ConnectOptions(
             iceServers: customIceServers,

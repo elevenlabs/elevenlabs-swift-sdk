@@ -32,7 +32,7 @@ dependencies: [
 
 - **Platforms**: iOS 13.0+ · macOS 10.15+ · macCatalyst 14.0+ · visionOS 1.0+ · tvOS 17.0+
 - **Tooling**: Xcode 15.0+ · Swift 5.9+
-- **Privacy**: Add `NSMicrophoneUsageDescription` to your `Info.plist`. If connecting on local networks, you may also need `NSLocalNetworkUsageDescription`.
+- **Privacy**: Add `NSMicrophoneUsageDescription` to your `Info.plist`. WebRTC connection discovery may also trigger iOS Local Network permission; add `NSLocalNetworkUsageDescription` if needed, or use `.relayOnly` to restrict ICE to relay candidates.
 
 ### 3. Basic Usage (SwiftUI)
 
