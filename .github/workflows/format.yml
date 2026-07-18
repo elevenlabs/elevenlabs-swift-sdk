@@ -12,7 +12,11 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install SwiftFormat
-        run: brew install swiftformat
+        run: |
+          curl -L https://github.com/nicklockwood/SwiftFormat/releases/download/0.61.1/swiftformat.zip -o swiftformat.zip
+          unzip -q swiftformat.zip
+          sudo install -m 755 swiftformat /usr/local/bin/swiftformat
+          swiftformat --version
 
       - name: Show SwiftFormat lint annotations
         run: swiftformat . --lint --reporter github-actions-log || true
