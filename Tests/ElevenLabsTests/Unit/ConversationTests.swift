@@ -37,7 +37,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testConversationInitialState() {
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertTrue(conversation.isMicMuted)
         XCTAssertTrue(conversation.messages.isEmpty)
     }
 
@@ -161,7 +161,7 @@ final class ConversationTests: XCTestCase {
         )
 
         XCTAssertNotNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
-        XCTAssertFalse(conversation.isMuted)
+        XCTAssertFalse(conversation.isMicMuted)
 
         mockWebRTCConnectionManager.onRemoteSpeakingChanged?(true)
         await waitForPublished(conversation.$agentState) { $0 == .speaking }
@@ -296,9 +296,9 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testToggleMuteWhenNotConnected() async {
+    func testToggleMicMuteWhenNotConnected() async {
         do {
-            try await conversation.toggleMute()
+            try await conversation.toggleMicMute()
             XCTFail("Should throw error when not connected")
         } catch let error as ConversationError {
             XCTAssertEqual(error, .notConnected)
@@ -308,9 +308,9 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testSetMutedWhenNotConnected() async {
+    func testSetMicMutedWhenNotConnected() async {
         do {
-            try await conversation.setMuted(true)
+            try await conversation.setMicMuted(true)
             XCTFail("Should throw error when not connected")
         } catch let error as ConversationError {
             XCTAssertEqual(error, .notConnected)
@@ -320,15 +320,30 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testSetMicrophoneMutedUsesConnectionManagerAudioControl() async throws {
+    func testSetHardwareMicMutedUsesConnectionManagerAudioControl() async throws {
         mockWebRTCConnectionManager.isMicrophoneMuted = false
 
         try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: makeConfig())
 
-        try await conversation.setMicrophoneMuted(true)
+        try await conversation.setHardwareMicMuted(true)
 
         XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertTrue(conversation.isMicMuted)
+    }
+
+    @MainActor
+    func testSetMicMutedUsesSoftwareMuteWhenConfigured() async throws {
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+        let config = makeConfig(configure: { config in
+            config.audioConfiguration = AudioPipelineConfiguration(microphoneMuteMode: .software())
+        })
+
+        try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: config)
+
+        try await conversation.setMicMuted(true)
+
+        XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
+        XCTAssertTrue(conversation.isMicMuted)
     }
 
     @MainActor
@@ -434,8 +449,8 @@ final class ConversationTests: XCTestCase {
         }
 
         await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
-        try? await conversation.setMuted(false)
-        XCTAssertFalse(conversation.isMuted)
+        try? await conversation.setMicMuted(false)
+        XCTAssertFalse(conversation.isMicMuted)
         mockWebRTCConnectionManager.timeoutAgentReady()
 
         await XCTAssertThrowsErrorAsync {
@@ -448,7 +463,7 @@ final class ConversationTests: XCTestCase {
             return XCTFail("Expected agent timeout failure state")
         }
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertTrue(conversation.isMicMuted)
         XCTAssertNil(mockWebRTCConnectionManager.room)
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)

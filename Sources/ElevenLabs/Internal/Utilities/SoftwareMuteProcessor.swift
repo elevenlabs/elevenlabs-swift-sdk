@@ -25,16 +25,16 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
     private var consecutiveBelowCount: Int = 0
     private var hangoverLatched: Bool = false
 
-    private let onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
+    private let onSpeechDetectedWhileMuted: (@Sendable () -> Void)?
     private let mutedSpeechThresholdInDb: Float
     private let mutedSpeechThrottleInSeconds: TimeInterval
 
     init(
-        onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?,
+        onSpeechDetectedWhileMuted: (@Sendable () -> Void)?,
         mutedSpeechThresholdInDb: Float = -35,
         mutedSpeechThrottleInSeconds: TimeInterval = 3.0
     ) {
-        self.onMutedSpeech = onMutedSpeech
+        self.onSpeechDetectedWhileMuted = onSpeechDetectedWhileMuted
         self.mutedSpeechThresholdInDb = mutedSpeechThresholdInDb
         self.mutedSpeechThrottleInSeconds = mutedSpeechThrottleInSeconds
     }
@@ -59,51 +59,52 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
 
         let channelCount = audioBuffer.channels
         let frameCount = audioBuffer.frames
-        let vCount = vDSP_Length(frameCount)
 
-        var totalRMS: Float = 0
-        for i in 0 ..< channelCount {
-            let ptr = audioBuffer.rawBuffer(forChannel: i)
-            var channelRMS: Float = 0
-            vDSP_rmsqv(ptr, 1, &channelRMS, vCount)
-            totalRMS += channelRMS / 32768.0
-        }
-        let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
-        let db = 20 * log10(max(averageRMS, 1e-6))
+        if onSpeechDetectedWhileMuted != nil {
+            let vCount = vDSP_Length(frameCount)
 
-        let levelActive = db > mutedSpeechThresholdInDb
-
-        var shouldFire = false
-        var fireLevel: Float = 0
-        os_unfair_lock_lock(&lock)
-        if levelActive {
-            consecutiveBelowCount = 0
-            consecutiveAboveCount += 1
-            if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
-                hangoverLatched = true
+            var totalRMS: Float = 0
+            for i in 0 ..< channelCount {
+                let ptr = audioBuffer.rawBuffer(forChannel: i)
+                var channelRMS: Float = 0
+                vDSP_rmsqv(ptr, 1, &channelRMS, vCount)
+                totalRMS += channelRMS / 32768.0
             }
-        } else {
-            consecutiveAboveCount = 0
-            consecutiveBelowCount += 1
-            if consecutiveBelowCount >= Hangover.buffersBelowToClear {
-                hangoverLatched = false
+            let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
+            let db = 20 * log10(max(averageRMS, 1e-6))
+
+            let levelActive = db > mutedSpeechThresholdInDb
+
+            var shouldFire = false
+            os_unfair_lock_lock(&lock)
+            if levelActive {
                 consecutiveBelowCount = 0
+                consecutiveAboveCount += 1
+                if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
+                    hangoverLatched = true
+                }
+            } else {
+                consecutiveAboveCount = 0
+                consecutiveBelowCount += 1
+                if consecutiveBelowCount >= Hangover.buffersBelowToClear, hangoverLatched {
+                    hangoverLatched = false
+                    consecutiveBelowCount = 0
+                }
             }
-        }
 
-        if hangoverLatched, levelActive {
-            let now = Date()
-            if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
-                lastNotificationTime = now
-                shouldFire = true
-                fireLevel = db
+            if hangoverLatched, levelActive {
+                let now = Date()
+                if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
+                    lastNotificationTime = now
+                    shouldFire = true
+                }
             }
-        }
-        os_unfair_lock_unlock(&lock)
+            os_unfair_lock_unlock(&lock)
 
-        if shouldFire {
-            DispatchQueue.main.async {
-                self.onMutedSpeech?(.init(audioLevel: fireLevel))
+            if shouldFire {
+                DispatchQueue.main.async {
+                    self.onSpeechDetectedWhileMuted?()
+                }
             }
         }
 

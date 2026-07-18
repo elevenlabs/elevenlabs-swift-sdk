@@ -199,7 +199,6 @@ public enum ElevenLabs {
 
     // Protocol event types are already public from their respective files
     public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
-    public typealias MicrophoneMuteMode = LiveKit.MicrophoneMuteMode
     public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
     public typealias IceServer = LiveKit.IceServer
 

@@ -14,6 +14,10 @@ public struct ConversationCallbacks: Sendable {
     /// Called when a startup-related error occurs
     public var onError: (@Sendable (ConversationError) -> Void)?
 
+    /// Called when local speech is detected while the microphone is muted.
+    /// Fires only for mute modes that support muted-speech detection.
+    public var onSpeechDetectedWhileMuted: (@Sendable () -> Void)?
+
     /// Called for each agent response with the associated event identifier.
     public var onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
 
@@ -58,6 +62,7 @@ public struct ConversationCallbacks: Sendable {
         onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
         onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
         onError: (@Sendable (ConversationError) -> Void)? = nil,
+        onSpeechDetectedWhileMuted: (@Sendable () -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
         onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
         onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
@@ -76,6 +81,7 @@ public struct ConversationCallbacks: Sendable {
         self.onDisconnect = onDisconnect
         self.onStartupStateChange = onStartupStateChange
         self.onError = onError
+        self.onSpeechDetectedWhileMuted = onSpeechDetectedWhileMuted
         self.onAgentResponse = onAgentResponse
         self.onAgentResponseCorrection = onAgentResponseCorrection
         self.onAgentResponseMetadata = onAgentResponseMetadata

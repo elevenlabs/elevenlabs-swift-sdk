@@ -13,7 +13,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -28,7 +28,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -43,7 +43,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         let expectation = expectation(description: "should fire")
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -56,12 +56,36 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         wait(for: [expectation], timeout: 2.0)
     }
 
+    func testUnmuteResetsDetectionState() throws {
+        let detections = expectation(description: "should detect speech before and after remute")
+        detections.expectedFulfillmentCount = 2
+
+        let processor = SoftwareMuteProcessor(
+            onSpeechDetectedWhileMuted: {
+                detections.fulfill()
+            },
+            mutedSpeechThrottleInSeconds: 0
+        )
+
+        processor.setMuted(true)
+        for _ in 0 ..< 4 {
+            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        }
+
+        processor.setMuted(false)
+        processor.setMuted(true)
+        for _ in 0 ..< 4 {
+            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
+        }
+        wait(for: [detections], timeout: 2.0)
+    }
+
     func testSingleLoudBufferDoesNotFireWithDefaultHangover() throws {
         let expectation = expectation(description: "should not fire on single buffer")
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -77,7 +101,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -92,8 +116,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testDoesNotChangeBufferedDataIfUnmuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
 
         let buffer = try loadBuffer(named: "spoken-audio")
@@ -113,9 +136,23 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testZerosBufferedDataIfMuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
+
+        let buffer = try loadBuffer(named: "spoken-audio")
+        processor.setMuted(true)
+        processor.audioProcessingProcess(audioBuffer: buffer)
+
+        for ch in 0 ..< buffer.channels {
+            let ptr1 = buffer.rawBuffer(forChannel: ch)
+            for f in 0 ..< buffer.frames {
+                XCTAssertEqual(ptr1[f], 0, "unzeroed data at channel \(ch), frame \(f)")
+            }
+        }
+    }
+
+    func testZerosBufferedDataIfMutedWithoutSpeechDetectionCallback() throws {
+        let processor = SoftwareMuteProcessor(onSpeechDetectedWhileMuted: nil)
 
         let buffer = try loadBuffer(named: "spoken-audio")
         processor.setMuted(true)
