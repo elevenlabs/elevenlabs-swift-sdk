@@ -59,52 +59,49 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
 
         let channelCount = audioBuffer.channels
         let frameCount = audioBuffer.frames
+        let vCount = vDSP_Length(frameCount)
 
-        if onSpeechDetectedWhileMuted != nil {
-            let vCount = vDSP_Length(frameCount)
+        var totalRMS: Float = 0
+        for i in 0 ..< channelCount {
+            let ptr = audioBuffer.rawBuffer(forChannel: i)
+            var channelRMS: Float = 0
+            vDSP_rmsqv(ptr, 1, &channelRMS, vCount)
+            totalRMS += channelRMS / 32768.0
+        }
+        let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
+        let db = 20 * log10(max(averageRMS, 1e-6))
 
-            var totalRMS: Float = 0
-            for i in 0 ..< channelCount {
-                let ptr = audioBuffer.rawBuffer(forChannel: i)
-                var channelRMS: Float = 0
-                vDSP_rmsqv(ptr, 1, &channelRMS, vCount)
-                totalRMS += channelRMS / 32768.0
+        let levelActive = db > mutedSpeechThresholdInDb
+
+        var shouldFire = false
+        os_unfair_lock_lock(&lock)
+        if levelActive {
+            consecutiveBelowCount = 0
+            consecutiveAboveCount += 1
+            if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
+                hangoverLatched = true
             }
-            let averageRMS = totalRMS / Float(max(audioBuffer.channels, 1))
-            let db = 20 * log10(max(averageRMS, 1e-6))
-
-            let levelActive = db > mutedSpeechThresholdInDb
-
-            var shouldFire = false
-            os_unfair_lock_lock(&lock)
-            if levelActive {
+        } else {
+            consecutiveAboveCount = 0
+            consecutiveBelowCount += 1
+            if consecutiveBelowCount >= Hangover.buffersBelowToClear, hangoverLatched {
+                hangoverLatched = false
                 consecutiveBelowCount = 0
-                consecutiveAboveCount += 1
-                if consecutiveAboveCount >= Hangover.buffersAboveToConfirm {
-                    hangoverLatched = true
-                }
-            } else {
-                consecutiveAboveCount = 0
-                consecutiveBelowCount += 1
-                if consecutiveBelowCount >= Hangover.buffersBelowToClear, hangoverLatched {
-                    hangoverLatched = false
-                    consecutiveBelowCount = 0
-                }
             }
+        }
 
-            if hangoverLatched, levelActive {
-                let now = Date()
-                if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
-                    lastNotificationTime = now
-                    shouldFire = true
-                }
+        if hangoverLatched, levelActive {
+            let now = Date()
+            if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
+                lastNotificationTime = now
+                shouldFire = true
             }
-            os_unfair_lock_unlock(&lock)
+        }
+        os_unfair_lock_unlock(&lock)
 
-            if shouldFire {
-                DispatchQueue.main.async {
-                    self.onSpeechDetectedWhileMuted?()
-                }
+        if shouldFire {
+            DispatchQueue.main.async {
+                self.onSpeechDetectedWhileMuted?()
             }
         }
 
