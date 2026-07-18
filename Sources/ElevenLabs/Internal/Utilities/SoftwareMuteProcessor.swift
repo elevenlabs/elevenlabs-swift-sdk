@@ -84,7 +84,7 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         } else {
             consecutiveAboveCount = 0
             consecutiveBelowCount += 1
-            if consecutiveBelowCount >= Hangover.buffersBelowToClear, hangoverLatched {
+            if consecutiveBelowCount >= Hangover.buffersBelowToClear {
                 hangoverLatched = false
                 consecutiveBelowCount = 0
             }

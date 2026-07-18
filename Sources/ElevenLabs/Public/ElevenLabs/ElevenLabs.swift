@@ -198,7 +198,6 @@ public enum ElevenLabs {
     // MARK: - Re-exports
 
     // Protocol event types are already public from their respective files
-    public typealias SpeechActivityEvent = LiveKit.SpeechActivityEvent
     public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
     public typealias IceServer = LiveKit.IceServer
 

@@ -129,7 +129,9 @@ final class ConversationAudioManager {
 
     private func configureSoftwareMuteProcessor(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
         guard case let .software(speechThreshold) = muteMode else {
-            cleanupSoftwareMuteProcessor()
+            if softwareMuteProcessor != nil {
+                cleanupSoftwareMuteProcessor()
+            }
             return
         }
 
