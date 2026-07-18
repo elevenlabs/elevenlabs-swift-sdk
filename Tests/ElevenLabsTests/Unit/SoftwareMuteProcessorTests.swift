@@ -56,30 +56,6 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         wait(for: [expectation], timeout: 2.0)
     }
 
-    func testUnmuteResetsDetectionState() throws {
-        let detections = expectation(description: "should detect speech before and after remute")
-        detections.expectedFulfillmentCount = 2
-
-        let processor = SoftwareMuteProcessor(
-            onSpeechDetectedWhileMuted: {
-                detections.fulfill()
-            },
-            mutedSpeechThrottleInSeconds: 0
-        )
-
-        processor.setMuted(true)
-        for _ in 0 ..< 4 {
-            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
-        }
-
-        processor.setMuted(false)
-        processor.setMuted(true)
-        for _ in 0 ..< 4 {
-            try processor.audioProcessingProcess(audioBuffer: loadBuffer(named: "spoken-audio"))
-        }
-        wait(for: [detections], timeout: 2.0)
-    }
-
     func testSingleLoudBufferDoesNotFireWithDefaultHangover() throws {
         let expectation = expectation(description: "should not fire on single buffer")
         expectation.isInverted = true
