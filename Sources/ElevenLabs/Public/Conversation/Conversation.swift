@@ -214,23 +214,15 @@ public final class Conversation: ObservableObject {
 
         if let pendingMute = pendingMuteState {
             pendingMuteState = nil
-            if case .software = config.audioConfiguration?.microphoneMuteMode ?? .inputMixer {
-                audioManager?.softwareMuteProcessor?.setMuted(pendingMute)
+            do {
+                try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
                 isMicMuted = pendingMute
-            } else {
-                do {
-                    try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
-                    isMicMuted = pendingMute
-                } catch {
-                    logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
-                }
+            } catch {
+                logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
             }
-        } else if case .software = config.audioConfiguration?.microphoneMuteMode ?? .inputMixer {
-            isMicMuted = false
-        } else {
-            isMicMuted = webRTCConnectionManager.isMicrophoneMuted
         }
 
+        isMicMuted = webRTCConnectionManager.isMicrophoneMuted
         return result
     }
 
@@ -304,14 +296,8 @@ public final class Conversation: ObservableObject {
 
     /// Mute or unmute the local microphone.
     public func setMicMuted(_ muted: Bool) async throws {
-        if state == .connecting {
-            pendingMuteState = muted
-            isMicMuted = muted
-            return
-        }
-
-        if case .software = config.audioConfiguration?.microphoneMuteMode ?? .inputMixer {
-            audioManager?.softwareMuteProcessor?.setMuted(muted)
+        if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
+            softwareMuteProcessor.setMuted(muted)
             isMicMuted = muted
             return
         }
