@@ -154,6 +154,9 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 return .timedOut(elapsed: Date().timeIntervalSince(start))
             }
             let first = await group.next()!
+            if case .timedOut = first {
+                await delegate.release()
+            }
             group.cancelAll()
             return first
         }
