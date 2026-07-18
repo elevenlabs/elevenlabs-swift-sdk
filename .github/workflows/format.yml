@@ -14,5 +14,8 @@ jobs:
       - name: Install SwiftFormat
         run: brew install swiftformat
 
+      - name: Show SwiftFormat diffs
+        run: swiftformat . --diff || true
+
       - name: Run SwiftFormat in Strict Mode
-        run: swiftformat . --lint
+        run: swiftformat . --strict
