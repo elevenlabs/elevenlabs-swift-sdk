@@ -205,7 +205,7 @@ public final class Conversation: ObservableObject {
                 }
             )
         } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: webRTCConnectionManager, suggestLocalNetworkPermission: true)
+            await handleStartupFailure(failure, disconnecting: webRTCConnectionManager)
             throw failure.error
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: webRTCConnectionManager)
@@ -242,7 +242,7 @@ public final class Conversation: ObservableObject {
         do {
             return try await connectionManager.connect(auth: auth, config: config)
         } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: connectionManager, suggestLocalNetworkPermission: false)
+            await handleStartupFailure(failure, disconnecting: connectionManager)
             throw failure.error
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: connectionManager)
@@ -463,8 +463,7 @@ public final class Conversation: ObservableObject {
 
     private func handleStartupFailure(
         _ failure: StartupFailure,
-        disconnecting connectionManager: any ConnectionManaging,
-        suggestLocalNetworkPermission: Bool
+        disconnecting connectionManager: any ConnectionManaging
     ) async {
         cleanupTransientResources()
         await connectionManager.disconnect()
@@ -473,13 +472,6 @@ public final class Conversation: ObservableObject {
         state = .idle
         updateStartupState(.failed(failure.reason, failure.metrics))
         callbacks.onError?(failure.error)
-
-        if suggestLocalNetworkPermission,
-           case .room = failure.reason,
-           LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission()
-        {
-            callbacks.onError?(ConversationError.localNetworkPermissionRequired)
-        }
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {

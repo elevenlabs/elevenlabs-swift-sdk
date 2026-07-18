@@ -218,7 +218,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         room.delegates.add(delegate: eventDelegate)
         room.delegates.add(delegate: readinessDelegate)
 
-        let connectOptions = await networkConfiguration.makeConnectOptions()
+        let connectOptions = networkConfiguration.makeConnectOptions()
 
         let connectStart = Date()
         do {
@@ -231,9 +231,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         } catch {
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
             errorHandler?(error)
-            if await LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
-                errorHandler?(ConversationError.localNetworkPermissionRequired)
-            }
             throw error
         }
 
