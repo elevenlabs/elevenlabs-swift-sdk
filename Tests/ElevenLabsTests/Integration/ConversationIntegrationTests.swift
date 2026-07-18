@@ -40,7 +40,7 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv.sendMessage("Hello")
         }
 
-        // Mute operations also require active state
+        // Mute operations also require connected state
         await assertThrowsConversationError(.notConnected) {
             try await conv.toggleMicMute()
         }

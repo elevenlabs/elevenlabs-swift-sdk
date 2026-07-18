@@ -64,7 +64,7 @@ conversation.$agentState
 
 ### Connection State
 
-Handle transitions between idle, connecting, active, and ended states.
+Handle transitions between idle, connecting, connected, and ended states.
 
 ```swift
 conversation.$state
@@ -74,7 +74,7 @@ conversation.$state
             break
         case .connecting:
             break
-        case .active(let callInfo):
+        case .connected(let callInfo):
             print("Connected to agent: \(callInfo.agentId)")
         case .ended(let reason):
             print("Conversation ended: \(reason)")
@@ -605,7 +605,7 @@ class ReconnectionManager: ObservableObject {
                         self.showReconnectButton = true
                         self.reconnectAttempts = 0
                     }
-                case .active:
+                case .connected:
                     self.showReconnectButton = false
                     self.isReconnecting = false
                     self.reconnectAttempts = 0
@@ -733,8 +733,8 @@ Always call SDK methods from the `@MainActor` when interacting with the UI. The 
 Although the SDK uses ARC, we recommend calling `endConversation()` when the user leaves the chat screen to promptly release WebRTC resources.
 
 ```swift
-// Call endConversation() when the conversation is active
-if conversation.state.isActive {
+// Call endConversation() when the conversation is connected
+if conversation.state.isConnected {
     await conversation.endConversation()
 }
 ```

@@ -7,6 +7,6 @@ public enum ConversationStartupState: Sendable, Equatable {
     case waitingForAgent(timeout: TimeInterval)
     case agentReady(ConversationAgentReadyReport)
     case sendingConversationInit(attempt: Int)
-    case active(CallInfo, ConversationStartupMetrics)
+    case connected(CallInfo, ConversationStartupMetrics)
     case failed(ConversationStartupFailure, ConversationStartupMetrics)
 }

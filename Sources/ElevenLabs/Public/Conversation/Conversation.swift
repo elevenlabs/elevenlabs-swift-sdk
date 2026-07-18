@@ -167,9 +167,9 @@ public final class Conversation: ObservableObject {
             try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
         }
 
-        state = .active(.init(agentId: result.agentId))
+        state = .connected(.init(agentId: result.agentId))
         startupMetrics = result.metrics
-        updateStartupState(.active(CallInfo(agentId: result.agentId), result.metrics))
+        updateStartupState(.connected(CallInfo(agentId: result.agentId), result.metrics))
         callbacks.onAgentReady?()
     }
 
@@ -251,14 +251,14 @@ public final class Conversation: ObservableObject {
     }
 
     /// End and clean up.
-    /// Can be called during connection phase to cancel, or during active conversation to end.
+    /// Can be called during connection phase to cancel, or during connected conversation to end.
     public func endConversation() async {
         await endConversation(disconnectReason: .user, endReason: .userEnded)
     }
 
     private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
-        // Allow ending during both active and connecting states
-        guard state.isActive || state == .connecting else { return }
+        // Allow ending during both connected and connecting states
+        guard state.isConnected || state == .connecting else { return }
         guard let connectionManager = activeConnectionManager else {
             // No connection manager yet, just reset state
             if state == .connecting {
@@ -281,7 +281,7 @@ public final class Conversation: ObservableObject {
 
     /// Send a text message to the agent.
     public func sendMessage(_ text: String) async throws {
-        guard state.isActive else {
+        guard state.isConnected else {
             throw ConversationError.notConnected
         }
         let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
@@ -305,7 +305,7 @@ public final class Conversation: ObservableObject {
     }
 
     func setHardwareMicMuted(_ muted: Bool) async throws {
-        if state.isActive {
+        if state.isConnected {
             guard let webRTCConnectionManager = activeWebRTCConnectionManager else {
                 throw ConversationError.notConnected
             }
@@ -329,21 +329,21 @@ public final class Conversation: ObservableObject {
 
     /// Interrupt the agent while speaking.
     public func interruptAgent() async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+        guard state.isConnected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.userActivity
         try await publish(event)
     }
 
     /// Contextual update to agent (system prompt-ish).
     public func updateContext(_ context: String) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+        guard state.isConnected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.contextualUpdate(ContextualUpdateEvent(text: context))
         try await publish(event)
     }
 
     /// Send feedback (like/dislike) for an event/message id.
     public func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
-        guard state.isActive else {
+        guard state.isConnected else {
             throw ConversationError.notConnected
         }
 
@@ -358,7 +358,7 @@ public final class Conversation: ObservableObject {
     ///   - toolCallId: The tool call identifier from `MCPToolCallEvent`.
     ///   - isApproved: Pass `true` to approve, `false` to reject.
     public func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+        guard state.isConnected else { throw ConversationError.notConnected }
         let approval = MCPToolApprovalResultEvent(toolCallId: toolCallId, isApproved: isApproved)
         try await publish(.mcpToolApprovalResult(approval))
     }
@@ -385,7 +385,7 @@ public final class Conversation: ObservableObject {
         isError: Bool = false,
         errorType: ClientToolErrorType? = nil
     ) async throws {
-        guard state.isActive else { throw ConversationError.notConnected }
+        guard state.isConnected else { throw ConversationError.notConnected }
         let toolResult = ClientToolResultEvent(
             toolCallId: toolCallId, result: result, isError: isError, errorType: errorType
         )
@@ -447,7 +447,7 @@ public final class Conversation: ObservableObject {
                 guard let self,
                       let connectionManager,
                       activeConnectionManager === connectionManager,
-                      state == .connecting || state.isActive
+                      state == .connecting || state.isConnected
                 else {
                     return
                 }
