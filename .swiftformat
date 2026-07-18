@@ -1,5 +1,6 @@
 # SwiftFormat Configuration
 --swiftversion 5.9
+--disable wrapIfStatementBodies
 
 --trailingcommas never
 
