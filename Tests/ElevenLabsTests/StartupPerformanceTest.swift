@@ -66,9 +66,9 @@ final class StartupPerformanceTest: XCTestCase {
             print("  [\(String(format: "%.3f", elapsed))s] State: idle")
         case .connecting:
             print("  [\(String(format: "%.3f", elapsed))s] State: connecting")
-        case let .active(info):
+        case let .connected(info):
             hasConnected = true
-            print("  [\(String(format: "%.3f", elapsed))s] State: active (agent: \(info.agentId))")
+            print("  [\(String(format: "%.3f", elapsed))s] State: connected (agent: \(info.agentId))")
             print("  🎯 ACTIVE STATE REACHED in \(String(format: "%.3f", elapsed))s")
         case let .ended(reason):
             print("  [\(String(format: "%.3f", elapsed))s] State: ended (reason: \(reason))")
@@ -87,7 +87,7 @@ final class StartupPerformanceTest: XCTestCase {
 
         print("  [\(String(format: "%.3f", elapsed))s] Agent state: \(conversation.agentState)")
 
-        // The static API should return an already-active conversation
+        // The static API should return an already-connected conversation
         // But let's give it a moment and measure the total time when we called the API
         let totalTime = Date().timeIntervalSince(testStart)
 
@@ -110,12 +110,12 @@ final class StartupPerformanceTest: XCTestCase {
         // Wait for cleanup
         try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
 
-        // Check if we reached active state
-        let reachedActive = conversation.state.isActive
+        // Check if we reached connected state
+        let reachedConnected = conversation.state.isConnected
         if case .ended(reason: .userEnded) = conversation.state {
             // This is fine - we ended it ourselves
-        } else if !reachedActive {
-            throw NSError(domain: "StartupTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to reach active state"])
+        } else if !reachedConnected {
+            throw NSError(domain: "StartupTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to reach connected state"])
         }
 
         return totalTime
@@ -135,7 +135,7 @@ final class StartupPerformanceTest: XCTestCase {
         let maxTime = timings.max() ?? 0
 
         print("Runs completed: \(timings.count)")
-        print("Average time to active: \(String(format: "%.3f", avgTime))s")
+        print("Average time to connected: \(String(format: "%.3f", avgTime))s")
         print("Fastest time: \(String(format: "%.3f", minTime))s")
         print("Slowest time: \(String(format: "%.3f", maxTime))s")
         print("Range: \(String(format: "%.3f", maxTime - minTime))s")

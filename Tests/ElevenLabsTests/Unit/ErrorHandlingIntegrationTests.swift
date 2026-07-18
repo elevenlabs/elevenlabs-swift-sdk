@@ -139,15 +139,15 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             // Verify no errors were reported
             XCTAssertTrue(capturedErrors.isEmpty, "Error array should be empty")
 
-            // Verify connection is active
-            XCTAssertTrue(conversation.state.isActive, "Conversation should be active")
+            // Verify connection is established
+            XCTAssertTrue(conversation.state.isConnected, "Conversation should be connected")
 
             print("\n📊 Startup states (\(capturedStartupStates.count)):")
             for (index, state) in capturedStartupStates.enumerated() {
                 print("  \(index + 1). \(state)")
             }
 
-            if case let .active(_, metrics) = conversation.startupState {
+            if case let .connected(_, metrics) = conversation.startupState {
                 print("\n⏱️ Startup metrics:")
                 print("  Total: \(String(format: "%.3f", metrics.total ?? 0))s")
                 print("  Token fetch: \(String(format: "%.3f", metrics.tokenFetch ?? 0))s")
@@ -261,7 +261,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 )
 
                 print("  ✅ Connection \(attempt) successful")
-                XCTAssertTrue(conversation.state.isActive)
+                XCTAssertTrue(conversation.state.isConnected)
 
                 // Brief interaction
                 try? await conversation.sendMessage("Test message \(attempt)")
