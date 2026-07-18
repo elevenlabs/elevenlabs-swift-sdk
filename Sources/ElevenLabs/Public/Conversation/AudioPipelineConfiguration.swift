@@ -35,7 +35,8 @@ public enum MicrophoneMuteMode: Sendable, Equatable {
     /// Mutes instantly by silencing the input mixer. The mic stays open and the
     /// audio session remains active. Recommended default.
     ///
-    /// Use ``software(speechThreshold:)`` for silent muting with speech detection.
+    /// Use ``software(speechThreshold:notificationThrottle:)`` for silent muting
+    /// with speech detection.
     case inputMixer
 
     /// Mutes by restarting the engine without mic input. Releases the mic, but
@@ -50,6 +51,8 @@ public enum MicrophoneMuteMode: Sendable, Equatable {
     /// Mutes in software by zeroing captured audio before it leaves the device.
     /// Supports ``ConversationCallbacks/onSpeechDetectedWhileMuted``.
     ///
-    /// - Parameter speechThreshold: dB threshold for muted-speech detection.
-    case software(speechThreshold: Float = -35)
+    /// - Parameters:
+    ///   - speechThreshold: dB threshold for muted-speech detection.
+    ///   - notificationThrottle: Minimum interval between muted-speech callbacks.
+    case software(speechThreshold: Float = -35, notificationThrottle: TimeInterval = 3.0)
 }

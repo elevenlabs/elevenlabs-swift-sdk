@@ -347,6 +347,31 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingSetMicMutedUsesSoftwareMuteWhenConfigured() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+        let config = makeConfig(configure: { config in
+            config.audioConfiguration = AudioPipelineConfiguration(microphoneMuteMode: .software())
+        })
+
+        let startTask = Task {
+            guard let conversation = self.conversation else { return }
+            try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: config)
+        }
+
+        await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
+        try await conversation.setMicMuted(true)
+        XCTAssertTrue(conversation.isMicMuted)
+        XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
+
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+
+        XCTAssertTrue(conversation.isMicMuted)
+        XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
+    }
+
+    @MainActor
     func testInterruptAgentWhenNotConnected() async {
         do {
             try await conversation.interruptAgent()

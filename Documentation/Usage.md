@@ -504,7 +504,7 @@ The `AudioPipelineConfiguration` allows you to fine-tune the hardware audio beha
 let audioConfig = AudioPipelineConfiguration(
     // .inputMixer (default) - uses standard system mixing
     // .voiceProcessing - optimized for speech (AEC/NS)
-    // .software(speechThreshold:) - silent mute with onSpeechDetectedWhileMuted callbacks
+    // .software(speechThreshold:notificationThrottle:) - silent mute with callbacks
     microphoneMuteMode: .inputMixer,
     
     // Set to true to minimize latency of the first word

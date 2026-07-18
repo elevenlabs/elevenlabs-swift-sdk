@@ -128,7 +128,7 @@ final class ConversationAudioManager {
     }
 
     private func configureSoftwareMuteProcessor(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
-        guard case let .software(speechThreshold) = muteMode else {
+        guard case let .software(speechThreshold, notificationThrottle) = muteMode else {
             if softwareMuteProcessor != nil {
                 cleanupSoftwareMuteProcessor()
             }
@@ -138,7 +138,7 @@ final class ConversationAudioManager {
         softwareMuteProcessor = SoftwareMuteProcessor(
             onSpeechDetectedWhileMuted: callbacks.onSpeechDetectedWhileMuted,
             mutedSpeechThresholdInDb: speechThreshold,
-            mutedSpeechThrottleInSeconds: 3.0
+            mutedSpeechThrottleInSeconds: notificationThrottle
         )
         AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
     }
