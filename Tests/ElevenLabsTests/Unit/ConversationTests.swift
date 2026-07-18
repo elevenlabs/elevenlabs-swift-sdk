@@ -42,11 +42,11 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationSuccessUpdatesStartupState() async throws {
-        let stateExpectation = expectation(description: "startup becomes active")
+        let stateExpectation = expectation(description: "startup becomes connected")
 
         let config = makeConfig()
         let callbacks = makeCallbacks(onStartupStateChange: { state in
-            if case .active = state {
+            if case .connected = state {
                 stateExpectation.fulfill()
             }
         })
@@ -61,9 +61,9 @@ final class ConversationTests: XCTestCase {
 
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
         XCTAssertFalse(mockWebRTCConnectionManager.publishedPayloads.isEmpty)
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
-        guard case let .active(callInfo, metrics) = conversation.startupState else {
-            return XCTFail("Expected active startup state")
+        XCTAssertEqual(conversation.state, ConversationState.connected(.init(agentId: "test-agent-id")))
+        guard case let .connected(callInfo, metrics) = conversation.startupState else {
+            return XCTFail("Expected connected startup state")
         }
         XCTAssertEqual(callInfo.agentId, "test-agent-id")
         XCTAssertEqual(metrics.conversationInitAttempts, 1)
@@ -190,7 +190,7 @@ final class ConversationTests: XCTestCase {
         )
         XCTAssertFalse(mockWebSocketConnectionManager.sentPayloads.isEmpty)
         XCTAssertEqual(try sentEventType(from: mockWebSocketConnectionManager.sentPayloads[0]), "conversation_initiation_client_data")
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        XCTAssertEqual(conversation.state, ConversationState.connected(.init(agentId: "test-agent-id")))
 
         let payload: [String: Any] = [
             "type": "agent_response",
@@ -232,7 +232,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        XCTAssertEqual(conversation.state, ConversationState.connected(.init(agentId: "test-agent-id")))
     }
 
     func testStartTextOnlySignedURLUsesProvidedWebSocketURL() async throws {
@@ -250,7 +250,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
         XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.absoluteString, signedURL)
         XCTAssertFalse(mockWebSocketConnectionManager.sentPayloads.isEmpty)
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "agent-private")))
+        XCTAssertEqual(conversation.state, ConversationState.connected(.init(agentId: "agent-private")))
     }
 
     func testSignedWebSocketURLRejectsURLWithoutAgentId() {
@@ -608,8 +608,8 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testEndConversationWhenNotActive() async {
-        // Should not throw error when ending inactive conversation
+    func testEndConversationWhenNotConnected() async {
+        // Should not throw error when ending a non-connected conversation
         await conversation.endConversation()
         XCTAssertEqual(conversation.state, .idle)
     }
@@ -628,11 +628,11 @@ final class ConversationTests: XCTestCase {
     func testConversationStateEnum() {
         let idleState: ConversationState = .idle
         let connectingState: ConversationState = .connecting
-        let activeState: ConversationState = .active(CallInfo(agentId: "test"))
+        let connectedState: ConversationState = .connected(CallInfo(agentId: "test"))
 
         XCTAssertNotEqual(idleState, connectingState)
-        XCTAssertNotEqual(connectingState, activeState)
-        XCTAssertNotEqual(idleState, activeState)
+        XCTAssertNotEqual(connectingState, connectedState)
+        XCTAssertNotEqual(idleState, connectedState)
     }
 
     func testFeedbackTypeEnum() {
@@ -656,7 +656,7 @@ final class ConversationTests: XCTestCase {
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: config
         )
-        XCTAssertEqual(conversation.state, .active(.init(agentId: "test-agent-id")))
+        XCTAssertEqual(conversation.state, ConversationState.connected(.init(agentId: "test-agent-id")))
         let disconnectsBefore = mockWebRTCConnectionManager.disconnectCallCount
 
         await mockWebRTCConnectionManager.onDisconnected?()

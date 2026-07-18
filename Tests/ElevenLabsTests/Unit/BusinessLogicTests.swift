@@ -146,7 +146,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
 
-        XCTAssertEqual(conversation.state, .active(CallInfo(agentId: "new-agent")))
+        XCTAssertEqual(conversation.state, .connected(CallInfo(agentId: "new-agent")))
     }
 
     // MARK: - Audio Alignment

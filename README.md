@@ -67,7 +67,7 @@ struct ChatView: View {
                     switch conversation.state {
                     case .idle: Text("Status: idle")
                     case .connecting: Text("Status: connecting")
-                    case .active(let info): Text("Connected to: \(info.agentId)")
+                    case .connected(let info): Text("Connected to: \(info.agentId)")
                     case .ended: Text("Status: ended")
                     case .error: Text("Status: error")
                     }
