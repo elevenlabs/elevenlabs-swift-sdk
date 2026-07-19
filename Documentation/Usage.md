@@ -192,20 +192,28 @@ struct AudioControlView: View {
 }
 ```
 
-### Raw Audio Tracks
+### Raw Audio Observers
 
-Access the underlying LiveKit audio tracks for advanced visualization (e.g., audio visualizers or level meters).
+Observe decoded PCM from the agent output or local microphone without taking a LiveKit dependency in app code. Prefer this over reaching for transport tracks.
 
 ```swift
-// Use these with LiveKit view components or custom processors
-if let inputTrack = conversation.inputTrack as? LocalAudioTrack {
-    // Access local microphone track
+final class SpectrumObserver: ConversationAudioObserver, @unchecked Sendable {
+    func didReceive(_ buffer: AVAudioPCMBuffer) {
+        // Time-critical path: copy what you need, then hop off this callback.
+        let copy = buffer.copy()
+        Task { @MainActor in
+            updateVisualizer(copy)
+        }
+    }
 }
 
-if let agentTrack = conversation.agentAudioTrack as? RemoteAudioTrack {
-    // Access agent's audio track
-}
+let client = ConversationClient()
+let observer = SpectrumObserver()
+client.addAgentAudioObserver(observer)
+client.addMicAudioObserver(observer)
 ```
+
+`didReceive(_:)` runs on the audio callback path (not the main actor). The buffer is borrowed and read-only.
 
 ---
 

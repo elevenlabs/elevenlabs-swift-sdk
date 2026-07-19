@@ -76,7 +76,7 @@ final class Conversation: ObservableObject {
     /// Context for logging (e.g. agentId)
     private var activeContext: [String: String]?
 
-    /// Audio tracks for advanced use cases
+    /// Internal LiveKit tracks used to attach ``ConversationAudioObserver``s.
     var inputTrack: (any AudioTrackProtocol)? {
         activeWebRTCConnectionManager?.inputTrack
     }
