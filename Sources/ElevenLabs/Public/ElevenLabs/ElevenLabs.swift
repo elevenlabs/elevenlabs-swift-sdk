@@ -1,5 +1,4 @@
 import Foundation
-import LiveKit
 
 // Main namespace & entry point for the ElevenLabs Conversational AI SDK.
 //
@@ -31,13 +30,6 @@ public enum ElevenLabs {
     public static func configure(_ configuration: Configuration) {
         Global.shared.configuration = configuration
     }
-
-    // MARK: - Re-exports
-
-    // Re-export audio track types for advanced audio handling
-    public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
-    public typealias RemoteAudioTrack = LiveKit.RemoteAudioTrack
-    public typealias AudioTrack = LiveKit.AudioTrack
 
     // Language enum is already public and accessible as ElevenLabs.Language
 
