@@ -77,6 +77,7 @@ conversation.$state
             print("Connecting: \(stage)")
         case .connected(let callInfo):
             print("Connected to agent: \(callInfo.agentId)")
+            print("Conversation ID: \(callInfo.conversationId)")
         case .ended(let reason):
             print("Conversation ended: \(reason)")
         case .error(let error):
@@ -520,20 +521,17 @@ let config = ConversationConfig(audioConfiguration: audioConfig)
 
 ---
 
-## Startup Performance Tuning {#startup-tuning}
+## Startup Timeouts {#startup-tuning}
 
-Control the connection handshake and retry behavior.
+Control how long startup waits for the agent and conversation metadata.
 
 ```swift
 let startupConfig = ConversationStartupConfiguration(
-    // Time to wait for agent to be 'ready' after room connection
+    // Time to wait for the agent after the room connects
     agentReadyTimeout: 10.0,
-    
-    // Backoff strategy for protocol initialization 
-    initRetryDelays: [0, 1.0, 2.0, 5.0],
-    
-    // Whether to fail early if agent takes too long
-    failIfAgentNotReady: true
+
+    // Time to wait for the server to initialize the conversation
+    initiationMetadataTimeout: 5.0
 )
 
 let config = ConversationConfig(startupConfiguration: startupConfig)

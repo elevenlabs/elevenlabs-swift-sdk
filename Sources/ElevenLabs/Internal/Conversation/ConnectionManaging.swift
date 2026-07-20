@@ -33,9 +33,16 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
 }
 
 extension ConnectionManaging {
-    func handleIncomingData(_ data: Data, logger: any Logging) {
+    func handleIncomingData(
+        _ data: Data,
+        metadataWaiter: ConversationInitiationMetadataWaiter,
+        logger: any Logging
+    ) {
         do {
             if let event = try EventParser.parseIncomingEvent(from: data) {
+                if case let .conversationMetadata(metadata) = event {
+                    Task { await metadataWaiter.observe(metadata) }
+                }
                 onEventReceived?(event)
             }
         } catch let EventParseError.unknownEventType(type) {
@@ -55,5 +62,23 @@ extension ConnectionManaging {
         } catch ConnectionManagerError.notConnected {
             throw ConversationError.notConnected
         }
+    }
+
+    @MainActor
+    func waitForInitiationMetadata(
+        config: ConversationConfig,
+        metrics: inout ConversationStartupMetrics,
+        startTime: Date,
+        metadataWaiter: ConversationInitiationMetadataWaiter,
+        onStartupStateChange: (ConversationStartupState) -> Void
+    ) async throws -> ConversationMetadataEvent {
+        let timeout = config.startupConfiguration.initiationMetadataTimeout
+        onStartupStateChange(.waitingForInitiationMetadata(timeout: timeout))
+
+        let waitStart = Date()
+        let metadata = try await metadataWaiter.wait()
+        metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
+        metrics.total = Date().timeIntervalSince(startTime)
+        return metadata
     }
 }

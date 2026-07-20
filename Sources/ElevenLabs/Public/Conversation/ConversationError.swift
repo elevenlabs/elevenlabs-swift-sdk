@@ -6,6 +6,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     case connectionFailed(String) // Store error description instead of Error for Equatable
     case authenticationFailed(String)
     case agentTimeout
+    case initiationMetadataTimeout
     case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
     case serverError(ErrorEvent)
 
@@ -25,6 +26,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
         case let .connectionFailed(description): "Connection failed: \(description)"
         case let .authenticationFailed(msg): "Authentication failed: \(msg)"
         case .agentTimeout: "Agent did not join in time."
+        case .initiationMetadataTimeout: "Conversation metadata was not received in time."
         case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
         case let .serverError(event): "Server error (\(event.code)): \(event.message ?? "unknown")"
         }
