@@ -57,7 +57,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         connectCallCount += 1
         lastNetworkConfiguration = config.networkConfiguration
         var metrics = ConversationStartupMetrics()
@@ -91,7 +91,10 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
 
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: auth.agentId),
+            metrics: metrics
+        )
     }
 
     func disconnect() async {

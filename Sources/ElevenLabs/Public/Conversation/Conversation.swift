@@ -161,26 +161,22 @@ public final class Conversation: ObservableObject {
             throw ConversationError.alreadyActive
         }
 
-        let result: StartupResult = if config.conversationOverrides.textOnly {
+        let result: ConversationStartResult = if config.conversationOverrides.textOnly {
             try await startTextOnlyConversation(auth: auth, config: config, provider: dependencyProvider)
         } else {
             try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
         }
 
-        let startResult = ConversationStartResult(
-            callInfo: CallInfo(agentId: result.agentId),
-            metrics: result.metrics
-        )
-        state = .connected(startResult.callInfo)
+        state = .connected(result.callInfo)
         callbacks.onAgentReady?()
-        return startResult
+        return result
     }
 
     private func startVoiceConversation(
         auth: ConversationCredentials,
         config: ConversationConfig,
         provider: any ConversationDependencyProvider
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         let webRTCConnectionManager = provider.webRTCConnectionManager
         await prepareConversationStart(
             auth: auth, config: config,
@@ -198,7 +194,7 @@ public final class Conversation: ObservableObject {
         }
         await audioManager?.configure(with: config, callbacks: callbacks)
 
-        let result: StartupResult
+        let result: ConversationStartResult
         do {
             result = try await webRTCConnectionManager.connect(
                 auth: auth,
@@ -233,7 +229,7 @@ public final class Conversation: ObservableObject {
         auth: ConversationCredentials,
         config: ConversationConfig,
         provider: ConversationDependencyProvider
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         let connectionManager = provider.webSocketConnectionManager
         await prepareConversationStart(
             auth: auth, config: config,

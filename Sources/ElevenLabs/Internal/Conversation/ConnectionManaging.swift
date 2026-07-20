@@ -15,7 +15,7 @@ protocol ConnectionManaging: AnyObject {
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult
+    ) async throws -> ConversationStartResult
 
     func disconnect() async
     func send(data: Data) async throws
