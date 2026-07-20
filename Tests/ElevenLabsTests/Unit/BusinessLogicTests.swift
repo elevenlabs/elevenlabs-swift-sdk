@@ -137,7 +137,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         // Hold agent-ready so we can observe `.connecting` before startup finishes.
         mockWebRTCConnectionManager.autoSucceedAgentReady = false
         let startTask = Task {
-            try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
+            _ = try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
         }
 
         await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
