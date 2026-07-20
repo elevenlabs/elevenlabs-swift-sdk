@@ -26,11 +26,12 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     var room: Room?
 
-    var inputTrack: LocalAudioTrack?
-    var agentAudioTrack: RemoteAudioTrack?
+    var inputTrack: (any AudioTrackProtocol)?
+    var agentAudioTrack: (any AudioTrackProtocol)?
     var isMicrophoneMuted = true
 
     var errorHandler: ((Swift.Error?) -> Void)?
+    var onDisconnectStarted: (@MainActor () async -> Void)?
 
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
@@ -131,6 +132,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     func disconnect() async {
         disconnectCallCount += 1
+        await onDisconnectStarted?()
         onEventReceived = nil
         onDisconnected = nil
         errorHandler = nil
