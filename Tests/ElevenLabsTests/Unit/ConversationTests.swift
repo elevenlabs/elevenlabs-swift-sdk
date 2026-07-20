@@ -302,27 +302,17 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testToggleMicMuteWhenNotConnected() async {
-        do {
-            try await conversation.toggleMicMute()
-            XCTFail("Should throw error when not connected")
-        } catch let error as ConversationError {
-            XCTAssertEqual(error, .notConnected)
-        } catch {
-            XCTFail("Unexpected error type")
-        }
+    func testToggleMicMuteWhenNotConnectedIsNoOp() async throws {
+        try await conversation.toggleMicMute()
+
+        XCTAssertTrue(conversation.isMicMuted)
     }
 
     @MainActor
-    func testSetMicMutedWhenNotConnected() async {
-        do {
-            try await conversation.setMicMuted(true)
-            XCTFail("Should throw error when not connected")
-        } catch let error as ConversationError {
-            XCTAssertEqual(error, .notConnected)
-        } catch {
-            XCTFail("Unexpected error type")
-        }
+    func testSetMicMutedWhenNotConnectedIsNoOp() async throws {
+        try await conversation.setMicMuted(false)
+
+        XCTAssertTrue(conversation.isMicMuted)
     }
 
     @MainActor
