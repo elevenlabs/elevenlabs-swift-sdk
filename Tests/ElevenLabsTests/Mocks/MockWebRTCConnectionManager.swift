@@ -38,7 +38,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     private(set) var connectCallCount = 0
     private(set) var disconnectCallCount = 0
-    private(set) var lastNetworkConfiguration: LiveKitNetworkConfiguration = .default
+    private(set) var lastNetworkConfiguration: WebRTCConfiguration = .default
     private(set) var lastWaitTimeout: TimeInterval = 0
     private(set) var publishedPayloads: [Data] = []
 

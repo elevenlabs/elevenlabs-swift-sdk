@@ -197,10 +197,6 @@ public enum ElevenLabs {
 
     // MARK: - Re-exports
 
-    // Protocol event types are already public from their respective files
-    public typealias IceTransportPolicy = LiveKit.IceTransportPolicy
-    public typealias IceServer = LiveKit.IceServer
-
     // Re-export audio track types for advanced audio handling
     public typealias LocalAudioTrack = LiveKit.LocalAudioTrack
     public typealias RemoteAudioTrack = LiveKit.RemoteAudioTrack
