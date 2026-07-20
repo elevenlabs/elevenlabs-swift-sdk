@@ -43,6 +43,10 @@ final class Conversation: ObservableObject {
     /// Audio device management
     private var audioManager: ConversationAudioManager?
 
+    /// Externally registered audio observers. Kept attached across track swaps.
+    let agentObserverRegistry = AudioObserverRegistry()
+    let micObserverRegistry = AudioObserverRegistry()
+
     /// Agent state manager for event-based state tracking
     var agentStateManager: AgentStateManager?
 
@@ -155,6 +159,11 @@ final class Conversation: ObservableObject {
                 self?.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking)
             }
         }
+        webRTCConnectionManager.onTracksChanged = { [weak self] in
+            Task { @MainActor in
+                self?.refreshAudioObservers()
+            }
+        }
 
         await audioManager?.configure(with: config, callbacks: callbacks)
         if let pendingMuteState {
@@ -191,7 +200,38 @@ final class Conversation: ObservableObject {
             }
         }
 
+        // Attach to any tracks already present (mic, and the agent track if it
+        // was subscribed before the delegate callback fired).
+        refreshAudioObservers()
         return result
+    }
+
+    // MARK: - Audio observers
+
+    /// Register an observer for the agent's decoded output audio.
+    func addAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        agentObserverRegistry.add(observer)
+    }
+
+    /// Unregister a previously added agent audio observer.
+    func removeAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        agentObserverRegistry.remove(observer)
+    }
+
+    /// Register an observer for the local microphone input audio.
+    func addMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        micObserverRegistry.add(observer)
+    }
+
+    /// Unregister a previously added mic audio observer.
+    func removeMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        micObserverRegistry.remove(observer)
+    }
+
+    /// Reconcile registered observers with the currently available tracks.
+    func refreshAudioObservers() {
+        agentObserverRegistry.attach(to: agentAudioTrack)
+        micObserverRegistry.attach(to: inputTrack)
     }
 
     private func startTextOnlyConversation(
@@ -449,6 +489,9 @@ final class Conversation: ObservableObject {
         speakingTimer = nil
         pendingMuteState = nil
         agentState = .listening
+
+        agentObserverRegistry.reset()
+        micObserverRegistry.reset()
 
         audioManager?.cleanup()
         agentStateManager = nil

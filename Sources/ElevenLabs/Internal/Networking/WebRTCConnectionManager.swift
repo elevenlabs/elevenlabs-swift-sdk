@@ -19,13 +19,11 @@ enum WebRTCConnectionManagerError: Error {
 /// remote disconnect) plus an async readiness API.
 ///
 /// LiveKit observation is split across two `RoomDelegate` instances:
-/// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect
+/// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect, track changes
 /// - `LiveKitReadinessDelegate` — signals when the agent's audio track subscribes
 ///
-/// Note: `Room`, `LocalAudioTrack`, and `RemoteAudioTrack` are intentionally
-/// exposed on the public SDK surface (e.g. `Conversation.inputTrack`), so this
-/// type does not fully hide LiveKit from callers. It does centralize the
-/// dependency in one place.
+/// LiveKit room/track types stay internal to this manager; consumers observe
+/// audio via ``ConversationAudioObserver`` rather than LiveKit track APIs.
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
     var onDisconnected: (() async -> Void)?
@@ -35,6 +33,10 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     /// Fired when a remote participant starts or stops speaking.
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
+
+    /// Fired when an audio track is published/subscribed/unpublished/unsubscribed,
+    /// so callers can (re)attach audio observers to the current tracks.
+    var onTracksChanged: (@Sendable () -> Void)?
 
     var errorHandler: ((Swift.Error?) -> Void)?
 
@@ -237,7 +239,10 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 self?.handleIncomingData(data, metadataWaiter: metadataWaiter, logger: logger)
             },
             onRemoteSpeaking: { [weak self] isSpeaking in self?.onRemoteSpeakingChanged?(isSpeaking) },
-            onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() }
+            onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() },
+            onTracksChanged: { [weak self] in
+                Task { @MainActor in self?.onTracksChanged?() }
+            }
         )
         self.eventDelegate = eventDelegate
 
@@ -287,6 +292,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
         onRemoteSpeakingChanged = nil
+        onTracksChanged = nil
 
         await initiationMetadataWaiter?.cancel()
         initiationMetadataWaiter = nil
@@ -359,21 +365,24 @@ private func isAgentParticipant(_ participant: Participant) -> Bool {
 
 // MARK: – Room event delegate
 
-/// `RoomDelegate` that forwards data, remote speaking, and remote-disconnect events
-/// (agent leaving or room disconnect) to manager-supplied closures.
+/// `RoomDelegate` that forwards data, remote speaking, remote-disconnect, and
+/// audio track availability events to manager-supplied closures.
 final class LiveKitRoomEventDelegate: RoomDelegate {
     private let onData: @Sendable (Data) -> Void
     private let onRemoteSpeaking: @Sendable (Bool) -> Void
     private let onRemoteDisconnect: @Sendable () async -> Void
+    private let onTracksChanged: @Sendable () -> Void
 
     init(
         onData: @escaping @Sendable (Data) -> Void,
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void,
-        onRemoteDisconnect: @escaping @Sendable () async -> Void
+        onRemoteDisconnect: @escaping @Sendable () async -> Void,
+        onTracksChanged: @escaping @Sendable () -> Void = {}
     ) {
         self.onData = onData
         self.onRemoteSpeaking = onRemoteSpeaking
         self.onRemoteDisconnect = onRemoteDisconnect
+        self.onTracksChanged = onTracksChanged
     }
 
     nonisolated func room(
@@ -400,6 +409,27 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
         Task { [onRemoteDisconnect] in
             await onRemoteDisconnect()
         }
+    }
+
+    /// Audio track availability changes — used to (re)attach audio observers.
+    nonisolated func room(_: Room, participant _: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: RemoteParticipant, didUnsubscribeTrack publication: RemoteTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: LocalParticipant, didPublishTrack publication: LocalTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
     }
 }
 
