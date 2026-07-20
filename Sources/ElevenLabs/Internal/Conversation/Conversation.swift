@@ -538,7 +538,7 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            callbacks.onUnhandledClientToolCall?(toolCall)
+            callbacks.onClientToolCall?(toolCall)
             pendingToolCalls.append(toolCall)
 
         case let .vadScore(vad):
