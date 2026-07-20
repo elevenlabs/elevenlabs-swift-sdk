@@ -349,33 +349,10 @@ final class Conversation: ObservableObject {
     }
 
     /// Send the result of a client tool call back to the agent.
-    ///
-    /// The `Encodable` result is JSON-encoded before sending.
-    func sendToolResult(
-        for toolCallId: String,
-        result: some Encodable,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        let json = try String(decoding: JSONEncoder().encode(result), as: UTF8.self)
-        // `json` is statically a String, so this dispatches to the String overload
-        // below (a concrete match beats the generic) — not a recursive call.
-        try await sendToolResult(for: toolCallId, result: json, isError: isError, errorType: errorType)
-    }
-
-    /// Send a client tool result that is already a string (sent verbatim).
-    func sendToolResult(
-        for toolCallId: String,
-        result: String,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
+    func sendToolResult(_ result: ClientToolResultEvent) async throws {
         guard state.isConnected else { throw ConversationError.notConnected }
-        let toolResult = ClientToolResultEvent(
-            toolCallId: toolCallId, result: result, isError: isError, errorType: errorType
-        )
-        try await publish(.clientToolResult(toolResult))
-        pendingToolCalls.removeAll { $0.toolCallId == toolResult.toolCallId }
+        try await publish(.clientToolResult(result))
+        pendingToolCalls.removeAll { $0.toolCallId == result.toolCallId }
     }
 
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).

@@ -668,7 +668,9 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testSendToolResultWhenNotConnected() async {
         do {
-            try await conversation.sendToolResult(for: "tool-id", result: "result", isError: false)
+            try await conversation.sendToolResult(
+                .init(toolCallId: "tool-id", result: "result")
+            )
             XCTFail("Should throw error when not connected")
         } catch let error as ConversationError {
             XCTAssertEqual(error, .notConnected)
@@ -694,7 +696,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
 
         let payloadCountBeforeResult = mockWebRTCConnectionManager.publishedPayloads.count
-        try await conversation.sendToolResult(for: "call_123", result: "success")
+        try await conversation.sendToolResult(.init(toolCallId: "call_123", result: "success"))
 
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
         XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCountBeforeResult + 1)
@@ -713,8 +715,10 @@ final class ConversationTests: XCTestCase {
         _ = try await conversation.start(auth: .publicAgent(id: "test"))
 
         try await conversation.sendToolResult(
-            for: "call_42",
-            result: Weather(temperature: 25, condition: "Sunny")
+            .init(
+                toolCallId: "call_42",
+                result: Weather(temperature: 25, condition: "Sunny")
+            )
         )
 
         let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
