@@ -27,7 +27,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - Tool Call Tests
 
     func testToolCallLifecycle() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         // 1. Receive a tool call
         let toolCall = try ClientToolCallEvent(
@@ -64,7 +64,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             let condition: String
         }
 
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         try await conversation.sendToolResult(
             for: "call_42",
@@ -84,7 +84,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - Streaming Message Tests
 
     func testAgentStreamingMessages() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         // 1. Start streaming
         mockWebRTCConnectionManager.deliver(.agentChatResponsePart(
@@ -118,7 +118,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - End Call Logic
 
     func testAutomaticEndCallHandling() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         mockWebRTCConnectionManager.deliver(.agentToolResponse(AgentToolResponseEvent(
             toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 1
@@ -131,7 +131,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - Concurrency & Responsiveness
 
     func testStateTransitionsImmediatelyToConnecting() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "old-agent"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "old-agent"))
         await conversation.endConversation()
 
         // Hold agent-ready so we can observe `.connecting` before startup finishes.
@@ -155,7 +155,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     // MARK: - Audio Alignment
 
     func testAudioAlignmentUpdatesProperty() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         let alignment = AudioAlignment(
             chars: ["H", "e", "l", "l", "o"],
@@ -169,7 +169,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
     }
 
     func testEndConversationClearsLatestAudioState() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test"))
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"))
 
         let alignment = AudioAlignment(chars: ["H"], charStartTimesMs: [0], charDurationsMs: [100])
         mockWebRTCConnectionManager.deliver(.audio(AudioEvent(audioBase64: "base64", eventId: 1, alignment: alignment)))
