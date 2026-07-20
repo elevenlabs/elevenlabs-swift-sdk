@@ -24,7 +24,7 @@ private final class LiveKitAudioRendererAdapter: AudioRenderer, @unchecked Senda
 @MainActor
 final class AudioObserverRegistry {
     private var adapters: [ObjectIdentifier: LiveKitAudioRendererAdapter] = [:]
-    private weak var attachedTrack: AudioTrack?
+    private weak var attachedTrack: (any AudioTrackProtocol)?
 
     /// Number of currently registered observers.
     var registeredCount: Int {
@@ -51,7 +51,7 @@ final class AudioObserverRegistry {
     /// Point the registry at a (possibly new or `nil`) track. Detaches every
     /// adapter from the previous track and attaches them to the new one, so
     /// registered observers survive track swaps. Idempotent for the same track.
-    func attach(to track: AudioTrack?) {
+    func attach(to track: (any AudioTrackProtocol)?) {
         guard track !== attachedTrack else { return }
         if let attachedTrack {
             for adapter in adapters.values {

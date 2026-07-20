@@ -44,12 +44,12 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     private(set) var room: Room?
 
-    var inputTrack: LocalAudioTrack? {
-        room?.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
+    var inputTrack: (any AudioTrackProtocol)? {
+        room?.localParticipant.firstAudioPublication?.track as? any AudioTrackProtocol
     }
 
-    var agentAudioTrack: RemoteAudioTrack? {
-        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? RemoteAudioTrack
+    var agentAudioTrack: (any AudioTrackProtocol)? {
+        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? any AudioTrackProtocol
     }
 
     var isMicrophoneMuted: Bool {

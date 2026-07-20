@@ -77,11 +77,11 @@ final class Conversation: ObservableObject {
     private var activeContext: [String: String]?
 
     /// Audio tracks for advanced use cases
-    var inputTrack: LocalAudioTrack? {
+    var inputTrack: (any AudioTrackProtocol)? {
         activeWebRTCConnectionManager?.inputTrack
     }
 
-    var agentAudioTrack: RemoteAudioTrack? {
+    var agentAudioTrack: (any AudioTrackProtocol)? {
         activeWebRTCConnectionManager?.agentAudioTrack
     }
 
@@ -200,8 +200,6 @@ final class Conversation: ObservableObject {
             }
         }
 
-        // Attach to any tracks already present (mic, and the agent track if it
-        // was subscribed before the delegate callback fired).
         refreshAudioObservers()
         return result
     }
@@ -210,6 +208,7 @@ final class Conversation: ObservableObject {
 
     /// Register an observer for the agent's decoded output audio.
     func addAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        guard !isTearingDown else { return }
         agentObserverRegistry.add(observer)
     }
 
@@ -220,6 +219,7 @@ final class Conversation: ObservableObject {
 
     /// Register an observer for the local microphone input audio.
     func addMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        guard !isTearingDown else { return }
         micObserverRegistry.add(observer)
     }
 
@@ -230,6 +230,7 @@ final class Conversation: ObservableObject {
 
     /// Reconcile registered observers with the currently available tracks.
     func refreshAudioObservers() {
+        guard !isTearingDown else { return }
         agentObserverRegistry.attach(to: agentAudioTrack)
         micObserverRegistry.attach(to: inputTrack)
     }
@@ -277,10 +278,8 @@ final class Conversation: ObservableObject {
         else { return }
         state = .ended(reason: endReason)
 
-        // Disconnect synchronously to ensure clean state
-        await connectionManager.disconnect()
-
         tearDownActiveSession()
+        await connectionManager.disconnect()
 
         // Call user's onDisconnect callback if provided
         callbacks.onDisconnect?(disconnectReason)
@@ -410,6 +409,7 @@ final class Conversation: ObservableObject {
     let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
+    private var isTearingDown = false
 
     private func updateStartupStage(_ stage: ConversationStartupState) {
         guard state.isConnecting, state != .connecting(stage) else { return }
@@ -467,8 +467,8 @@ final class Conversation: ObservableObject {
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
         guard state.isConnecting else { return }
         state = .ended(reason: .userEnded)
-        await connectionManager.disconnect()
         tearDownActiveSession()
+        await connectionManager.disconnect()
     }
 
     /// Tear down operational state when an active session ends.
@@ -485,6 +485,7 @@ final class Conversation: ObservableObject {
     }
 
     private func cleanupTransientResources() {
+        isTearingDown = true
         speakingTimer?.cancel()
         speakingTimer = nil
         pendingMuteState = nil

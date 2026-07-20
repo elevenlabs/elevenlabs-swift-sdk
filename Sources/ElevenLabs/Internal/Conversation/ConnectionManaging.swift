@@ -27,8 +27,8 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     /// Fired when an audio track is published/subscribed/unpublished/unsubscribed.
     var onTracksChanged: (@Sendable () -> Void)? { get set }
-    var inputTrack: LocalAudioTrack? { get }
-    var agentAudioTrack: RemoteAudioTrack? { get }
+    var inputTrack: (any AudioTrackProtocol)? { get }
+    var agentAudioTrack: (any AudioTrackProtocol)? { get }
     var isMicrophoneMuted: Bool { get }
 
     func setMicrophoneMuted(_ muted: Bool) async throws
