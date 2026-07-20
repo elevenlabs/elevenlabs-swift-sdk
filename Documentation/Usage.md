@@ -287,13 +287,17 @@ class ConversationViewModel: ObservableObject {
                 result = "Unknown tool: \(toolCall.toolName)"
             }
             
-            try await conversation.sendToolResult(for: toolCall.toolCallId, result: result)
+            try await conversation.sendToolResult(
+                .init(toolCallId: toolCall.toolCallId, result: result)
+            )
         } catch {
             print("Tool execution failed: \(error)")
             try? await conversation.sendToolResult(
-                for: toolCall.toolCallId,
-                result: "Error: \(error.localizedDescription)",
-                isError: true
+                .init(
+                    toolCallId: toolCall.toolCallId,
+                    result: "Error: \(error.localizedDescription)",
+                    isError: true
+                )
             )
         }
     }

@@ -80,9 +80,10 @@ final class ConversationIntegrationTests: XCTestCase {
         let conv2 = conversation
         await assertThrowsConversationError(.notConnected) {
             try await conv2.sendToolResult(
-                for: "test-tool-call",
-                result: "Tool executed successfully",
-                isError: false
+                .init(
+                    toolCallId: "test-tool-call",
+                    result: "Tool executed successfully"
+                )
             )
         }
 

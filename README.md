@@ -122,15 +122,16 @@ private func handleToolCall(_ toolCall: ClientToolCallEvent) async {
 
         // Send the tool result back to the agent
         try await conversation?.sendToolResult(
-            for: toolCall.toolCallId,
-            result: result
+            .init(toolCallId: toolCall.toolCallId, result: result)
         )
     } catch {
         // Handle tool execution errors
         try? await conversation?.sendToolResult(
-            for: toolCall.toolCallId,
-            result: ["error": error.localizedDescription],
-            isError: true
+            .init(
+                toolCallId: toolCall.toolCallId,
+                result: ["error": error.localizedDescription],
+                isError: true
+            )
         )
     }
 }
@@ -206,7 +207,9 @@ Task {
             let result = await myAppAction(params)
 
             // 3. Send result back to the agent
-            try? await conversation.sendToolResult(for: call.toolCallId, result: result)
+            try? await conversation.sendToolResult(
+                .init(toolCallId: call.toolCallId, result: result)
+            )
         }
     }
 }

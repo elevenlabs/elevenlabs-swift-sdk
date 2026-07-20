@@ -87,6 +87,22 @@ public struct ClientToolResultEvent: Sendable {
         self.isError = isError || errorType != nil
         self.errorType = errorType
     }
+
+    /// JSON-encodes `result` before creating the event.
+    public init(
+        toolCallId: String,
+        result: some Encodable,
+        isError: Bool = false,
+        errorType: ClientToolErrorType? = nil
+    ) throws {
+        let json = try String(decoding: JSONEncoder().encode(result), as: UTF8.self)
+        self.init(
+            toolCallId: toolCallId,
+            result: json,
+            isError: isError,
+            errorType: errorType
+        )
+    }
 }
 
 /// Contextual update to the conversation

@@ -233,29 +233,8 @@ public final class ConversationClient: ObservableObject {
     }
 
     /// Send the result of a client tool call back to the agent.
-    ///
-    /// The `Encodable` result is JSON-encoded before sending.
-    public func sendToolResult(
-        for toolCallId: String,
-        result: some Encodable,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        try await requireSession().sendToolResult(
-            for: toolCallId, result: result, isError: isError, errorType: errorType
-        )
-    }
-
-    /// Send a client tool result that is already a string (sent verbatim).
-    public func sendToolResult(
-        for toolCallId: String,
-        result: String,
-        isError: Bool = false,
-        errorType: ClientToolErrorType? = nil
-    ) async throws {
-        try await requireSession().sendToolResult(
-            for: toolCallId, result: result, isError: isError, errorType: errorType
-        )
+    public func sendToolResult(_ result: ClientToolResultEvent) async throws {
+        try await requireSession().sendToolResult(result)
     }
 
     /// Mark a tool call as completed without sending a result. A best-effort
