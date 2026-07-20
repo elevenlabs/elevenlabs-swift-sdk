@@ -413,9 +413,8 @@ public final class Conversation: ObservableObject {
     var speakingTimer: Task<Void, Never>?
 
     private func updateStartupStage(_ stage: ConversationStartupState) {
-        if state != .connecting(stage) {
-            state = .connecting(stage)
-        }
+        guard state.isConnecting, state != .connecting(stage) else { return }
+        state = .connecting(stage)
     }
 
     /// Common preparation shared by voice and text-only startup paths.
