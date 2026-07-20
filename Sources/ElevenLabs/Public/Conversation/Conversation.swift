@@ -278,8 +278,6 @@ final class Conversation: ObservableObject {
             // Buffer the mute state to apply after connection completes
             pendingMuteState = muted
             isMicMuted = muted
-        } else {
-            throw ConversationError.notConnected
         }
     }
 
