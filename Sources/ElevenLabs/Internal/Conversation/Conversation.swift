@@ -29,9 +29,6 @@ final class Conversation: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
 
-    var lastAgentEventId: Int?
-    var lastFeedbackSubmittedEventId: Int?
-
     /// Pending mute state to apply after connection completes.
     /// Allows setting mute state during connection phase.
     private var pendingMuteState: Bool?
@@ -269,7 +266,6 @@ final class Conversation: ObservableObject {
 
         // Call user's onDisconnect callback if provided
         callbacks.onDisconnect?(disconnectReason)
-        callbacks.onCanSendFeedbackChange?(false)
     }
 
     /// Send a text message to the agent.
@@ -334,8 +330,6 @@ final class Conversation: ObservableObject {
 
         let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
         try await publish(event)
-        lastFeedbackSubmittedEventId = eventId
-        callbacks.onCanSendFeedbackChange?(false)
     }
 
     /// Approve or reject an MCP tool call request from the agent.
@@ -391,7 +385,6 @@ final class Conversation: ObservableObject {
         let mode = config.conversationOverrides.textOnly ? "text-only" : "voice"
         logger.info("Starting \(mode) conversation", context: activeContext)
 
-        callbacks.onCanSendFeedbackChange?(false)
         setupAgentStateManager()
 
         connectionManager.onEventReceived = { [weak self, weak connectionManager] event in
@@ -441,10 +434,6 @@ final class Conversation: ObservableObject {
         cleanupTransientResources()
 
         pendingToolCalls.removeAll()
-
-        lastAgentEventId = nil
-        lastFeedbackSubmittedEventId = nil
-        callbacks.onCanSendFeedbackChange?(false)
     }
 
     private func cleanupTransientResources() {
@@ -493,12 +482,8 @@ final class Conversation: ObservableObject {
 
         case let .agentResponse(e):
             upsertAgentMessage(content: e.response, eventId: e.eventId)
-            lastAgentEventId = e.eventId
             agentStateManager?.processSignal(.agentResponse)
             callbacks.onAgentResponse?(e.response, e.eventId)
-            if lastFeedbackSubmittedEventId.map({ e.eventId > $0 }) ?? true {
-                callbacks.onCanSendFeedbackChange?(true)
-            }
 
         case let .agentResponseCorrection(correction):
             upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
@@ -527,7 +512,6 @@ final class Conversation: ObservableObject {
             speakingTimer?.cancel()
             applyStateSignal(.interruption, fallback: .listening)
             callbacks.onInterruption?(interruptionEvent.eventId)
-            callbacks.onCanSendFeedbackChange?(false)
 
         case let .conversationMetadata(metadata):
             conversationMetadata = metadata
