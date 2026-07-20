@@ -430,6 +430,9 @@ final class ConversationTests: XCTestCase {
         }
 
         XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
+        mockWebRTCConnectionManager.deliverStartupState(.waitingForAgent(timeout: 1))
+        XCTAssertEqual(conversation.state, .error(conversationError))
+
         let errorsAfterConnectionFailure = await waitForValues(capturedErrors, count: 1)
         XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed("Mock connection failed")])
     }

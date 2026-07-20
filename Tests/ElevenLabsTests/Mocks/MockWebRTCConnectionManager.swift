@@ -41,6 +41,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     private(set) var lastNetworkConfiguration: WebRTCConfiguration = .default
     private(set) var lastWaitTimeout: TimeInterval = 0
     private(set) var publishedPayloads: [Data] = []
+    private var startupStateChange: ((ConversationStartupState) -> Void)?
 
     private var waitContinuation: CheckedContinuation<AgentReadyWaitResult, Never>?
     private var pendingWaitResult: AgentReadyWaitResult?
@@ -58,6 +59,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
+        startupStateChange = onStartupStateChange
         connectCallCount += 1
         lastNetworkConfiguration = config.networkConfiguration
         var metrics = ConversationStartupMetrics()
@@ -95,6 +97,10 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             callInfo: CallInfo(agentId: auth.agentId),
             metrics: metrics
         )
+    }
+
+    func deliverStartupState(_ state: ConversationStartupState) {
+        startupStateChange?(state)
     }
 
     func disconnect() async {
