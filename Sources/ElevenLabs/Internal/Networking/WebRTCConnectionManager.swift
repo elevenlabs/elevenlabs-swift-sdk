@@ -58,6 +58,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     private var eventDelegate: LiveKitRoomEventDelegate?
     private var readinessDelegate: LiveKitReadinessDelegate?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
     private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
@@ -72,13 +73,18 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     // MARK: – Public API
 
     /// Full WebRTC startup sequence: resolve token → request mic permission →
-    /// connect room → wait for agent → send conversation_init (sent once).
+    /// connect room → wait for agent → send init → wait for initiation metadata.
     @MainActor
     func connect(
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
         logger.info("Starting conversation startup sequence", context: ["agentId": auth.agentId])
@@ -104,7 +110,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 details: connectionDetails,
                 enableMic: permissionGranted,
                 throwOnMicrophoneFailure: throwOnMicFailure,
-                networkConfiguration: config.networkConfiguration
+                networkConfiguration: config.networkConfiguration,
+                metadataWaiter: waiter
             )
         }
 
@@ -127,9 +134,15 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
 
-        metrics.total = Date().timeIntervalSince(startTime)
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
         return ConversationStartResult(
-            callInfo: CallInfo(agentId: auth.agentId),
+            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
             metrics: metrics
         )
     }
@@ -199,7 +212,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool,
-        networkConfiguration: WebRTCConfiguration
+        networkConfiguration: WebRTCConfiguration,
+        metadataWaiter: ConversationInitiationMetadataWaiter
     ) async throws {
         await readinessDelegate?.release()
 
@@ -208,7 +222,9 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
         let logger = logger
         let eventDelegate = LiveKitRoomEventDelegate(
-            onData: { [weak self] data in self?.handleIncomingData(data, logger: logger) },
+            onData: { [weak self] data in
+                self?.handleIncomingData(data, metadataWaiter: metadataWaiter, logger: logger)
+            },
             onRemoteSpeaking: { [weak self] isSpeaking in self?.onRemoteSpeakingChanged?(isSpeaking) },
             onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() }
         )
@@ -261,6 +277,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         errorHandler = nil
         onRemoteSpeakingChanged = nil
 
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
         await readinessDelegate?.release()
         readinessDelegate = nil
 

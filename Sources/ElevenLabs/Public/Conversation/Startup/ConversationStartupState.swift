@@ -9,4 +9,5 @@ public enum ConversationStartupState: Sendable, Equatable {
     case waitingForAgent(timeout: TimeInterval)
     case agentReady(ConversationAgentReadyReport)
     case sendingConversationInit
+    case waitingForInitiationMetadata(timeout: TimeInterval)
 }
