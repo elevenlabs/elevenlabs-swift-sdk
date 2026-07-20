@@ -34,7 +34,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -73,7 +73,10 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
 
         metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: auth.agentId),
+            metrics: metrics
+        )
     }
 
     func send(data: Data) async throws {

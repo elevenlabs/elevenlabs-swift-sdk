@@ -20,7 +20,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         connectCallCount += 1
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
@@ -53,7 +53,10 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         }
 
         metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: auth.agentId),
+            metrics: metrics
+        )
     }
 
     func disconnect() async {

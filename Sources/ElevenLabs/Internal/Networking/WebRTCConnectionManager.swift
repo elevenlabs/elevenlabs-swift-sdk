@@ -78,7 +78,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
         logger.info("Starting conversation startup sequence", context: ["agentId": auth.agentId])
@@ -128,7 +128,10 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
 
         metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: auth.agentId),
+            metrics: metrics
+        )
     }
 
     /// Race the delegate's "first remote participant joined" signal against `timeout`.
