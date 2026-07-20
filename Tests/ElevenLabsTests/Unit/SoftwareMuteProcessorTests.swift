@@ -13,7 +13,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -28,7 +28,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -43,7 +43,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         let expectation = expectation(description: "should fire")
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -61,7 +61,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -77,7 +77,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -92,8 +92,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testDoesNotChangeBufferedDataIfUnmuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
 
         let buffer = try loadBuffer(named: "spoken-audio")
@@ -113,9 +112,23 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testZerosBufferedDataIfMuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
+
+        let buffer = try loadBuffer(named: "spoken-audio")
+        processor.setMuted(true)
+        processor.audioProcessingProcess(audioBuffer: buffer)
+
+        for ch in 0 ..< buffer.channels {
+            let ptr1 = buffer.rawBuffer(forChannel: ch)
+            for f in 0 ..< buffer.frames {
+                XCTAssertEqual(ptr1[f], 0, "unzeroed data at channel \(ch), frame \(f)")
+            }
+        }
+    }
+
+    func testZerosBufferedDataIfMutedWithoutSpeechDetectionCallback() throws {
+        let processor = SoftwareMuteProcessor(onSpeechDetectedWhileMuted: nil)
 
         let buffer = try loadBuffer(named: "spoken-audio")
         processor.setMuted(true)

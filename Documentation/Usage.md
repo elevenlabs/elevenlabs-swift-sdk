@@ -124,7 +124,7 @@ Control the user's microphone state directly without needing to manage `AVAudioS
 ```swift
 class AudioControlViewModel: ObservableObject {
     @Published var isAgentReady = false
-    @Published var isMuted = true
+    @Published var isMicMuted = true
     
     private var conversation: Conversation?
     private var cancellables = Set<AnyCancellable>()
@@ -137,26 +137,26 @@ class AudioControlViewModel: ObservableObject {
                     Task { @MainActor in
                         self?.isAgentReady = true
                         // Automatically unmute when agent is ready
-                        try? await self?.setMuted(false)
+                        try? await self?.setMicMuted(false)
                     }
                 }
             )
         )
         
         // Observe mute state changes from the conversation
-        conversation?.$isMuted
+        conversation?.$isMicMuted
             .receive(on: DispatchQueue.main)
-            .assign(to: &$isMuted)
+            .assign(to: &$isMicMuted)
     }
     
-    func setMuted(_ muted: Bool) async {
+    func setMicMuted(_ muted: Bool) async {
         guard let conversation else { return }
-        try? await conversation.setMuted(muted)
+        try? await conversation.setMicMuted(muted)
     }
     
-    func toggleMute() async {
+    func toggleMicMute() async {
         guard let conversation else { return }
-        try? await conversation.toggleMute()
+        try? await conversation.toggleMicMute()
     }
 }
 
@@ -169,15 +169,15 @@ struct AudioControlView: View {
             if viewModel.isAgentReady {
                 Button(action: {
                     Task {
-                        await viewModel.toggleMute()
+                        await viewModel.toggleMicMute()
                     }
                 }) {
-                    Image(systemName: viewModel.isMuted ? "mic.slash" : "mic")
+                    Image(systemName: viewModel.isMicMuted ? "mic.slash" : "mic")
                         .font(.largeTitle)
                 }
                 .buttonStyle(.borderedProminent)
                 
-                Text(viewModel.isMuted ? "Muted" : "Unmuted")
+                Text(viewModel.isMicMuted ? "Muted" : "Unmuted")
                     .foregroundColor(.secondary)
             } else {
                 ProgressView("Connecting...")
@@ -504,6 +504,7 @@ The `AudioPipelineConfiguration` allows you to fine-tune the hardware audio beha
 let audioConfig = AudioPipelineConfiguration(
     // .inputMixer (default) - uses standard system mixing
     // .voiceProcessing - optimized for speech (AEC/NS)
+    // .software(speechThreshold:notificationThrottle:) - silent mute with callbacks
     microphoneMuteMode: .inputMixer,
     
     // Set to true to minimize latency of the first word

@@ -24,7 +24,7 @@ public final class Conversation: ObservableObject {
     @Published public internal(set) var startupMetrics: ConversationStartupMetrics?
     @Published public internal(set) var messages: [Message] = []
     @Published public internal(set) var agentState: ElevenLabs.AgentState = .listening
-    @Published public internal(set) var isMuted: Bool = true // Start as true, will be updated based on actual state
+    @Published public internal(set) var isMicMuted: Bool = true
 
     /// Stream of client tool calls that need to be executed by the app
     @Published public internal(set) var pendingToolCalls: [ClientToolCallEvent] = []
@@ -193,7 +193,7 @@ public final class Conversation: ObservableObject {
         if audioManager == nil {
             setupAudioManager()
         }
-        await audioManager?.configure(with: config)
+        await audioManager?.configure(with: config, callbacks: callbacks)
 
         let result: StartupResult
         do {
@@ -216,13 +216,13 @@ public final class Conversation: ObservableObject {
             pendingMuteState = nil
             do {
                 try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
-                isMuted = pendingMute
+                isMicMuted = pendingMute
             } catch {
                 logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
             }
         }
 
-        isMuted = webRTCConnectionManager.isMicrophoneMuted
+        isMicMuted = webRTCConnectionManager.isMicrophoneMuted
         return result
     }
 
@@ -289,32 +289,29 @@ public final class Conversation: ObservableObject {
         appendMessage(role: .user, content: text)
     }
 
-    /// Toggle / set microphone
-    public func toggleMute() async throws {
-        try await setMuted(!isMuted)
+    /// Toggle the local microphone mute state.
+    public func toggleMicMute() async throws {
+        try await setMicMuted(!isMicMuted)
     }
 
-    public func setMuted(_ muted: Bool) async throws {
+    /// Mute or unmute the local microphone.
+    public func setMicMuted(_ muted: Bool) async throws {
         if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
             softwareMuteProcessor.setMuted(muted)
-            isMuted = muted
+            isMicMuted = muted
             return
         }
-        try await setMicrophoneMuted(muted)
+        try await setHardwareMicMuted(muted)
     }
 
-    /// Mute the microphone. Normally calling setMuted will mute the microphone
-    /// but if software mute is enabled, the setMuted call will just toggle
-    /// the software mute. If you still want to explicitly mute the microphone
-    /// you can use this method.
-    public func setMicrophoneMuted(_ muted: Bool) async throws {
+    func setHardwareMicMuted(_ muted: Bool) async throws {
         if state.isActive {
             guard let webRTCConnectionManager = activeWebRTCConnectionManager else {
                 throw ConversationError.notConnected
             }
             do {
                 try await webRTCConnectionManager.setMicrophoneMuted(muted)
-                isMuted = muted
+                isMicMuted = muted
                 pendingMuteState = nil
             } catch WebRTCConnectionManagerError.roomUnavailable {
                 throw ConversationError.notConnected
@@ -324,7 +321,7 @@ public final class Conversation: ObservableObject {
         } else if state == .connecting {
             // Buffer the mute state to apply after connection completes
             pendingMuteState = muted
-            isMuted = muted
+            isMicMuted = muted
         } else {
             throw ConversationError.notConnected
         }
@@ -530,7 +527,7 @@ public final class Conversation: ObservableObject {
         speakingTimer = nil
         pendingMuteState = nil
         agentState = .listening
-        isMuted = true
+        isMicMuted = true
 
         audioManager?.cleanup()
         agentStateManager = nil
