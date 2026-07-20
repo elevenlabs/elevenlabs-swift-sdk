@@ -2,7 +2,7 @@ import Foundation
 
 public enum ConversationError: LocalizedError, Sendable, Equatable {
     case notConnected
-    case alreadyActive
+    case alreadyStarted
     case connectionFailed(String) // Store error description instead of Error for Equatable
     case authenticationFailed(String)
     case agentTimeout
@@ -22,7 +22,7 @@ public enum ConversationError: LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notConnected: "Conversation is not connected."
-        case .alreadyActive: "Conversation is already active."
+        case .alreadyStarted: "Conversation has already been started."
         case let .connectionFailed(description): "Connection failed: \(description)"
         case let .authenticationFailed(msg): "Authentication failed: \(msg)"
         case .agentTimeout: "Agent did not join in time."

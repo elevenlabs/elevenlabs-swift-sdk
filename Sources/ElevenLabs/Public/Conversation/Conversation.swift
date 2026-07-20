@@ -4,47 +4,35 @@ import LiveKit
 
 // swiftlint:disable file_length type_body_length
 
-/// The central entry point for the ElevenLabs Conversational AI SDK.
+/// A single-use conversation session, created by and owned by `ConversationClient`.
 ///
-/// **Role:**
-/// - Manages the lifecycle of a single conversation session.
-/// - Coordinates state between the network layer (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
-/// (`EventParser`), and the UI (`ObservableObject`).
-/// - Handles audio device management and permission checks.
-///
-/// **Usage:**
-/// Create an instance via `ElevenLabs.startConversation(...)`. Use the `@Published` properties
-/// to bind your UI to conversation state.
+/// Manages the lifecycle of one conversation: network layer
+/// (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
+/// (`EventParser`), and audio device setup.
 @MainActor
-public final class Conversation: ObservableObject {
-    // MARK: - Public State
+final class Conversation: ObservableObject {
+    // MARK: - State
 
-    @Published public internal(set) var state: ConversationState = .idle
-    @Published public internal(set) var messages: [Message] = []
-    @Published public internal(set) var agentState: ElevenLabs.AgentState = .listening
-    @Published public internal(set) var isMicMuted: Bool = true
+    @Published var state: ConversationState = .idle
+    @Published var messages: [Message] = []
+    @Published var agentState: ElevenLabs.AgentState = .listening
+    @Published var isMicMuted: Bool = true
 
     /// Stream of client tool calls that need to be executed by the app
-    @Published public internal(set) var pendingToolCalls: [ClientToolCallEvent] = []
+    @Published var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
-    @Published public internal(set) var conversationMetadata: ConversationMetadataEvent?
+    @Published var conversationMetadata: ConversationMetadataEvent?
 
     /// MCP tool calls from the agent
-    @Published public internal(set) var mcpToolCalls: [MCPToolCallEvent] = []
+    @Published var mcpToolCalls: [MCPToolCallEvent] = []
 
     /// Current MCP connection status for all integrations
-    @Published public internal(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
-
-    /// Latest audio alignment payload emitted by the agent.
-    @Published public internal(set) var latestAudioAlignment: AudioAlignment?
-
-    /// Latest audio event emitted by the agent.
-    @Published public internal(set) var latestAudioEvent: AudioEvent?
+    @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
 
     /// Device lists (optional to expose; keep `internal` if you don't want them public)
-    @Published public internal(set) var audioDevices: [AudioDevice] = []
-    @Published public internal(set) var selectedAudioDeviceID: String = ""
+    @Published var audioDevices: [AudioDevice] = []
+    @Published var selectedAudioDeviceID: String = ""
 
     var lastAgentEventId: Int?
     var lastFeedbackSubmittedEventId: Int?
@@ -86,11 +74,11 @@ public final class Conversation: ObservableObject {
     private var activeContext: [String: String]?
 
     /// Audio tracks for advanced use cases
-    public var inputTrack: LocalAudioTrack? {
+    var inputTrack: LocalAudioTrack? {
         activeWebRTCConnectionManager?.inputTrack
     }
 
-    public var agentAudioTrack: RemoteAudioTrack? {
+    var agentAudioTrack: RemoteAudioTrack? {
         activeWebRTCConnectionManager?.agentAudioTrack
     }
 
@@ -133,36 +121,18 @@ public final class Conversation: ObservableObject {
         agentStateManager = manager
     }
 
-    // MARK: - Public API
-
-    /// Start a conversation with an agent using agent ID.
-    ///
-    /// Each call to this method creates a fresh Room object, ensuring clean state
-    /// and preventing any interference from previous conversations.
-    public func startConversation(
-        with agentId: String,
-        config: ConversationConfig = .init()
-    ) async throws -> ConversationStartResult {
-        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config)
-    }
+    // MARK: - API
 
     /// Start a conversation using authentication configuration.
-    ///
-    /// Each call to this method creates a fresh Room object, ensuring clean state
-    /// and preventing any interference from previous conversations.
-    public func startConversation(
-        auth: ConversationCredentials,
-        config: ConversationConfig = .init()
-    ) async throws -> ConversationStartResult {
-        guard state == .idle || state.isEnded || state.isError else {
-            throw ConversationError.alreadyActive
+    func start(auth: ConversationCredentials) async throws -> ConversationStartResult {
+        guard state == .idle else {
+            throw ConversationError.alreadyStarted
         }
 
         let result: ConversationStartResult = if config.conversationOverrides.textOnly {
-            try await startTextOnlyConversation(auth: auth, config: config, provider: dependencyProvider)
+            try await startTextOnlyConversation(auth: auth)
         } else {
-            try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
+            try await startVoiceConversation(auth: auth)
         }
 
         state = .connected(result.callInfo)
@@ -171,13 +141,11 @@ public final class Conversation: ObservableObject {
     }
 
     private func startVoiceConversation(
-        auth: ConversationCredentials,
-        config: ConversationConfig,
-        provider: any ConversationDependencyProvider
+        auth: ConversationCredentials
     ) async throws -> ConversationStartResult {
-        let webRTCConnectionManager = provider.webRTCConnectionManager
-        await prepareConversationStart(
-            auth: auth, config: config,
+        let webRTCConnectionManager = dependencyProvider.webRTCConnectionManager
+        prepareConversationStart(
+            auth: auth,
             connectionManager: webRTCConnectionManager
         )
 
@@ -187,9 +155,6 @@ public final class Conversation: ObservableObject {
             }
         }
 
-        if audioManager == nil {
-            setupAudioManager()
-        }
         await audioManager?.configure(with: config, callbacks: callbacks)
 
         let result: ConversationStartResult
@@ -224,13 +189,11 @@ public final class Conversation: ObservableObject {
     }
 
     private func startTextOnlyConversation(
-        auth: ConversationCredentials,
-        config: ConversationConfig,
-        provider: ConversationDependencyProvider
+        auth: ConversationCredentials
     ) async throws -> ConversationStartResult {
-        let connectionManager = provider.webSocketConnectionManager
-        await prepareConversationStart(
-            auth: auth, config: config,
+        let connectionManager = dependencyProvider.webSocketConnectionManager
+        prepareConversationStart(
+            auth: auth,
             connectionManager: connectionManager
         )
 
@@ -253,21 +216,13 @@ public final class Conversation: ObservableObject {
 
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
-    public func endConversation() async {
-        await endConversation(disconnectReason: .user, endReason: .userEnded)
-    }
-
-    private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
-        // Allow ending during both connected and connecting states
-        guard state.isConnected || state.isConnecting else { return }
-        guard let connectionManager = activeConnectionManager else {
-            // No connection manager yet, just reset state
-            if state.isConnecting {
-                state = .idle
-                tearDownActiveSession()
-            }
-            return
-        }
+    func endConversation(
+        disconnectReason: DisconnectionReason = .user,
+        endReason: EndReason = .userEnded
+    ) async {
+        guard state.isConnected || state.isConnecting,
+              let connectionManager = activeConnectionManager
+        else { return }
         state = .ended(reason: endReason)
 
         // Disconnect synchronously to ensure clean state
@@ -281,7 +236,7 @@ public final class Conversation: ObservableObject {
     }
 
     /// Send a text message to the agent.
-    public func sendMessage(_ text: String) async throws {
+    func sendMessage(_ text: String) async throws {
         guard state.isConnected else {
             throw ConversationError.notConnected
         }
@@ -291,12 +246,12 @@ public final class Conversation: ObservableObject {
     }
 
     /// Toggle the local microphone mute state.
-    public func toggleMicMute() async throws {
+    func toggleMicMute() async throws {
         try await setMicMuted(!isMicMuted)
     }
 
     /// Mute or unmute the local microphone.
-    public func setMicMuted(_ muted: Bool) async throws {
+    func setMicMuted(_ muted: Bool) async throws {
         if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
             softwareMuteProcessor.setMuted(muted)
             isMicMuted = muted
@@ -329,21 +284,21 @@ public final class Conversation: ObservableObject {
     }
 
     /// Interrupt the agent while speaking.
-    public func interruptAgent() async throws {
+    func interruptAgent() async throws {
         guard state.isConnected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.userActivity
         try await publish(event)
     }
 
     /// Contextual update to agent (system prompt-ish).
-    public func updateContext(_ context: String) async throws {
+    func updateContext(_ context: String) async throws {
         guard state.isConnected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.contextualUpdate(ContextualUpdateEvent(text: context))
         try await publish(event)
     }
 
     /// Send feedback (like/dislike) for an event/message id.
-    public func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
+    func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
         guard state.isConnected else {
             throw ConversationError.notConnected
         }
@@ -358,7 +313,7 @@ public final class Conversation: ObservableObject {
     /// - Parameters:
     ///   - toolCallId: The tool call identifier from `MCPToolCallEvent`.
     ///   - isApproved: Pass `true` to approve, `false` to reject.
-    public func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
+    func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
         guard state.isConnected else { throw ConversationError.notConnected }
         let approval = MCPToolApprovalResultEvent(toolCallId: toolCallId, isApproved: isApproved)
         try await publish(.mcpToolApprovalResult(approval))
@@ -367,7 +322,7 @@ public final class Conversation: ObservableObject {
     /// Send the result of a client tool call back to the agent.
     ///
     /// The `Encodable` result is JSON-encoded before sending.
-    public func sendToolResult(
+    func sendToolResult(
         for toolCallId: String,
         result: some Encodable,
         isError: Bool = false,
@@ -380,7 +335,7 @@ public final class Conversation: ObservableObject {
     }
 
     /// Send a client tool result that is already a string (sent verbatim).
-    public func sendToolResult(
+    func sendToolResult(
         for toolCallId: String,
         result: String,
         isError: Bool = false,
@@ -395,7 +350,7 @@ public final class Conversation: ObservableObject {
     }
 
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
-    public func markToolCallCompleted(_ toolCallId: String) {
+    func markToolCallCompleted(_ toolCallId: String) {
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
 
@@ -407,7 +362,7 @@ public final class Conversation: ObservableObject {
         activeConnectionManager as? any WebRTCConnectionManaging
     }
 
-    var config: ConversationConfig
+    let config: ConversationConfig
     let callbacks: ConversationCallbacks
 
     var speakingTimer: Task<Void, Never>?
@@ -420,21 +375,10 @@ public final class Conversation: ObservableObject {
     /// Common preparation shared by voice and text-only startup paths.
     private func prepareConversationStart(
         auth: ConversationCredentials,
-        config: ConversationConfig,
         connectionManager: any ConnectionManaging
-    ) async {
-        let previousConnectionManager = activeConnectionManager
+    ) {
         state = .connecting(.preparing)
-
-        if let previousConnectionManager, previousConnectionManager !== connectionManager {
-            await previousConnectionManager.disconnect()
-        }
-
         activeConnectionManager = connectionManager
-        // Reset the target manager too; dependency providers may reuse manager instances across starts.
-        await connectionManager.disconnect()
-        cleanupPreviousConversation()
-        self.config = config
 
         activeContext = ["agentId": auth.agentId]
         let mode = config.conversationOverrides.textOnly ? "text-only" : "voice"
@@ -474,28 +418,15 @@ public final class Conversation: ObservableObject {
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
-        cleanupTransientResources()
+        guard state.isConnecting else { return }
+        state = .ended(reason: .userEnded)
         await connectionManager.disconnect()
-        state = .idle
-    }
-
-    /// Clean up state from any previous conversation to ensure a fresh start.
-    /// Called when starting a new session; wipes both operational and display state.
-    private func cleanupPreviousConversation() {
         tearDownActiveSession()
-
-        messages.removeAll()
-        mcpToolCalls.removeAll()
-        mcpConnectionStatus = nil
-        conversationMetadata = nil
-
-        logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
     }
 
     /// Tear down operational state when an active session ends.
     /// Preserves user-visible display state (messages, MCP activity, conversation
-    /// metadata, startup metrics) so the transcript remains visible until a new
-    /// conversation is started.
+    /// metadata) so `ConversationClient` can keep the completed transcript visible.
     private func tearDownActiveSession() {
         cleanupTransientResources()
 
@@ -504,8 +435,6 @@ public final class Conversation: ObservableObject {
         lastAgentEventId = nil
         lastFeedbackSubmittedEventId = nil
         callbacks.onCanSendFeedbackChange?(false)
-        latestAudioEvent = nil
-        latestAudioAlignment = nil
     }
 
     private func cleanupTransientResources() {
