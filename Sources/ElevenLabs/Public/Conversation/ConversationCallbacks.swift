@@ -45,9 +45,6 @@ public struct ConversationCallbacks: Sendable {
     /// Called when audio alignment metadata is emitted.
     public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
 
-    /// Called when feedback availability changes.
-    public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
-
     /// Called when a client tool call is received without a registered handler.
     public var onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
@@ -69,7 +66,6 @@ public struct ConversationCallbacks: Sendable {
         onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
-        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
         onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
         onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
     ) {
@@ -87,7 +83,6 @@ public struct ConversationCallbacks: Sendable {
         self.onInterruption = onInterruption
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
-        self.onCanSendFeedbackChange = onCanSendFeedbackChange
         self.onClientToolCall = onClientToolCall
         self.onAgentStateChange = onAgentStateChange
     }

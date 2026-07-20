@@ -557,40 +557,21 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
     }
 
-    func testAgentResponseCallbackTogglesFeedbackAvailability() async throws {
-        let gotResponse = expectation(description: "agent response")
-        // Feedback flips more than once (start→false, response→true, feedback→false).
-        let feedbackStates = ValueRecorder<Bool>()
-
-        let callbacks = makeCallbacks(configure: { callbacks in
-            callbacks.onAgentResponse = { text, eventId in
-                XCTAssertEqual(text, "Hello")
-                XCTAssertEqual(eventId, 42)
-                gotResponse.fulfill()
-            }
-            callbacks.onCanSendFeedbackChange = { canSend in
-                Task { await feedbackStates.append(canSend) }
-            }
-        })
-
+    func testSendFeedbackWhileConnected() async throws {
         let conversation = Conversation(
             dependencyProvider: dependencyProvider,
-            config: makeConfig(),
-            callbacks: callbacks
+            config: makeConfig()
         )
 
         _ = try await conversation.start(auth: .publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)))
-
-        await fulfillment(of: [gotResponse], timeout: 1.0)
-        let initialFeedbackState = await waitForLastValue(feedbackStates) { $0 == true }
-        XCTAssertEqual(initialFeedbackState, true)
-
         try await conversation.sendFeedback(FeedbackEvent.Score.like, eventId: 42)
 
-        let updatedFeedbackState = await waitForLastValue(feedbackStates) { $0 == false }
-        XCTAssertEqual(updatedFeedbackState, false)
+        let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "feedback")
+        XCTAssertEqual(json["score"] as? String, "like")
+        XCTAssertEqual(json["event_id"] as? Int, 42)
     }
 
     func testVadScoreCallbackReceivesScores() async throws {
@@ -635,34 +616,6 @@ final class ConversationTests: XCTestCase {
         )))
 
         await fulfillment(of: [gotTool], timeout: 1.0)
-    }
-
-    func testInterruptionCallbackDisablesFeedback() async throws {
-        let gotInterruption = expectation(description: "interruption")
-        let feedbackStates = ValueRecorder<Bool>()
-
-        let callbacks = makeCallbacks(configure: { callbacks in
-            callbacks.onInterruption = { id in
-                XCTAssertEqual(id, 7)
-                gotInterruption.fulfill()
-            }
-            callbacks.onCanSendFeedbackChange = { canSend in
-                Task { await feedbackStates.append(canSend) }
-            }
-        })
-
-        let conversation = Conversation(
-            dependencyProvider: dependencyProvider,
-            config: makeConfig(),
-            callbacks: callbacks
-        )
-        _ = try await conversation.start(auth: .publicAgent(id: "test"))
-
-        mockWebRTCConnectionManager.deliver(.interruption(InterruptionEvent(eventId: 7)))
-
-        await fulfillment(of: [gotInterruption], timeout: 1.0)
-        let interruptionFeedbackState = await waitForLastValue(feedbackStates) { $0 == false }
-        XCTAssertEqual(interruptionFeedbackState, false)
     }
 
     @MainActor

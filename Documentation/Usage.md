@@ -498,10 +498,6 @@ let callbacks = ConversationCallbacks(
     onAudioAlignment: { alignment in
         // Real-time word highlighting timing.
     },
-    onCanSendFeedbackChange: { canSend in
-        // Enable/disable your 'Thumbs Up/Down' buttons in the UI
-        self.showFeedbackUI = canSend
-    },
     onError: { error in
         print("A non-fatal or startup error occurred: \(error)")
     }
@@ -553,35 +549,29 @@ let config = ConversationConfig(startupConfiguration: startupConfig)
 
 ## Feedback & Context {#feedback-context}
 
-Handle feedback (like/dislike) and contextual updates to the agent.
+Feedback can be sent whenever the conversation is connected.
 
 ```swift
-// 1) Setup: react to feedback availability
-var canSendFeedback = false
-
 let callbacks = ConversationCallbacks(
     onAgentResponse: { text, eventId in
         print("Agent:", text, "(event:", eventId, ")")
-    },
-    onCanSendFeedbackChange: { can in
-        canSendFeedback = can
-        // e.g., refresh your UI
     }
 )
 
-let conversation = try await ElevenLabs.startConversation(agentId: "agent_123", callbacks: callbacks)
+let client = ConversationClient(callbacks: callbacks)
+_ = try await client.startConversation(agentId: "agent_123")
 
-// 2) Sending feedback from your UI
-func thumbsUp(latestEventId: Int) {
-    Task { try? await conversation.sendFeedback(.like, eventId: latestEventId) }
+func thumbsUp(eventId: Int) async throws {
+    guard client.state.isConnected else { return }
+    try await client.sendFeedback(.like, eventId: eventId)
 }
 
-func thumbsDown(latestEventId: Int) {
-    Task { try? await conversation.sendFeedback(.dislike, eventId: latestEventId) }
+func thumbsDown(eventId: Int) async throws {
+    guard client.state.isConnected else { return }
+    try await client.sendFeedback(.dislike, eventId: eventId)
 }
 
-// 3) Contextual updates (e.g., user preferences)
-Task { try? await conversation.updateContext("user_prefers_detailed_answers=true") }
+try await client.updateContext("user_prefers_detailed_answers=true")
 ```
 
 ---
