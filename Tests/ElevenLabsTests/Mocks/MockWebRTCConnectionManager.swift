@@ -19,6 +19,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
+    var onTracksChanged: (@Sendable () -> Void)?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
     private var eventHandlerInstalled: CheckedContinuation<Void, Never>?
@@ -134,6 +135,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
         onRemoteSpeakingChanged = nil
+        onTracksChanged = nil
         room = nil
         // Only cancel an in-flight agent-ready wait — don't stash `.cancelled` for the next connect.
         if waitContinuation != nil {
