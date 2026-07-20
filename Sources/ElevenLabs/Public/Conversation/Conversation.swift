@@ -20,8 +20,6 @@ public final class Conversation: ObservableObject {
     // MARK: - Public State
 
     @Published public internal(set) var state: ConversationState = .idle
-    @Published public internal(set) var startupState: ConversationStartupState = .idle
-    @Published public internal(set) var startupMetrics: ConversationStartupMetrics?
     @Published public internal(set) var messages: [Message] = []
     @Published public internal(set) var agentState: ElevenLabs.AgentState = .listening
     @Published public internal(set) var isMicMuted: Bool = true
@@ -157,7 +155,7 @@ public final class Conversation: ObservableObject {
         auth: ConversationCredentials,
         config: ConversationConfig = .init()
     ) async throws {
-        guard state == .idle || state.isEnded else {
+        guard state == .idle || state.isEnded || state.isError else {
             throw ConversationError.alreadyActive
         }
 
@@ -167,9 +165,7 @@ public final class Conversation: ObservableObject {
             try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
         }
 
-        state = .connected(.init(agentId: result.agentId))
-        startupMetrics = result.metrics
-        updateStartupState(.connected(CallInfo(agentId: result.agentId), result.metrics))
+        state = .connected(CallInfo(agentId: result.agentId), result.metrics)
         callbacks.onAgentReady?()
     }
 
@@ -200,13 +196,13 @@ public final class Conversation: ObservableObject {
             result = try await webRTCConnectionManager.connect(
                 auth: auth,
                 config: config,
-                onStartupStateChange: { [weak self] newState in
-                    self?.updateStartupState(newState)
+                onStartupStateChange: { [weak self] stage in
+                    self?.updateStartupStage(stage)
                 }
             )
-        } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: webRTCConnectionManager)
-            throw failure.error
+        } catch let error as ConversationError {
+            await handleStartupFailure(error, disconnecting: webRTCConnectionManager)
+            throw error
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: webRTCConnectionManager)
             throw CancellationError()
@@ -237,13 +233,17 @@ public final class Conversation: ObservableObject {
             connectionManager: connectionManager
         )
 
-        updateStartupState(.connectingRoom)
-
         do {
-            return try await connectionManager.connect(auth: auth, config: config)
-        } catch let failure as StartupFailure {
-            await handleStartupFailure(failure, disconnecting: connectionManager)
-            throw failure.error
+            return try await connectionManager.connect(
+                auth: auth,
+                config: config,
+                onStartupStateChange: { [weak self] stage in
+                    self?.updateStartupStage(stage)
+                }
+            )
+        } catch let error as ConversationError {
+            await handleStartupFailure(error, disconnecting: connectionManager)
+            throw error
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: connectionManager)
             throw CancellationError()
@@ -258,10 +258,10 @@ public final class Conversation: ObservableObject {
 
     private func endConversation(disconnectReason: DisconnectionReason = .user, endReason: EndReason = .userEnded) async {
         // Allow ending during both connected and connecting states
-        guard state.isConnected || state == .connecting else { return }
+        guard state.isConnected || state.isConnecting else { return }
         guard let connectionManager = activeConnectionManager else {
             // No connection manager yet, just reset state
-            if state == .connecting {
+            if state.isConnecting {
                 state = .idle
                 tearDownActiveSession()
             }
@@ -318,7 +318,7 @@ public final class Conversation: ObservableObject {
             } catch {
                 throw ConversationError.microphoneToggleFailed(error)
             }
-        } else if state == .connecting {
+        } else if state.isConnecting {
             // Buffer the mute state to apply after connection completes
             pendingMuteState = muted
             isMicMuted = muted
@@ -411,9 +411,10 @@ public final class Conversation: ObservableObject {
 
     var speakingTimer: Task<Void, Never>?
 
-    private func updateStartupState(_ newState: ConversationStartupState) {
-        startupState = newState
-        callbacks.onStartupStateChange?(newState)
+    private func updateStartupStage(_ stage: ConversationStartupState) {
+        if state != .connecting(stage) {
+            state = .connecting(stage)
+        }
     }
 
     /// Common preparation shared by voice and text-only startup paths.
@@ -423,7 +424,7 @@ public final class Conversation: ObservableObject {
         connectionManager: any ConnectionManaging
     ) async {
         let previousConnectionManager = activeConnectionManager
-        state = .connecting
+        state = .connecting(.preparing)
 
         if let previousConnectionManager, previousConnectionManager !== connectionManager {
             await previousConnectionManager.disconnect()
@@ -447,7 +448,7 @@ public final class Conversation: ObservableObject {
                 guard let self,
                       let connectionManager,
                       activeConnectionManager === connectionManager,
-                      state == .connecting || state.isConnected
+                      state.isConnecting || state.isConnected
                 else {
                     return
                 }
@@ -462,24 +463,20 @@ public final class Conversation: ObservableObject {
     }
 
     private func handleStartupFailure(
-        _ failure: StartupFailure,
+        _ error: ConversationError,
         disconnecting connectionManager: any ConnectionManaging
     ) async {
         cleanupTransientResources()
         await connectionManager.disconnect()
 
-        startupMetrics = failure.metrics
-        state = .idle
-        updateStartupState(.failed(failure.reason, failure.metrics))
-        callbacks.onError?(failure.error)
+        state = .error(error)
+        callbacks.onError?(error)
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
         cleanupTransientResources()
         await connectionManager.disconnect()
-        startupMetrics = nil
         state = .idle
-        updateStartupState(.idle)
     }
 
     /// Clean up state from any previous conversation to ensure a fresh start.
@@ -491,9 +488,6 @@ public final class Conversation: ObservableObject {
         mcpToolCalls.removeAll()
         mcpConnectionStatus = nil
         conversationMetadata = nil
-
-        startupState = .idle
-        startupMetrics = nil
 
         logger.debug("Previous conversation state cleaned up for fresh Room", context: activeContext)
     }

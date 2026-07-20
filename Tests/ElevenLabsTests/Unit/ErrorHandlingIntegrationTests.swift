@@ -1,4 +1,5 @@
 // swiftlint:disable file_length type_body_length function_body_length
+import Combine
 @testable import ElevenLabs
 import XCTest
 
@@ -37,10 +38,6 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
-            onStartupStateChange: { state in
-                print("📊 Startup state: \(state)")
-                Task { await collector.addState(state) }
-            },
             onError: { error in
                 print("✅ onError callback received: \(error)")
                 Task { await collector.addError(error) }
@@ -105,10 +102,6 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("✅ Agent ready!")
                 readyExpectation.fulfill()
             },
-            onStartupStateChange: { state in
-                print("📊 Startup state: \(state)")
-                Task { await collector.addState(state) }
-            },
             onError: { error in
                 print("❌ Unexpected error in success test: \(error)")
                 Task { await collector.addError(error) }
@@ -147,13 +140,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("  \(index + 1). \(state)")
             }
 
-            if case let .connected(_, metrics) = conversation.startupState {
+            if case let .connected(_, metrics) = conversation.state {
                 print("\n⏱️ Startup metrics:")
                 print("  Total: \(String(format: "%.3f", metrics.total ?? 0))s")
                 print("  Token fetch: \(String(format: "%.3f", metrics.tokenFetch ?? 0))s")
                 print("  Room connect: \(String(format: "%.3f", metrics.roomConnect ?? 0))s")
                 print("  Agent ready: \(String(format: "%.3f", metrics.agentReady ?? 0))s")
-                print("  Init attempts: \(metrics.conversationInitAttempts)")
             }
 
             // Clean disconnect
@@ -240,9 +232,6 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 networkConfiguration: networkConfig
             )
             let callbacks = ConversationCallbacks(
-                onStartupStateChange: { state in
-                    print("  📊 State: \(state)")
-                },
                 onError: { error in
                     print("  ❌ Error: \(error)")
                 }
@@ -277,23 +266,15 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         }
     }
 
-    /// Test that startup state transitions are properly reported including failures
+    /// Test that startup stages are reported and failures land in `.error`.
     func testStartupStateTransitions() async throws {
-        let errorExpectation = expectation(description: "Should receive error state")
-        let collector = ErrorCollector()
+        let errorExpectation = expectation(description: "Should receive error callback")
 
         let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
-            onStartupStateChange: { state in
-                print("📊 State transition: \(state)")
-                Task { await collector.addState(state) }
-
-                if case .failed = state {
-                    errorExpectation.fulfill()
-                }
-            },
             onError: { error in
                 print("❌ Error: \(error)")
+                errorExpectation.fulfill()
             }
         )
 
@@ -304,6 +285,14 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
         self.conversation = conversation
 
+        var observedResolvingToken = false
+        var cancellable: AnyCancellable?
+        cancellable = conversation.$state.sink { state in
+            if case .connecting(.resolvingToken) = state {
+                observedResolvingToken = true
+            }
+        }
+
         // Use invalid agent to trigger failure
         do {
             try await conversation.startConversation(
@@ -313,26 +302,15 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         } catch {
             // Expected
         }
+        cancellable?.cancel()
 
         await fulfillment(of: [errorExpectation], timeout: 5.0)
 
-        let capturedStartupStates = await collector.states
+        XCTAssertTrue(observedResolvingToken, "Should have resolvingToken stage")
 
-        print("\n📊 State transition sequence (\(capturedStartupStates.count) states):")
-        for (index, state) in capturedStartupStates.enumerated() {
-            print("  \(index + 1). \(state)")
+        guard case .error = conversation.state else {
+            return XCTFail("Expected error state after startup failure")
         }
-
-        // Verify we got expected state transitions
-        XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .resolvingToken = state { return true }
-            return false
-        }, "Should have resolvingToken state")
-
-        XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .failed = state { return true }
-            return false
-        }, "Should have failed state")
     }
 
     /// Test custom token provider error handling
@@ -386,9 +364,6 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let collector = ErrorCollector()
         let config = ConversationConfig()
         let callbacks = ConversationCallbacks(
-            onStartupStateChange: { state in
-                print("📊 State: \(state)")
-            },
             onError: { error in
                 print("❌ Network error: \(error)")
                 Task { await collector.addError(error) }
@@ -457,13 +432,6 @@ extension ErrorHandlingIntegrationTests {
             onDisconnect: { reason in
                 let timestamp = Self.formatTimestamp()
                 print("🔌 [\(timestamp)] DISCONNECTED (reason: \(reason))")
-            },
-            onStartupStateChange: { state in
-                let timestamp = Self.formatTimestamp()
-                print("📊 [\(timestamp)] STARTUP STATE: \(state)")
-                Task {
-                    await errorCollector.addState(state)
-                }
             },
             onError: { error in
                 let timestamp = Self.formatTimestamp()

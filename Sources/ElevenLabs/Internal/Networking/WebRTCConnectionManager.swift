@@ -86,7 +86,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         // 1. Resolve token / connection details.
         onStartupStateChange(.resolvingToken)
         let connectionDetails = try await runPhase(
-            timing: \.tokenFetch, metrics: &metrics, startTime: startTime, failure: StartupFailure.token
+            timing: \.tokenFetch, metrics: &metrics, startTime: startTime
         ) {
             try await tokenService.fetchConnectionDetails(configuration: auth)
         }
@@ -98,7 +98,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         onStartupStateChange(.connectingRoom)
         let throwOnMicFailure = !config.continueWithoutMicrophoneOnFailure
         try await runPhase(
-            timing: \.roomConnect, metrics: &metrics, startTime: startTime, failure: StartupFailure.room
+            timing: \.roomConnect, metrics: &metrics, startTime: startTime
         ) {
             try await connectToRoom(
                 details: connectionDetails,
@@ -114,27 +114,25 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         guard case let .success(elapsed) = await waitForAgentReady(timeout: agentTimeout) else {
             metrics.total = Date().timeIntervalSince(startTime)
             logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
-            throw StartupFailure.agentTimeout(metrics)
+            throw ConversationError.agentTimeout
         }
         metrics.agentReady = elapsed
         onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
 
         // 5. Send conversation_initiation_client_data (sent once).
-        onStartupStateChange(.sendingConversationInit(attempt: 1))
+        onStartupStateChange(.sendingConversationInit)
         try await runPhase(
-            timing: \.conversationInit, metrics: &metrics, startTime: startTime,
-            failure: StartupFailure.conversationInit
+            timing: \.conversationInit, metrics: &metrics, startTime: startTime
         ) {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
-        metrics.conversationInitAttempts = 1
 
         metrics.total = Date().timeIntervalSince(startTime)
         return StartupResult(agentId: auth.agentId, metrics: metrics)
     }
 
     /// Race the delegate's "first remote participant joined" signal against `timeout`.
-    /// A `.timedOut` result makes `connect` fail with `StartupFailure.agentTimeout`.
+    /// A `.timedOut` result makes `connect` fail with `ConversationError.agentTimeout`.
     private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
             return .timedOut(elapsed: 0)
@@ -271,14 +269,13 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     // MARK: – Private helpers
 
     /// Run one timed startup phase: record its duration into `metrics[keyPath:]`,
-    /// let `CancellationError` propagate unwrapped, and wrap any other error via
-    /// `failure` (stamping `total`).
+    /// let `CancellationError` propagate unwrapped, and wrap any other error as
+    /// `ConversationError` (stamping `total`).
     @MainActor
     private func runPhase<T>(
         timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
         metrics: inout ConversationStartupMetrics,
         startTime: Date,
-        failure: (ConversationError, ConversationStartupMetrics) -> StartupFailure,
         _ body: () async throws -> T
     ) async throws -> T {
         let start = Date()
@@ -293,7 +290,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         } catch {
             metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
             metrics.total = Date().timeIntervalSince(startTime)
-            throw failure(error as? ConversationError ?? .connectionFailed(error), metrics)
+            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
     }
 

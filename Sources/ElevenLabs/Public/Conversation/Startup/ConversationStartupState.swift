@@ -1,12 +1,12 @@
 import Foundation
 
+/// In-flight startup stage while `ConversationState` is `.connecting`.
 public enum ConversationStartupState: Sendable, Equatable {
-    case idle
+    /// Session teardown / wiring before transport-specific stages begin.
+    case preparing
     case resolvingToken
     case connectingRoom
     case waitingForAgent(timeout: TimeInterval)
     case agentReady(ConversationAgentReadyReport)
-    case sendingConversationInit(attempt: Int)
-    case connected(CallInfo, ConversationStartupMetrics)
-    case failed(ConversationStartupFailure, ConversationStartupMetrics)
+    case sendingConversationInit
 }
