@@ -116,7 +116,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         self.conversation = conversation
 
         do {
-            try await conversation.startConversation(
+            let result = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
                 config: config
             )
@@ -140,13 +140,11 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
                 print("  \(index + 1). \(state)")
             }
 
-            if case let .connected(_, metrics) = conversation.state {
-                print("\n⏱️ Startup metrics:")
-                print("  Total: \(String(format: "%.3f", metrics.total ?? 0))s")
-                print("  Token fetch: \(String(format: "%.3f", metrics.tokenFetch ?? 0))s")
-                print("  Room connect: \(String(format: "%.3f", metrics.roomConnect ?? 0))s")
-                print("  Agent ready: \(String(format: "%.3f", metrics.agentReady ?? 0))s")
-            }
+            print("\n⏱️ Startup metrics:")
+            print("  Total: \(String(format: "%.3f", result.metrics.total ?? 0))s")
+            print("  Token fetch: \(String(format: "%.3f", result.metrics.tokenFetch ?? 0))s")
+            print("  Room connect: \(String(format: "%.3f", result.metrics.roomConnect ?? 0))s")
+            print("  Agent ready: \(String(format: "%.3f", result.metrics.agentReady ?? 0))s")
 
             // Clean disconnect
             await conversation.endConversation()

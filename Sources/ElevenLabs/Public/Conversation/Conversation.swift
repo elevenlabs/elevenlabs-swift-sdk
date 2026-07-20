@@ -139,22 +139,24 @@ public final class Conversation: ObservableObject {
     ///
     /// Each call to this method creates a fresh Room object, ensuring clean state
     /// and preventing any interference from previous conversations.
+    @discardableResult
     public func startConversation(
         with agentId: String,
         config: ConversationConfig = .init()
-    ) async throws {
+    ) async throws -> ConversationStartResult {
         let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        try await startConversation(auth: authConfig, config: config)
+        return try await startConversation(auth: authConfig, config: config)
     }
 
     /// Start a conversation using authentication configuration.
     ///
     /// Each call to this method creates a fresh Room object, ensuring clean state
     /// and preventing any interference from previous conversations.
+    @discardableResult
     public func startConversation(
         auth: ConversationCredentials,
         config: ConversationConfig = .init()
-    ) async throws {
+    ) async throws -> ConversationStartResult {
         guard state == .idle || state.isEnded || state.isError else {
             throw ConversationError.alreadyActive
         }
@@ -165,8 +167,13 @@ public final class Conversation: ObservableObject {
             try await startVoiceConversation(auth: auth, config: config, provider: dependencyProvider)
         }
 
-        state = .connected(CallInfo(agentId: result.agentId), result.metrics)
+        let startResult = ConversationStartResult(
+            callInfo: CallInfo(agentId: result.agentId),
+            metrics: result.metrics
+        )
+        state = .connected(startResult.callInfo)
         callbacks.onAgentReady?()
+        return startResult
     }
 
     private func startVoiceConversation(

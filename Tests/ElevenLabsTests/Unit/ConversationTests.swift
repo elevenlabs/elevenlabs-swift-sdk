@@ -41,21 +41,23 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.messages.isEmpty)
     }
 
-    func testStartConversationSuccessUpdatesStartupState() async throws {
+    func testStartConversationSuccessReturnsResult() async throws {
         let config = makeConfig()
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: config, callbacks: makeCallbacks())
 
-        try await conversation.startConversation(
+        let result = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: config
         )
 
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
         XCTAssertFalse(mockWebRTCConnectionManager.publishedPayloads.isEmpty)
-        guard case let .connected(callInfo, _) = conversation.state else {
+        guard case let .connected(callInfo) = conversation.state else {
             return XCTFail("Expected connected state")
         }
         XCTAssertEqual(callInfo.agentId, "test-agent-id")
+        XCTAssertEqual(result.callInfo, callInfo)
+        XCTAssertEqual(result.metrics.agentReady, 0)
         let errorsAfterSuccess = await capturedErrors.values()
         XCTAssertTrue(errorsAfterSuccess.isEmpty)
     }
@@ -249,7 +251,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
         XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.absoluteString, signedURL)
         XCTAssertFalse(mockWebSocketConnectionManager.sentPayloads.isEmpty)
-        guard case let .connected(info, _) = conversation.state else {
+        guard case let .connected(info) = conversation.state else {
             return XCTFail("Expected connected state")
         }
         XCTAssertEqual(info.agentId, "agent-private")
@@ -625,7 +627,7 @@ final class ConversationTests: XCTestCase {
     func testConversationStateEnum() {
         let idleState: ConversationState = .idle
         let connectingState: ConversationState = .connecting(.preparing)
-        let connectedState: ConversationState = .connected(CallInfo(agentId: "test"), .init())
+        let connectedState: ConversationState = .connected(CallInfo(agentId: "test"))
 
         XCTAssertNotEqual(idleState, connectingState)
         XCTAssertNotEqual(connectingState, connectedState)
