@@ -39,6 +39,10 @@ public final class ConversationClient: ObservableObject {
     /// Subscriptions mirroring the active session's state; reset on each `startConversation`.
     private var cancellables = Set<AnyCancellable>()
 
+    /// Durable observers re-attached to every session this client starts.
+    private var agentAudioObservers: [any ConversationAudioObserver] = []
+    private var micAudioObservers: [any ConversationAudioObserver] = []
+
     public init(callbacks: ConversationCallbacks = .init()) {
         self.callbacks = callbacks
         dependencyProvider = nil
@@ -146,6 +150,10 @@ public final class ConversationClient: ObservableObject {
         session.$conversationMetadata.sink { [weak self] in self?.conversationMetadata = $0 }.store(in: &cancellables)
         session.$mcpToolCalls.sink { [weak self] in self?.mcpToolCalls = $0 }.store(in: &cancellables)
         session.$mcpConnectionStatus.sink { [weak self] in self?.mcpConnectionStatus = $0 }.store(in: &cancellables)
+
+        // Re-attach durable observers to the new session.
+        agentAudioObservers.forEach(session.addAgentAudioObserver)
+        micAudioObservers.forEach(session.addMicAudioObserver)
     }
 
     private func requireSession() throws -> Conversation {
@@ -176,6 +184,40 @@ public final class ConversationClient: ObservableObject {
     public func setMicMuted(_ muted: Bool) async throws {
         try await session?.setMicMuted(muted)
         isMicMuted = muted
+    }
+
+    // MARK: - Audio observers
+
+    /// Register an observer for the agent's decoded output audio.
+    ///
+    /// The observer is durable: it is re-attached to every session this client
+    /// starts. ``ConversationAudioObserver/didReceive(_:)`` is called off the
+    /// main actor on a time-critical audio callback path.
+    public func addAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        if !agentAudioObservers.contains(where: { $0 === observer }) {
+            agentAudioObservers.append(observer)
+        }
+        session?.addAgentAudioObserver(observer)
+    }
+
+    /// Unregister a previously added agent audio observer.
+    public func removeAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        agentAudioObservers.removeAll { $0 === observer }
+        session?.removeAgentAudioObserver(observer)
+    }
+
+    /// Register a durable observer for the local microphone input.
+    public func addMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        if !micAudioObservers.contains(where: { $0 === observer }) {
+            micAudioObservers.append(observer)
+        }
+        session?.addMicAudioObserver(observer)
+    }
+
+    /// Unregister a previously added mic audio observer.
+    public func removeMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        micAudioObservers.removeAll { $0 === observer }
+        session?.removeMicAudioObserver(observer)
     }
 
     // MARK: - Tools & feedback

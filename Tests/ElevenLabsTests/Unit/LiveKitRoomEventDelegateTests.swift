@@ -7,12 +7,14 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     private func makeDelegate(
         onData: @escaping @Sendable (Data) -> Void = { _ in },
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void = { _ in },
-        onRemoteDisconnect: @escaping @Sendable () async -> Void = {}
+        onRemoteDisconnect: @escaping @Sendable () async -> Void = {},
+        onTracksChanged: @escaping @Sendable () -> Void = {}
     ) -> RoomDelegate {
         LiveKitRoomEventDelegate(
             onData: onData,
             onRemoteSpeaking: onRemoteSpeaking,
-            onRemoteDisconnect: onRemoteDisconnect
+            onRemoteDisconnect: onRemoteDisconnect,
+            onTracksChanged: onTracksChanged
         )
     }
 
