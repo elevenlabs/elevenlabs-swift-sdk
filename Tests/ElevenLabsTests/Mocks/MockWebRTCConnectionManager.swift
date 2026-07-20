@@ -112,6 +112,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         room = nil
     }
 
+    @MainActor
     func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         lastWaitTimeout = timeout
         if let pending = pendingWaitResult {
@@ -161,19 +162,23 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     /// Suspends until `onEventReceived` is set.
+    @MainActor
     func waitForEventHandlerInstalled() async {
         if onEventReceived != nil { return }
         await withCheckedContinuation { eventHandlerInstalled = $0 }
     }
 
+    @MainActor
     func succeedAgentReady(elapsed: TimeInterval = 0.1) {
         resumeWait(with: .success(elapsed: elapsed))
     }
 
+    @MainActor
     func timeoutAgentReady(elapsed: TimeInterval = 0.1) {
         resumeWait(with: .timedOut(elapsed: elapsed))
     }
 
+    @MainActor
     private func resumeWait(with result: AgentReadyWaitResult) {
         if let continuation = waitContinuation {
             waitContinuation = nil
