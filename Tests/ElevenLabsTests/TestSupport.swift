@@ -1,5 +1,7 @@
+import AVFoundation
 import Combine
 @testable import ElevenLabs
+import LiveKit
 import XCTest
 
 extension XCTestCase {
@@ -114,5 +116,42 @@ actor ValueRecorder<Value> {
     func waitForLast(matching predicate: @escaping @Sendable (Value) -> Bool) async {
         if let last = storage.last, predicate(last) { return }
         await withCheckedContinuation { valueWaiters.append((predicate, $0)) }
+    }
+}
+
+final class SpyAudioTrack: NSObject, AudioTrackProtocol, @unchecked Sendable {
+    private var renderers: [any AudioRenderer] = []
+
+    private(set) var addCallCount = 0
+    private(set) var removeCallCount = 0
+
+    var attachedRendererCount: Int {
+        renderers.count
+    }
+
+    func add(audioRenderer: AudioRenderer) {
+        addCallCount += 1
+        renderers.append(audioRenderer)
+    }
+
+    func remove(audioRenderer: AudioRenderer) {
+        removeCallCount += 1
+        let removedRenderer = audioRenderer as AnyObject
+        renderers.removeAll { ($0 as AnyObject) === removedRenderer }
+    }
+
+    func render() {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160)!
+        buffer.frameLength = 160
+        renderers.forEach { $0.render(pcmBuffer: buffer) }
+    }
+}
+
+final class RecordingAudioObserver: ConversationAudioObserver, @unchecked Sendable {
+    private(set) var receivedBufferCount = 0
+
+    func didReceive(_: AVAudioPCMBuffer) {
+        receivedBufferCount += 1
     }
 }
