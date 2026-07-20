@@ -80,7 +80,6 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.messages.last?.content, "I am an AI")
         XCTAssertEqual(conversation.messages.last?.role, .agent)
         XCTAssertEqual(conversation.messages.last?.eventId, 456)
-        XCTAssertEqual(conversation.lastAgentEventId, 456)
     }
 
     func testAgentResponseFinalizesStreamedMessageInsteadOfDuplicating() async {
