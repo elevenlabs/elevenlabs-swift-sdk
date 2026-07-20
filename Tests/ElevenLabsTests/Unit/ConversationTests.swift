@@ -56,8 +56,10 @@ final class ConversationTests: XCTestCase {
             return XCTFail("Expected connected state")
         }
         XCTAssertEqual(callInfo.agentId, "test-agent-id")
+        XCTAssertEqual(callInfo.conversationId, "test-conversation-id")
         XCTAssertEqual(result.callInfo, callInfo)
         XCTAssertEqual(result.metrics.agentReady, 0)
+        XCTAssertNotNil(result.metrics.initiationMetadata)
         let errorsAfterSuccess = await capturedErrors.values()
         XCTAssertTrue(errorsAfterSuccess.isEmpty)
     }
@@ -89,6 +91,7 @@ final class ConversationTests: XCTestCase {
     func testStartConversationHandlesIncomingDataBeforeAgentReady() async throws {
         // Hold agent-ready so we can deliver protocol data while still connecting.
         mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        mockWebRTCConnectionManager.autoDeliverInitiationMetadata = false
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
@@ -123,6 +126,11 @@ final class ConversationTests: XCTestCase {
 
         mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
+
+        guard case let .connected(callInfo) = conversation.state else {
+            return XCTFail("Expected connected state")
+        }
+        XCTAssertEqual(callInfo.conversationId, "conversation-before-ready")
     }
 
     func testStaleProtocolDataHandlerDoesNotMutateEndedConversation() async throws {
@@ -178,8 +186,11 @@ final class ConversationTests: XCTestCase {
         )
         cancellable?.cancel()
 
-        let reportedStartupStages = await waitForValues(startupStages, count: 2)
-        XCTAssertEqual(reportedStartupStages, [.preparing, .sendingConversationInit])
+        let reportedStartupStages = await waitForValues(startupStages, count: 3)
+        XCTAssertEqual(
+            reportedStartupStages,
+            [.preparing, .sendingConversationInit, .waitingForInitiationMetadata(timeout: 5.0)]
+        )
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 0)
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
         XCTAssertEqual(mockWebSocketConnectionManager.lastConnectedURL?.scheme, "wss")
@@ -466,6 +477,28 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
     }
 
+    func testStartConversationInitiationMetadataTimeout() async {
+        mockWebRTCConnectionManager.autoDeliverInitiationMetadata = false
+
+        let startupConfig = ConversationStartupConfiguration(initiationMetadataTimeout: 0.01)
+        let config = makeConfig(startupConfiguration: startupConfig)
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await conversation.startConversation(
+                auth: .publicAgent(id: "test-agent"),
+                config: config
+            )
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, .initiationMetadataTimeout)
+        }
+
+        guard case .error(.initiationMetadataTimeout) = conversation.state else {
+            return XCTFail("Expected initiation metadata timeout error state")
+        }
+        let errorsAfterTimeout = await waitForValues(capturedErrors, count: 1)
+        XCTAssertEqual(errorsAfterTimeout, [.initiationMetadataTimeout])
+    }
+
     func testStartConversationConversationInitFailure() async {
         mockWebRTCConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
 
@@ -613,6 +646,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationError.authenticationFailed("test"), ConversationError.authenticationFailed("test"))
         XCTAssertEqual(ConversationError.connectionFailed("test"), ConversationError.connectionFailed("test"))
         XCTAssertEqual(ConversationError.agentTimeout, ConversationError.agentTimeout)
+        XCTAssertEqual(ConversationError.initiationMetadataTimeout, ConversationError.initiationMetadataTimeout)
         XCTAssertEqual(ConversationError.microphoneToggleFailed("test"), ConversationError.microphoneToggleFailed("test"))
 
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyActive)
@@ -621,7 +655,9 @@ final class ConversationTests: XCTestCase {
     func testConversationStateEnum() {
         let idleState: ConversationState = .idle
         let connectingState: ConversationState = .connecting(.preparing)
-        let connectedState: ConversationState = .connected(CallInfo(agentId: "test"))
+        let connectedState: ConversationState = .connected(
+            CallInfo(agentId: "test", conversationId: "conversation")
+        )
 
         XCTAssertNotEqual(idleState, connectingState)
         XCTAssertNotEqual(connectingState, connectedState)

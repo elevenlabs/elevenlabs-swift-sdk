@@ -19,6 +19,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
     private var eventHandlerInstalled: CheckedContinuation<Void, Never>?
 
@@ -35,6 +36,8 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     var tokenError: ConversationError?
     var publishError: Swift.Error?
     var microphoneError: Swift.Error?
+    var autoDeliverInitiationMetadata = true
+    var initiationMetadataConversationId = "test-conversation-id"
 
     private(set) var connectCallCount = 0
     private(set) var disconnectCallCount = 0
@@ -60,6 +63,12 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
         startupStateChange = onStartupStateChange
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
+        let startTime = Date()
         connectCallCount += 1
         lastNetworkConfiguration = config.networkConfiguration
         var metrics = ConversationStartupMetrics()
@@ -93,8 +102,21 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
 
+        if autoDeliverInitiationMetadata {
+            let metadata = makeInitiationMetadata()
+            await waiter.observe(metadata)
+            onEventReceived?(.conversationMetadata(metadata))
+        }
+
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
         return ConversationStartResult(
-            callInfo: CallInfo(agentId: auth.agentId),
+            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
             metrics: metrics
         )
     }
@@ -110,6 +132,8 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         errorHandler = nil
         onRemoteSpeakingChanged = nil
         room = nil
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
     }
 
     @MainActor
@@ -153,7 +177,14 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     // MARK: - Helpers
 
     func receive(data: Data) {
-        handleIncomingData(data, logger: SDKLogger(logLevel: .error))
+        guard let initiationMetadataWaiter else {
+            preconditionFailure("Cannot receive data before connecting")
+        }
+        handleIncomingData(
+            data,
+            metadataWaiter: initiationMetadataWaiter,
+            logger: SDKLogger(logLevel: .error)
+        )
     }
 
     /// Delivers an already-decoded event directly to the installed handler
@@ -186,5 +217,13 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         } else {
             pendingWaitResult = result
         }
+    }
+
+    private func makeInitiationMetadata() -> ConversationMetadataEvent {
+        ConversationMetadataEvent(
+            conversationId: initiationMetadataConversationId,
+            agentOutputAudioFormat: "pcm_16000",
+            userInputAudioFormat: "pcm_16000"
+        )
     }
 }

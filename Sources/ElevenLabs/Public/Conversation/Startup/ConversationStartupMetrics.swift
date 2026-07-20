@@ -8,6 +8,7 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
 
     public var agentReadyBuffer: TimeInterval?
     public var conversationInit: TimeInterval?
+    public var initiationMetadata: TimeInterval?
 
     public init(
         total: TimeInterval? = nil,
@@ -17,7 +18,8 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
         agentReadyViaGraceTimeout _: Bool = false,
         agentReadyTimedOut _: Bool = false,
         agentReadyBuffer: TimeInterval? = nil,
-        conversationInit: TimeInterval? = nil
+        conversationInit: TimeInterval? = nil,
+        initiationMetadata: TimeInterval? = nil
     ) {
         self.total = total
         self.tokenFetch = tokenFetch
@@ -25,5 +27,6 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
         self.agentReady = agentReady
         self.agentReadyBuffer = agentReadyBuffer
         self.conversationInit = conversationInit
+        self.initiationMetadata = initiationMetadata
     }
 }

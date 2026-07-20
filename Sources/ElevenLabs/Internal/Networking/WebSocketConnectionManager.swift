@@ -4,8 +4,8 @@ import Foundation
 ///
 /// Opens a single `URLSessionWebSocketTask` to the text conversation endpoint,
 /// sends `conversationInit` once the socket is open, then runs a receive loop
-/// that parses incoming JSON into `IncomingEvent`s and forwards them via
-/// `onEventReceived`. On runtime socket error, fires `onDisconnected` once.
+/// that forwards incoming events and waits for initiation metadata. On runtime
+/// socket error, fires `onDisconnected` once.
 ///
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
@@ -19,6 +19,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     private let logger: any Logging
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
     init(logger: any Logging) {
         self.logger = logger
@@ -35,6 +36,11 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -69,12 +75,18 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         // Socket is up and the init message is sent. Start consuming responses.
         receiveTask = Task { [weak self, weak task] in
             guard let self, let task else { return }
-            await receiveLoop(task: task)
+            await receiveLoop(task: task, metadataWaiter: waiter)
         }
 
-        metrics.total = Date().timeIntervalSince(startTime)
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
         return ConversationStartResult(
-            callInfo: CallInfo(agentId: auth.agentId),
+            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
             metrics: metrics
         )
     }
@@ -91,6 +103,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
 
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
         receiveTask?.cancel()
         receiveTask = nil
         task?.cancel(with: .normalClosure, reason: nil)
@@ -104,13 +118,20 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    private func receiveLoop(task: URLSessionWebSocketTask) async {
+    private func receiveLoop(
+        task: URLSessionWebSocketTask,
+        metadataWaiter: ConversationInitiationMetadataWaiter
+    ) async {
         while !Task.isCancelled {
             do {
                 let message = try await task.receive()
                 switch message {
                 case let .string(text):
-                    handleIncomingData(Data(text.utf8), logger: logger)
+                    handleIncomingData(
+                        Data(text.utf8),
+                        metadataWaiter: metadataWaiter,
+                        logger: logger
+                    )
                 case .data:
                     logger.warning("Ignoring binary WebSocket message")
                 @unknown default:
