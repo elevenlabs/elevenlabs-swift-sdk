@@ -63,7 +63,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStartConversationConfiguresIncomingEventHandler() async throws {
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: makeConfig()
         )
@@ -92,7 +92,7 @@ final class ConversationTests: XCTestCase {
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
                 config: makeConfig()
             )
@@ -126,7 +126,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testStaleProtocolDataHandlerDoesNotMutateEndedConversation() async throws {
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: makeConfig()
         )
@@ -145,7 +145,7 @@ final class ConversationTests: XCTestCase {
     func testStartConversationConfiguresRoomObservationHandlers() async throws {
         mockWebRTCConnectionManager.isMicrophoneMuted = false
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: makeConfig()
         )
@@ -172,7 +172,7 @@ final class ConversationTests: XCTestCase {
             }
         }
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: config
         )
@@ -209,7 +209,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testTextOnlyStartDisconnectsPreviousActiveManagerBeforeSwitchingTransports() async throws {
-        try await conversation.startConversation(auth: .publicAgent(id: "test-agent-id"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test-agent-id"), config: makeConfig())
         await conversation.endConversation()
 
         // Re-arm stale handlers so the transport switch has something to clear.
@@ -221,7 +221,7 @@ final class ConversationTests: XCTestCase {
             config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: config
         )
@@ -242,7 +242,7 @@ final class ConversationTests: XCTestCase {
             config.conversationOverrides = ConversationOverrides(textOnly: true)
         })
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: .signedWebSocketURL(signedURL),
             config: config
         )
@@ -274,7 +274,7 @@ final class ConversationTests: XCTestCase {
         })
 
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .conversationToken("livekit-token"),
                 config: config
             )
@@ -327,7 +327,7 @@ final class ConversationTests: XCTestCase {
     func testSetHardwareMicMutedUsesConnectionManagerAudioControl() async throws {
         mockWebRTCConnectionManager.isMicrophoneMuted = false
 
-        try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: makeConfig())
 
         try await conversation.setHardwareMicMuted(true)
 
@@ -342,7 +342,7 @@ final class ConversationTests: XCTestCase {
             config.audioConfiguration = AudioPipelineConfiguration(microphoneMuteMode: .software())
         })
 
-        try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: config)
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test-agent"), config: config)
 
         try await conversation.setMicMuted(true)
 
@@ -393,7 +393,7 @@ final class ConversationTests: XCTestCase {
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 config: config
             )
@@ -417,7 +417,7 @@ final class ConversationTests: XCTestCase {
 
         guard let conversation else { return }
         await XCTAssertThrowsErrorAsync {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 config: config
             )
@@ -442,7 +442,7 @@ final class ConversationTests: XCTestCase {
 
         let startTask = Task {
             guard let conversation = self.conversation else { return }
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 config: config
             )
@@ -480,7 +480,7 @@ final class ConversationTests: XCTestCase {
         guard let conversation else { return }
 
         await XCTAssertThrowsErrorAsync {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 config: config
             )
@@ -520,7 +520,7 @@ final class ConversationTests: XCTestCase {
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
 
-        try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
 
         mockWebRTCConnectionManager.deliver(.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42)))
 
@@ -544,7 +544,7 @@ final class ConversationTests: XCTestCase {
         })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
-        try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
 
         mockWebRTCConnectionManager.deliver(.vadScore(VadScoreEvent(vadScore: 0.87)))
 
@@ -561,7 +561,7 @@ final class ConversationTests: XCTestCase {
         })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
-        try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
 
         mockWebRTCConnectionManager.deliver(.agentToolResponse(AgentToolResponseEvent(
             toolName: "lookup_weather", toolCallId: "id", toolType: "action", isError: false, eventId: 10
@@ -585,7 +585,7 @@ final class ConversationTests: XCTestCase {
         })
 
         let conversation = Conversation(dependencyProvider: dependencyProvider, callbacks: callbacks)
-        try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
+        _ = try await conversation.startConversation(auth: .publicAgent(id: "test"), config: makeConfig())
 
         mockWebRTCConnectionManager.deliver(.interruption(InterruptionEvent(eventId: 7)))
 
@@ -653,7 +653,7 @@ final class ConversationTests: XCTestCase {
         })
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: config, callbacks: callbacks)
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: "test-agent-id"),
             config: config
         )

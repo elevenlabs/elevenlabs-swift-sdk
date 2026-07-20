@@ -178,7 +178,7 @@ public enum ElevenLabs {
         callbacks: ConversationCallbacks = .init()
     ) async throws -> Conversation {
         let conversation = createConversation(config: config, callbacks: callbacks)
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: auth, config: config
         )
         return conversation

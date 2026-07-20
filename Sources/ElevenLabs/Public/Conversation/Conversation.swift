@@ -139,7 +139,6 @@ public final class Conversation: ObservableObject {
     ///
     /// Each call to this method creates a fresh Room object, ensuring clean state
     /// and preventing any interference from previous conversations.
-    @discardableResult
     public func startConversation(
         with agentId: String,
         config: ConversationConfig = .init()
@@ -152,7 +151,6 @@ public final class Conversation: ObservableObject {
     ///
     /// Each call to this method creates a fresh Room object, ensuring clean state
     /// and preventing any interference from previous conversations.
-    @discardableResult
     public func startConversation(
         auth: ConversationCredentials,
         config: ConversationConfig = .init()

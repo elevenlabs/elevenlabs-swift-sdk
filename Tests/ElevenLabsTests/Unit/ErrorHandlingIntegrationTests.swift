@@ -54,7 +54,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Use an invalid agent ID to trigger an error
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "invalid_agent_id_12345"),
                 config: config
             )
@@ -186,7 +186,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
         self.conversation = conversation
 
-        try await conversation.startConversation(
+        _ = try await conversation.startConversation(
             auth: ConversationCredentials.publicAgent(id: testAgentId),
             config: config
         )
@@ -242,7 +242,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             )
 
             do {
-                try await conversation.startConversation(
+                _ = try await conversation.startConversation(
                     auth: ConversationCredentials.publicAgent(id: testAgentId),
                     config: config
                 )
@@ -293,7 +293,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Use invalid agent to trigger failure
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: "invalid_agent"),
                 config: config
             )
@@ -334,7 +334,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Provide a token provider that throws an error
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: .customTokenProvider {
                     throw NSError(domain: "TestError", code: 500, userInfo: [
                         NSLocalizedDescriptionKey: "Custom token provider failed"
@@ -377,7 +377,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Attempt connection - may succeed or fail depending on network
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
                 config: config
             )
@@ -453,7 +453,7 @@ extension ErrorHandlingIntegrationTests {
         print("\n🚀 Starting connection...")
 
         do {
-            try await conversation.startConversation(
+            _ = try await conversation.startConversation(
                 auth: ConversationCredentials.publicAgent(id: testAgentId),
                 config: config
             )
