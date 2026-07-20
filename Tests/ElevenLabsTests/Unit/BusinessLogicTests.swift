@@ -140,13 +140,16 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
         }
 
-        await waitForPublished(conversation.$state) { $0 == .connecting }
-        XCTAssertEqual(conversation.state, .connecting, "Should be connecting immediately, even if disconnect() is slow")
+        await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
+        XCTAssertTrue(conversation.state.isConnecting, "Should be connecting immediately, even if disconnect() is slow")
 
         mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
 
-        XCTAssertEqual(conversation.state, .connected(CallInfo(agentId: "new-agent")))
+        guard case let .connected(info, _) = conversation.state else {
+            return XCTFail("Expected connected state")
+        }
+        XCTAssertEqual(info.agentId, "new-agent")
     }
 
     // MARK: - Audio Alignment

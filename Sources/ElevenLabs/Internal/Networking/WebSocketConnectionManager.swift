@@ -29,7 +29,12 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         urlSession.invalidateAndCancel()
     }
 
-    func connect(auth: ConversationCredentials, config: ConversationConfig) async throws -> StartupResult {
+    @MainActor
+    func connect(
+        auth: ConversationCredentials,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> StartupResult {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
@@ -39,7 +44,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw convError
         }
 
         let task = urlSession.webSocketTask(with: url)
@@ -48,6 +53,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
         // The first send awaits the WebSocket handshake internally —
         // any connection failure surfaces here.
+        onStartupStateChange(.sendingConversationInit)
         do {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
@@ -57,8 +63,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         } catch {
             tearDownTask(task)
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
 
         // Socket is up and the init message is sent. Start consuming responses.
@@ -67,7 +72,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             await receiveLoop(task: task)
         }
 
-        metrics.conversationInitAttempts = 1
         metrics.total = Date().timeIntervalSince(startTime)
         return StartupResult(agentId: auth.agentId, metrics: metrics)
     }

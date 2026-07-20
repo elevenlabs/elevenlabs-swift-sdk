@@ -64,7 +64,8 @@ conversation.$agentState
 
 ### Connection State
 
-Handle transitions between idle, connecting, connected, and ended states.
+Handle transitions between idle, connecting, connected, ended, and error states.
+Startup stages are nested under `.connecting`.
 
 ```swift
 conversation.$state
@@ -72,10 +73,11 @@ conversation.$state
         switch state {
         case .idle:
             break
-        case .connecting:
-            break
-        case .connected(let callInfo):
+        case .connecting(let stage):
+            print("Connecting: \(stage)")
+        case .connected(let callInfo, let metrics):
             print("Connected to agent: \(callInfo.agentId)")
+            print("Startup took \(metrics.total ?? 0)s")
         case .ended(let reason):
             print("Conversation ended: \(reason)")
         case .error(let error):
@@ -609,7 +611,7 @@ class ReconnectionManager: ObservableObject {
                     self.showReconnectButton = false
                     self.isReconnecting = false
                     self.reconnectAttempts = 0
-                default:
+                case .idle, .connecting, .error:
                     break
                 }
             }

@@ -64,12 +64,12 @@ final class StartupPerformanceTest: XCTestCase {
         switch conversation.state {
         case .idle:
             print("  [\(String(format: "%.3f", elapsed))s] State: idle")
-        case .connecting:
-            print("  [\(String(format: "%.3f", elapsed))s] State: connecting")
-        case let .connected(info):
+        case let .connecting(stage):
+            print("  [\(String(format: "%.3f", elapsed))s] State: connecting (\(stage))")
+        case let .connected(info, _):
             hasConnected = true
             print("  [\(String(format: "%.3f", elapsed))s] State: connected (agent: \(info.agentId))")
-            print("  🎯 ACTIVE STATE REACHED in \(String(format: "%.3f", elapsed))s")
+            print("  🎯 CONNECTED STATE REACHED in \(String(format: "%.3f", elapsed))s")
         case let .ended(reason):
             print("  [\(String(format: "%.3f", elapsed))s] State: ended (reason: \(reason))")
         case let .error(error):

@@ -15,7 +15,12 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     private(set) var sentPayloads: [Data] = []
     private(set) var isConnected = false
 
-    func connect(auth: ConversationCredentials, config: ConversationConfig) async throws -> StartupResult {
+    @MainActor
+    func connect(
+        auth: ConversationCredentials,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> StartupResult {
         connectCallCount += 1
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
@@ -25,18 +30,18 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw convError
         }
 
         if let connectError {
             errorHandler?(connectError)
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = connectError as? ConversationError ?? .connectionFailed(connectError)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw connectError as? ConversationError ?? ConversationError.connectionFailed(connectError)
         }
 
         isConnected = true
 
+        onStartupStateChange(.sendingConversationInit)
         do {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
@@ -44,11 +49,9 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             throw CancellationError()
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
 
-        metrics.conversationInitAttempts = 1
         metrics.total = Date().timeIntervalSince(startTime)
         return StartupResult(agentId: auth.agentId, metrics: metrics)
     }

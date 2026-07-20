@@ -64,13 +64,13 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
         onStartupStateChange(.resolvingToken)
         if let tokenError {
-            throw StartupFailure.token(tokenError, metrics)
+            throw tokenError
         }
 
         onStartupStateChange(.connectingRoom)
         if shouldFailConnection {
             errorHandler?(connectionError)
-            throw StartupFailure.room(connectionError as? ConversationError ?? .connectionFailed(connectionError), metrics)
+            throw connectionError as? ConversationError ?? .connectionFailed(connectionError)
         }
         room = Room()
 
@@ -81,16 +81,15 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
         case let .timedOut(elapsed):
             metrics.agentReady = elapsed
-            throw StartupFailure.agentTimeout(metrics)
+            throw ConversationError.agentTimeout
         }
 
-        onStartupStateChange(.sendingConversationInit(attempt: 1))
+        onStartupStateChange(.sendingConversationInit)
         do {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         } catch {
-            throw StartupFailure.conversationInit(error as? ConversationError ?? .connectionFailed(error), metrics)
+            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
         }
-        metrics.conversationInitAttempts = 1
 
         return StartupResult(agentId: auth.agentId, metrics: metrics)
     }

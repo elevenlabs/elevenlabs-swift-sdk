@@ -10,26 +10,24 @@ protocol ConnectionManaging: AnyObject {
     var onDisconnected: (() async -> Void)? { get set }
     var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
-    func disconnect() async
-    func send(data: Data) async throws
-}
-
-protocol WebSocketConnectionManaging: ConnectionManaging {
-    func connect(auth: ConversationCredentials, config: ConversationConfig) async throws -> StartupResult
-}
-
-protocol WebRTCConnectionManaging: ConnectionManaging {
-    var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
-    var inputTrack: LocalAudioTrack? { get }
-    var agentAudioTrack: RemoteAudioTrack? { get }
-    var isMicrophoneMuted: Bool { get }
-
     @MainActor
     func connect(
         auth: ConversationCredentials,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> StartupResult
+
+    func disconnect() async
+    func send(data: Data) async throws
+}
+
+protocol WebSocketConnectionManaging: ConnectionManaging {}
+
+protocol WebRTCConnectionManaging: ConnectionManaging {
+    var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
+    var inputTrack: LocalAudioTrack? { get }
+    var agentAudioTrack: RemoteAudioTrack? { get }
+    var isMicrophoneMuted: Bool { get }
 
     func setMicrophoneMuted(_ muted: Bool) async throws
 }
