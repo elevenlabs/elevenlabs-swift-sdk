@@ -40,8 +40,6 @@ extension Conversation {
             upsertAgentMessage(content: existing + e.text, eventId: e.eventId)
 
         case let .audio(audioEvent):
-            latestAudioEvent = audioEvent
-            latestAudioAlignment = audioEvent.alignment
             if let alignment = audioEvent.alignment {
                 callbacks.onAudioAlignment?(alignment)
             }
