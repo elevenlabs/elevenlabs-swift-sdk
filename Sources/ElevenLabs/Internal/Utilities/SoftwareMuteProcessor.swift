@@ -25,16 +25,16 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
     private var consecutiveBelowCount: Int = 0
     private var hangoverLatched: Bool = false
 
-    private let onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?
+    private let onSpeechDetectedWhileMuted: (@Sendable () -> Void)?
     private let mutedSpeechThresholdInDb: Float
     private let mutedSpeechThrottleInSeconds: TimeInterval
 
     init(
-        onMutedSpeech: (@Sendable (MutedSpeechEvent) -> Void)?,
+        onSpeechDetectedWhileMuted: (@Sendable () -> Void)?,
         mutedSpeechThresholdInDb: Float = -35,
         mutedSpeechThrottleInSeconds: TimeInterval = 3.0
     ) {
-        self.onMutedSpeech = onMutedSpeech
+        self.onSpeechDetectedWhileMuted = onSpeechDetectedWhileMuted
         self.mutedSpeechThresholdInDb = mutedSpeechThresholdInDb
         self.mutedSpeechThrottleInSeconds = mutedSpeechThrottleInSeconds
     }
@@ -74,7 +74,6 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         let levelActive = db > mutedSpeechThresholdInDb
 
         var shouldFire = false
-        var fireLevel: Float = 0
         os_unfair_lock_lock(&lock)
         if levelActive {
             consecutiveBelowCount = 0
@@ -96,14 +95,13 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
             if now.timeIntervalSince(lastNotificationTime) > mutedSpeechThrottleInSeconds {
                 lastNotificationTime = now
                 shouldFire = true
-                fireLevel = db
             }
         }
         os_unfair_lock_unlock(&lock)
 
         if shouldFire {
             DispatchQueue.main.async {
-                self.onMutedSpeech?(.init(audioLevel: fireLevel))
+                self.onSpeechDetectedWhileMuted?()
             }
         }
 

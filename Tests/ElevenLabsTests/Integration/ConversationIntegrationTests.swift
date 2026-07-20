@@ -42,7 +42,7 @@ final class ConversationIntegrationTests: XCTestCase {
 
         // Mute operations also require active state
         await assertThrowsConversationError(.notConnected) {
-            try await conv.toggleMute()
+            try await conv.toggleMicMute()
         }
 
         await assertThrowsConversationError(.notConnected) {
@@ -67,11 +67,11 @@ final class ConversationIntegrationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test initial mute state
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertTrue(conversation.isMicMuted)
 
         // Test mute operations when not connected - should throw
         do {
-            try await conversation.setMuted(true)
+            try await conversation.setMicMuted(true)
             XCTFail("Should throw error when not connected")
         } catch let error as ConversationError {
             XCTAssertEqual(error, .notConnected)
