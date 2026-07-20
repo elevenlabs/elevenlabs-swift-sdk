@@ -146,7 +146,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         mockWebRTCConnectionManager.succeedAgentReady()
         try await startTask.value
 
-        guard case let .connected(info, _) = conversation.state else {
+        guard case let .connected(info) = conversation.state else {
             return XCTFail("Expected connected state")
         }
         XCTAssertEqual(info.agentId, "new-agent")

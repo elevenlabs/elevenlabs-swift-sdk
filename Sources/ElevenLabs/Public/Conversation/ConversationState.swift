@@ -3,7 +3,7 @@ import Foundation
 public enum ConversationState: Equatable, Sendable {
     case idle
     case connecting(ConversationStartupState)
-    case connected(CallInfo, ConversationStartupMetrics)
+    case connected(CallInfo)
     case ended(reason: EndReason)
     case error(ConversationError)
 
@@ -28,7 +28,7 @@ public enum ConversationState: Equatable, Sendable {
     }
 
     var connectedAgentId: String? {
-        if case let .connected(info, _) = self { return info.agentId }
+        if case let .connected(info) = self { return info.agentId }
         return nil
     }
 }

@@ -75,9 +75,8 @@ conversation.$state
             break
         case .connecting(let stage):
             print("Connecting: \(stage)")
-        case .connected(let callInfo, let metrics):
+        case .connected(let callInfo):
             print("Connected to agent: \(callInfo.agentId)")
-            print("Startup took \(metrics.total ?? 0)s")
         case .ended(let reason):
             print("Conversation ended: \(reason)")
         case .error(let error):

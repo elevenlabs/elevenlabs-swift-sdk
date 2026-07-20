@@ -66,7 +66,7 @@ final class StartupPerformanceTest: XCTestCase {
             print("  [\(String(format: "%.3f", elapsed))s] State: idle")
         case let .connecting(stage):
             print("  [\(String(format: "%.3f", elapsed))s] State: connecting (\(stage))")
-        case let .connected(info, _):
+        case let .connected(info):
             hasConnected = true
             print("  [\(String(format: "%.3f", elapsed))s] State: connected (agent: \(info.agentId))")
             print("  🎯 CONNECTED STATE REACHED in \(String(format: "%.3f", elapsed))s")
