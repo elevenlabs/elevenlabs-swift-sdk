@@ -171,6 +171,17 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(client.state, .idle)
     }
 
+    func testMicMethodsAreHarmlessAfterEnd() async throws {
+        _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+        await client.endConversation()
+
+        try await client.setMicMuted(false)
+        try await client.toggleMicMute()
+
+        XCTAssertTrue(client.isMicMuted)
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
     private func assertConnected(
         agentId: String,
         conversationId: String = "test-conversation-id",

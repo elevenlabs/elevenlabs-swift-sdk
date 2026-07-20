@@ -28,7 +28,7 @@ final class ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(config.agentOverrides?.language, .english)
     }
 
-    func testConversationStateTransitions() async {
+    func testConversationStateTransitions() async throws {
         let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Initial state
@@ -40,10 +40,8 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv.sendMessage("Hello")
         }
 
-        // Mute operations also require connected state
-        await assertThrowsConversationError(.notConnected) {
-            try await conv.toggleMicMute()
-        }
+        try await conv.toggleMicMute()
+        XCTAssertTrue(conv.isMicMuted)
 
         await assertThrowsConversationError(.notConnected) {
             try await conv.interruptAgent()
@@ -63,21 +61,14 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify message ordering
     }
 
-    func testAudioIntegration() async {
+    func testAudioIntegration() async throws {
         let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test initial mute state
         XCTAssertTrue(conversation.isMicMuted)
 
-        // Test mute operations when not connected - should throw
-        do {
-            try await conversation.setMicMuted(true)
-            XCTFail("Should throw error when not connected")
-        } catch let error as ConversationError {
-            XCTAssertEqual(error, .notConnected)
-        } catch {
-            XCTFail("Unexpected error type")
-        }
+        try await conversation.setMicMuted(false)
+        XCTAssertTrue(conversation.isMicMuted)
 
         // In a real integration test:
         // - Test microphone permissions
