@@ -49,7 +49,7 @@ public struct ConversationCallbacks: Sendable {
     public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
 
     /// Called when a client tool call is received without a registered handler.
-    public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
+    public var onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
     /// Called whenever the agent state changes (event-based mode only).
     public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
@@ -70,7 +70,7 @@ public struct ConversationCallbacks: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
-        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
         onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
     ) {
         self.onAgentReady = onAgentReady
@@ -88,7 +88,7 @@ public struct ConversationCallbacks: Sendable {
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
         self.onCanSendFeedbackChange = onCanSendFeedbackChange
-        self.onUnhandledClientToolCall = onUnhandledClientToolCall
+        self.onClientToolCall = onClientToolCall
         self.onAgentStateChange = onAgentStateChange
     }
 }
