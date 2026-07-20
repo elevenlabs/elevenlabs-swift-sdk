@@ -94,7 +94,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0) // Increased from default 3.0
 
         // Use automatic network strategy for faster test connections (allows all connection types)
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
         let config = ConversationConfig(
             startupConfiguration: startupConfig,
@@ -173,7 +173,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
         let config = ConversationConfig(
             startupConfiguration: startupConfig,
@@ -230,7 +230,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
         for attempt in 1 ... 3 {
             print("\n--- Attempt \(attempt) ---")
@@ -443,7 +443,7 @@ extension ErrorHandlingIntegrationTests {
         let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
         let config = ConversationConfig(
             startupConfiguration: startupConfig,

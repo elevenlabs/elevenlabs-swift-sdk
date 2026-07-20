@@ -198,7 +198,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         details: TokenService.ConnectionDetails,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool,
-        networkConfiguration: LiveKitNetworkConfiguration
+        networkConfiguration: WebRTCConfiguration
     ) async throws {
         await readinessDelegate?.release()
 
@@ -218,7 +218,9 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         room.delegates.add(delegate: eventDelegate)
         room.delegates.add(delegate: readinessDelegate)
 
-        let connectOptions = networkConfiguration.makeConnectOptions()
+        let connectOptions = networkConfiguration.strategy == .relayOnly
+            ? ConnectOptions(iceTransportPolicy: .relay)
+            : nil
 
         let connectStart = Date()
         do {

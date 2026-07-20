@@ -1,5 +1,4 @@
 import Foundation
-import LiveKit
 
 /// Reason for the conversation disconnection
 public enum DisconnectionReason: Sendable {
@@ -29,8 +28,8 @@ public struct ConversationConfig: Sendable {
     /// Controls microphone pipeline behaviour and VAD callbacks.
     public var audioConfiguration: AudioPipelineConfiguration?
 
-    /// Controls LiveKit peer connection behaviour, including ICE policies.
-    public var networkConfiguration: LiveKitNetworkConfiguration
+    /// Controls WebRTC connection behaviour, including ICE policies.
+    public var networkConfiguration: WebRTCConfiguration
 
     /// When provided, agent state is computed from VAD scores and protocol events
     /// instead of relying on LiveKit's isSpeaking detection.
@@ -47,7 +46,7 @@ public struct ConversationConfig: Sendable {
         continueWithoutMicrophoneOnFailure: Bool = false,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
-        networkConfiguration: LiveKitNetworkConfiguration = .default,
+        networkConfiguration: WebRTCConfiguration = .default,
         agentStateConfiguration: AgentStateConfiguration? = nil
     ) {
         self.agentOverrides = agentOverrides
