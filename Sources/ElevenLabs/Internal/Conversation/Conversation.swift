@@ -29,10 +29,6 @@ final class Conversation: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
 
-    /// Device lists (optional to expose; keep `internal` if you don't want them public)
-    @Published var audioDevices: [AudioDevice] = []
-    @Published var selectedAudioDeviceID: String = ""
-
     var lastAgentEventId: Int?
     var lastFeedbackSubmittedEventId: Int?
 
@@ -103,17 +99,7 @@ final class Conversation: ObservableObject {
 
     private func setupAudioManager() {
         guard !config.conversationOverrides.textOnly else { return }
-        let manager = ConversationAudioManager(logger: logger)
-        manager.onDevicesChanged = { [weak self] devices in
-            self?.audioDevices = devices
-        }
-        manager.onSelectedDeviceChanged = { [weak self] deviceId in
-            self?.selectedAudioDeviceID = deviceId
-        }
-        audioManager = manager
-        // Sync initial values
-        audioDevices = manager.audioDevices
-        selectedAudioDeviceID = manager.selectedAudioDeviceID
+        audioManager = ConversationAudioManager(logger: logger)
     }
 
     private func setupAgentStateManager() {

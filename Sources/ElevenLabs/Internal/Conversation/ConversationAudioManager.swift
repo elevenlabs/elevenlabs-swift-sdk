@@ -8,8 +8,6 @@ import LiveKit
 /// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
 @MainActor
 final class ConversationAudioManager {
-    private(set) var audioDevices: [AudioDevice] = []
-    private(set) var selectedAudioDeviceID: String = ""
     private(set) var softwareMuteProcessor: SoftwareMuteProcessor?
 
     private let audioManager = AudioManager.shared
@@ -17,22 +15,12 @@ final class ConversationAudioManager {
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
 
-    /// Callback when audio devices list changes
-    var onDevicesChanged: (([AudioDevice]) -> Void)?
-
-    /// Callback when selected device changes
-    var onSelectedDeviceChanged: ((String) -> Void)?
-
     init(logger: any Logging) {
         self.logger = logger
-        audioDevices = audioManager.inputDevices
-        selectedAudioDeviceID = audioManager.inputDevice.deviceId
         setupInitialConfiguration()
     }
 
     deinit {
-        // Reset callbacks directly since we can't call MainActor methods from deinit
-        audioManager.onDeviceUpdate = nil
         if audioSpeechHandlerInstalled {
             audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
         }
@@ -94,17 +82,6 @@ final class ConversationAudioManager {
                 try await audioManager.setRecordingAlwaysPreparedMode(true)
             } catch {
                 logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-
-        // Setup device change observer
-        audioManager.onDeviceUpdate = { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.audioDevices = self.audioManager.inputDevices
-                self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
-                self.onDevicesChanged?(self.audioDevices)
-                self.onSelectedDeviceChanged?(self.selectedAudioDeviceID)
             }
         }
     }
