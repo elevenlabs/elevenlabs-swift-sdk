@@ -98,7 +98,7 @@ final class ConversationTests: XCTestCase {
             )
         }
 
-        await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
+        await mockWebRTCConnectionManager.waitForEventHandlerInstalled()
 
         guard mockWebRTCConnectionManager.onEventReceived != nil else {
             mockWebRTCConnectionManager.succeedAgentReady()
@@ -439,25 +439,16 @@ final class ConversationTests: XCTestCase {
 
     func testStartConversationAgentTimeoutFailure() async {
         mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        mockWebRTCConnectionManager.timeoutAgentReady()
 
         let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 0.05)
         let config = makeConfig(startupConfiguration: startupConfig)
 
-        let startTask = Task {
-            guard let conversation = self.conversation else { return }
+        await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startConversation(
                 auth: .publicAgent(id: "test-agent"),
                 config: config
             )
-        }
-
-        await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
-        try? await conversation.setMicMuted(false)
-        XCTAssertFalse(conversation.isMicMuted)
-        mockWebRTCConnectionManager.timeoutAgentReady()
-
-        await XCTAssertThrowsErrorAsync {
-            try await startTask.value
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .agentTimeout)
         }

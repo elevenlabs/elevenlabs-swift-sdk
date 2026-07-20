@@ -51,19 +51,6 @@ extension XCTestCase {
         return await recorder.last()
     }
 
-    /// Waits until the mock's `onEventReceived` handler is installed.
-    func waitForEventHandlerInstalled(
-        on mock: MockWebRTCConnectionManager,
-        timeout: TimeInterval = 1.0
-    ) async {
-        let done = expectation(description: "event handler installed")
-        Task {
-            await mock.waitForEventHandlerInstalled()
-            done.fulfill()
-        }
-        await fulfillment(of: [done], timeout: timeout)
-    }
-
     func XCTAssertThrowsErrorAsync(
         _ expression: () async throws -> some Sendable,
         _ message: @autoclosure () -> String = "",

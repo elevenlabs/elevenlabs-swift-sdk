@@ -140,7 +140,7 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
             _ = try await conversation.startConversation(auth: .publicAgent(id: "new-agent"))
         }
 
-        await waitForEventHandlerInstalled(on: mockWebRTCConnectionManager)
+        await mockWebRTCConnectionManager.waitForEventHandlerInstalled()
         XCTAssertTrue(conversation.state.isConnecting, "Should be connecting immediately, even if disconnect() is slow")
 
         mockWebRTCConnectionManager.succeedAgentReady()
