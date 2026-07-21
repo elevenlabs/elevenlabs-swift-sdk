@@ -663,10 +663,9 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testEndConversationWhenNotConnected() async {
-        // Should not throw error when ending a non-connected conversation
+    func testEndIdleConversation() async {
         await conversation.endConversation()
-        XCTAssertEqual(conversation.state, .idle)
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
     }
 
     func testConversationErrorEquality() {

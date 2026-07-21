@@ -220,6 +220,12 @@ final class Conversation: ObservableObject {
         disconnectReason: DisconnectionReason = .user,
         endReason: EndReason = .userEnded
     ) async {
+        if state == .idle {
+            state = .ended(reason: endReason)
+            tearDownActiveSession()
+            return
+        }
+
         guard state.isConnected || state.isConnecting,
               let connectionManager = activeConnectionManager
         else { return }
