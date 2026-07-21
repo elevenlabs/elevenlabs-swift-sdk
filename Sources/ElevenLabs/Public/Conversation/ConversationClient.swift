@@ -98,14 +98,15 @@ public final class ConversationClient: ObservableObject {
         auth: ConversationCredentials,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
-        await session?.endConversation()
-
+        let previousConversation = session
         let conversation = Conversation(
             dependencyProvider: dependencyProvider ?? Dependencies(),
             config: config,
             callbacks: callbacks
         )
         bind(conversation)
+
+        await previousConversation?.endConversation()
         return try await conversation.start(auth: auth)
     }
 
