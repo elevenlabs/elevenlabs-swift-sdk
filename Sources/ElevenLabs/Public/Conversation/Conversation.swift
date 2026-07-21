@@ -16,7 +16,6 @@ final class Conversation: ObservableObject {
     @Published var state: ConversationState = .idle
     @Published var messages: [Message] = []
     @Published var agentState: ElevenLabs.AgentState = .listening
-    @Published var isMicMuted: Bool = true
 
     /// Stream of client tool calls that need to be executed by the app
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
@@ -87,11 +86,13 @@ final class Conversation: ObservableObject {
     init(
         dependencyProvider: any ConversationDependencyProvider,
         config: ConversationConfig = .init(),
-        callbacks: ConversationCallbacks = .init()
+        callbacks: ConversationCallbacks = .init(),
+        initialMicMuted: Bool = false
     ) {
         self.dependencyProvider = dependencyProvider
         self.config = config
         self.callbacks = callbacks
+        pendingMuteState = initialMicMuted
         logger = dependencyProvider.logger
         setupAudioManager()
     }
@@ -156,6 +157,9 @@ final class Conversation: ObservableObject {
         }
 
         await audioManager?.configure(with: config, callbacks: callbacks)
+        if let pendingMuteState {
+            audioManager?.softwareMuteProcessor?.setMuted(pendingMuteState)
+        }
 
         let result: ConversationStartResult
         do {
@@ -177,14 +181,16 @@ final class Conversation: ObservableObject {
         if let pendingMute = pendingMuteState {
             pendingMuteState = nil
             do {
-                try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
-                isMicMuted = pendingMute
+                if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
+                    softwareMuteProcessor.setMuted(pendingMute)
+                } else {
+                    try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
+                }
             } catch {
                 logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
             }
         }
 
-        isMicMuted = webRTCConnectionManager.isMicrophoneMuted
         return result
     }
 
@@ -251,16 +257,13 @@ final class Conversation: ObservableObject {
         appendMessage(role: .user, content: text)
     }
 
-    /// Toggle the local microphone mute state.
-    func toggleMicMute() async throws {
-        try await setMicMuted(!isMicMuted)
-    }
-
     /// Mute or unmute the local microphone.
     func setMicMuted(_ muted: Bool) async throws {
         if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
             softwareMuteProcessor.setMuted(muted)
-            isMicMuted = muted
+            if state.isConnecting {
+                pendingMuteState = muted
+            }
             return
         }
         try await setHardwareMicMuted(muted)
@@ -273,17 +276,14 @@ final class Conversation: ObservableObject {
             }
             do {
                 try await webRTCConnectionManager.setMicrophoneMuted(muted)
-                isMicMuted = muted
                 pendingMuteState = nil
             } catch WebRTCConnectionManagerError.roomUnavailable {
                 throw ConversationError.notConnected
             } catch {
                 throw ConversationError.microphoneToggleFailed(error)
             }
-        } else if state.isConnecting {
-            // Buffer the mute state to apply after connection completes
+        } else if state == .idle || state.isConnecting {
             pendingMuteState = muted
-            isMicMuted = muted
         }
     }
 
@@ -446,7 +446,6 @@ final class Conversation: ObservableObject {
         speakingTimer = nil
         pendingMuteState = nil
         agentState = .listening
-        isMicMuted = true
 
         audioManager?.cleanup()
         agentStateManager = nil
