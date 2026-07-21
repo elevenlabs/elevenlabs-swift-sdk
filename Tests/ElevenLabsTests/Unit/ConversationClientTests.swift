@@ -87,6 +87,36 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
     }
 
+    func testLatestOverlappingStartWins() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+
+        let firstStart = Task {
+            try await client.startConversation(auth: .publicAgent(id: "first-agent"))
+        }
+        await waitForPublished(client.$state) {
+            guard case let .connecting(stage) = $0,
+                  case .waitingForAgent = stage
+            else {
+                return false
+            }
+            return true
+        }
+
+        var textConfig = ConversationConfig()
+        textConfig.conversationOverrides = ConversationOverrides(textOnly: true)
+        _ = try await client.startConversation(
+            auth: .publicAgent(id: "second-agent"),
+            config: textConfig
+        )
+
+        mockWebRTCConnectionManager.succeedAgentReady()
+        await XCTAssertThrowsErrorAsync {
+            _ = try await firstStart.value
+        }
+
+        assertConnected(agentId: "second-agent")
+    }
+
     func testResetEndsSessionAndClearsMirroredState() async throws {
         _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
 
