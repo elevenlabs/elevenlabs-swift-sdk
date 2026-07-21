@@ -41,7 +41,6 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testConversationInitialState() {
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertTrue(conversation.isMicMuted)
         XCTAssertTrue(conversation.messages.isEmpty)
     }
 
@@ -171,7 +170,6 @@ final class ConversationTests: XCTestCase {
         )
 
         XCTAssertNotNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
-        XCTAssertFalse(conversation.isMicMuted)
 
         mockWebRTCConnectionManager.onRemoteSpeakingChanged?(true)
         await waitForPublished(conversation.$agentState) { $0 == .speaking }
@@ -302,17 +300,13 @@ final class ConversationTests: XCTestCase {
     }
 
     @MainActor
-    func testToggleMicMuteWhenNotConnectedIsNoOp() async throws {
-        try await conversation.toggleMicMute()
+    func testSetMicMutedWhileIdleAppliesOnStart() async throws {
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
 
-        XCTAssertTrue(conversation.isMicMuted)
-    }
+        try await conversation.setMicMuted(true)
+        _ = try await conversation.start(auth: .publicAgent(id: "test-agent"))
 
-    @MainActor
-    func testSetMicMutedWhenNotConnectedIsNoOp() async throws {
-        try await conversation.setMicMuted(false)
-
-        XCTAssertTrue(conversation.isMicMuted)
+        XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
     }
 
     @MainActor
@@ -324,7 +318,6 @@ final class ConversationTests: XCTestCase {
         try await conversation.setHardwareMicMuted(true)
 
         XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
-        XCTAssertTrue(conversation.isMicMuted)
     }
 
     @MainActor
@@ -344,7 +337,6 @@ final class ConversationTests: XCTestCase {
         try await conversation.setMicMuted(true)
 
         XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
-        XCTAssertTrue(conversation.isMicMuted)
     }
 
     @MainActor
@@ -445,7 +437,6 @@ final class ConversationTests: XCTestCase {
         guard case .error(.agentTimeout) = conversation.state else {
             return XCTFail("Expected agent timeout error state")
         }
-        XCTAssertTrue(conversation.isMicMuted)
         XCTAssertNil(mockWebRTCConnectionManager.room)
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
