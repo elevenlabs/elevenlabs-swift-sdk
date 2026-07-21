@@ -15,7 +15,7 @@ public final class ConversationClient: ObservableObject {
     @Published public private(set) var state: ConversationState = .idle
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var agentState: ElevenLabs.AgentState = .listening
-    @Published public private(set) var isMicMuted: Bool = true
+    @Published public private(set) var isMicMuted: Bool = false
 
     /// Stream of client tool calls that need to be executed by the app
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
@@ -102,7 +102,8 @@ public final class ConversationClient: ObservableObject {
         let conversation = Conversation(
             dependencyProvider: dependencyProvider ?? Dependencies(),
             config: config,
-            callbacks: callbacks
+            callbacks: callbacks,
+            initialMicMuted: isMicMuted
         )
         bind(conversation)
 
@@ -126,7 +127,7 @@ public final class ConversationClient: ObservableObject {
         state = .idle
         messages = []
         agentState = .listening
-        isMicMuted = true
+        isMicMuted = false
         pendingToolCalls = []
         conversationMetadata = nil
         mcpToolCalls = []
@@ -141,7 +142,6 @@ public final class ConversationClient: ObservableObject {
         session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
         session.$messages.sink { [weak self] in self?.messages = $0 }.store(in: &cancellables)
         session.$agentState.sink { [weak self] in self?.agentState = $0 }.store(in: &cancellables)
-        session.$isMicMuted.sink { [weak self] in self?.isMicMuted = $0 }.store(in: &cancellables)
         session.$pendingToolCalls.sink { [weak self] in self?.pendingToolCalls = $0 }.store(in: &cancellables)
         session.$conversationMetadata.sink { [weak self] in self?.conversationMetadata = $0 }.store(in: &cancellables)
         session.$mcpToolCalls.sink { [weak self] in self?.mcpToolCalls = $0 }.store(in: &cancellables)
@@ -172,14 +172,10 @@ public final class ConversationClient: ObservableObject {
 
     // MARK: - Microphone
 
-    /// Toggle / set microphone. A best-effort no-op when there is no live session.
-    public func toggleMicMute() async throws {
-        try await session?.toggleMicMute()
-    }
-
-    /// A best-effort no-op when there is no live session.
+    /// Set the microphone mute state for the current or next conversation.
     public func setMicMuted(_ muted: Bool) async throws {
         try await session?.setMicMuted(muted)
+        isMicMuted = muted
     }
 
     // MARK: - Tools & feedback

@@ -29,7 +29,7 @@ final class ConversationClientTests: XCTestCase {
     func testInitialStateIsIdleBeforeAnyStart() {
         XCTAssertEqual(client.state, .idle)
         XCTAssertTrue(client.messages.isEmpty)
-        XCTAssertTrue(client.isMicMuted)
+        XCTAssertFalse(client.isMicMuted)
     }
 
     func testStartConversationMirrorsSessionStateThroughActiveAndEnd() async throws {
@@ -39,6 +39,8 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(result.callInfo.agentId, "test-agent-id")
         XCTAssertEqual(result.callInfo.conversationId, "test-conversation-id")
         XCTAssertNotNil(result.metrics.initiationMetadata)
+        XCTAssertFalse(client.isMicMuted)
+        XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
 
         let payload: [String: Any] = [
             "type": "agent_response",
@@ -136,7 +138,7 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertTrue(client.messages.isEmpty)
         XCTAssertTrue(client.pendingToolCalls.isEmpty)
         XCTAssertNil(client.conversationMetadata)
-        XCTAssertTrue(client.isMicMuted)
+        XCTAssertFalse(client.isMicMuted)
 
         // Client is reusable after reset.
         _ = try await client.startConversation(auth: .publicAgent(id: "after-reset"))
@@ -192,21 +194,34 @@ final class ConversationClientTests: XCTestCase {
         }
     }
 
-    func testNoOpMethodsAreHarmlessWithNoSession() async throws {
+    func testSetMicMutedUpdatesStateWithNoSession() async throws {
         await client.endConversation()
         try await client.setMicMuted(true)
-        try await client.toggleMicMute()
+        XCTAssertTrue(client.isMicMuted)
+
+        try await client.setMicMuted(false)
+        XCTAssertFalse(client.isMicMuted)
+
         client.markToolCallCompleted("missing-id")
 
         XCTAssertEqual(client.state, .idle)
     }
 
-    func testMicMethodsAreHarmlessAfterEnd() async throws {
+    func testPreStartMuteIsAppliedToConversation() async throws {
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+
+        try await client.setMicMuted(true)
+        _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+
+        XCTAssertTrue(client.isMicMuted)
+        XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
+    }
+
+    func testSetMicMutedIsHarmlessAfterEnd() async throws {
         _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
         await client.endConversation()
 
-        try await client.setMicMuted(false)
-        try await client.toggleMicMute()
+        try await client.setMicMuted(true)
 
         XCTAssertTrue(client.isMicMuted)
         XCTAssertEqual(client.state, .ended(reason: .userEnded))
