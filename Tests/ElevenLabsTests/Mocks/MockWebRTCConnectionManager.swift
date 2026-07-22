@@ -93,6 +93,9 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         case let .timedOut(elapsed):
             metrics.agentReady = elapsed
             throw ConversationError.agentTimeout
+        case let .cancelled(elapsed):
+            metrics.agentReady = elapsed
+            throw CancellationError()
         }
 
         onStartupStateChange(.sendingConversationInit)
@@ -132,6 +135,10 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         errorHandler = nil
         onRemoteSpeakingChanged = nil
         room = nil
+        // Only cancel an in-flight agent-ready wait — don't stash `.cancelled` for the next connect.
+        if waitContinuation != nil {
+            await cancelAgentReady(elapsed: 0)
+        }
         await initiationMetadataWaiter?.cancel()
         initiationMetadataWaiter = nil
     }
@@ -207,6 +214,11 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     @MainActor
     func timeoutAgentReady(elapsed: TimeInterval = 0.1) {
         resumeWait(with: .timedOut(elapsed: elapsed))
+    }
+
+    @MainActor
+    func cancelAgentReady(elapsed: TimeInterval = 0.1) {
+        resumeWait(with: .cancelled(elapsed: elapsed))
     }
 
     @MainActor

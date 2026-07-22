@@ -417,6 +417,9 @@ final class Conversation: ObservableObject {
         cleanupTransientResources()
         await connectionManager.disconnect()
 
+        // End/supersede may have already moved us out of connecting; don't
+        // overwrite `.ended` or fire shared `onError` for a discarded session.
+        guard state.isConnecting else { return }
         state = .error(error)
         callbacks.onError?(error)
     }

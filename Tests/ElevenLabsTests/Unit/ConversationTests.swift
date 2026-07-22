@@ -484,6 +484,30 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
     }
 
+    func testEndDuringWaitingForAgentDoesNotReportFailure() async {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        let startTask = Task {
+            try await conversation.start(auth: .publicAgent(id: "test-agent"))
+        }
+
+        await waitForPublished(conversation.$state) {
+            if case .connecting(.waitingForAgent) = $0 { return true }
+            return false
+        }
+        await conversation.endConversation()
+
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
+        // onError appends asynchronously; give it a beat, then confirm End didn't fake a timeout.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let errors = await capturedErrors.values()
+        XCTAssertTrue(errors.isEmpty)
+    }
+
     func testStartConversationInitiationMetadataTimeout() async {
         mockWebRTCConnectionManager.autoDeliverInitiationMetadata = false
 
