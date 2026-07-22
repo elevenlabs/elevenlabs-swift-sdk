@@ -5,6 +5,7 @@ import LiveKit
 enum AgentReadyWaitResult: Equatable {
     case success(elapsed: TimeInterval)
     case timedOut(elapsed: TimeInterval)
+    case cancelled(elapsed: TimeInterval)
 }
 
 enum WebRTCConnectionManagerError: Error {
@@ -118,13 +119,20 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         // 4. Wait for the agent to be ready (fails outright if it doesn't join in time).
         let agentTimeout = config.startupConfiguration.agentReadyTimeout
         onStartupStateChange(.waitingForAgent(timeout: agentTimeout))
-        guard case let .success(elapsed) = await waitForAgentReady(timeout: agentTimeout) else {
+        switch await waitForAgentReady(timeout: agentTimeout) {
+        case let .success(elapsed):
+            metrics.agentReady = elapsed
+            onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
+        case let .timedOut(elapsed):
+            metrics.agentReady = elapsed
             metrics.total = Date().timeIntervalSince(startTime)
             logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
             throw ConversationError.agentTimeout
+        case let .cancelled(elapsed):
+            metrics.agentReady = elapsed
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw CancellationError()
         }
-        metrics.agentReady = elapsed
-        onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
 
         // 5. Send conversation_initiation_client_data (sent once).
         onStartupStateChange(.sendingConversationInit)
@@ -148,7 +156,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     /// Race the delegate's "first remote participant joined" signal against `timeout`.
-    /// A `.timedOut` result makes `connect` fail with `ConversationError.agentTimeout`.
+    /// `.timedOut` → `ConversationError.agentTimeout`; `.cancelled` → `CancellationError`
+    /// (disconnect/release during the wait).
     private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
             return .timedOut(elapsed: 0)
@@ -159,6 +168,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 do {
                     try await delegate.awaitRemoteParticipant()
                     return .success(elapsed: Date().timeIntervalSince(start))
+                } catch is CancellationError {
+                    return .cancelled(elapsed: Date().timeIntervalSince(start))
                 } catch {
                     return .timedOut(elapsed: Date().timeIntervalSince(start))
                 }
