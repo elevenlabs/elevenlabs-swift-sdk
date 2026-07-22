@@ -677,6 +677,55 @@ final class ConversationTests: XCTestCase {
         }
     }
 
+    func testToolCallLifecycle() async throws {
+        _ = try await conversation.start(auth: .publicAgent(id: "test"))
+
+        let toolCall = try ClientToolCallEvent(
+            toolName: "test_tool",
+            toolCallId: "call_123",
+            parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
+            eventId: 1,
+            expectsResponse: false
+        )
+        mockWebRTCConnectionManager.deliver(.clientToolCall(toolCall))
+        await waitForPublished(conversation.$pendingToolCalls) { $0.contains { $0.toolCallId == "call_123" } }
+
+        XCTAssertEqual(conversation.pendingToolCalls.count, 1)
+        XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
+
+        let payloadCountBeforeResult = mockWebRTCConnectionManager.publishedPayloads.count
+        try await conversation.sendToolResult(for: "call_123", result: "success")
+
+        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
+        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCountBeforeResult + 1)
+        let lastPayload = mockWebRTCConnectionManager.publishedPayloads.last ?? Data()
+        let lastPayloadString = String(data: lastPayload, encoding: .utf8) ?? ""
+        XCTAssertTrue(lastPayloadString.contains("call_123"))
+        XCTAssertTrue(lastPayloadString.contains("success"))
+    }
+
+    func testSendToolResultEncodesEncodableResult() async throws {
+        struct Weather: Encodable {
+            let temperature: Int
+            let condition: String
+        }
+
+        _ = try await conversation.start(auth: .publicAgent(id: "test"))
+
+        try await conversation.sendToolResult(
+            for: "call_42",
+            result: Weather(temperature: 25, condition: "Sunny")
+        )
+
+        let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
+        let envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+        XCTAssertEqual(envelope["type"] as? String, "client_tool_result")
+        let resultString = try XCTUnwrap(envelope["result"] as? String)
+        let parsed = try JSONSerialization.jsonObject(with: XCTUnwrap(resultString.data(using: .utf8))) as? [String: Any]
+        XCTAssertEqual(parsed?["temperature"] as? Int, 25)
+        XCTAssertEqual(parsed?["condition"] as? String, "Sunny")
+    }
+
     @MainActor
     func testEndIdleConversation() async {
         await conversation.endConversation()
