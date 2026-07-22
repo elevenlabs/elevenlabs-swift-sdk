@@ -1,4 +1,5 @@
 @testable import ElevenLabs
+import Foundation
 import XCTest
 
 @MainActor
@@ -239,5 +240,54 @@ final class ConversationEventHandlerTests: XCTestCase {
         ))
         XCTAssertEqual(conversation.messages.last?.content, "Hello World!")
         XCTAssertEqual(conversation.messages.last?.eventId, 13)
+    }
+
+    // MARK: - End Call
+
+    func testAutomaticEndCallHandling() async {
+        await conversation.handleIncomingEvent(.agentToolResponse(AgentToolResponseEvent(
+            toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 1
+        )))
+
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
+    }
+
+    // MARK: - Audio Alignment
+
+    func testAudioAlignmentCallback() async {
+        let receivedAlignment = expectation(description: "Audio alignment callback")
+        conversation = Conversation(
+            dependencyProvider: mockDependencyProvider,
+            callbacks: ConversationCallbacks(onAudioAlignment: { alignment in
+                XCTAssertEqual(alignment.chars, ["H", "e", "l", "l", "o"])
+                receivedAlignment.fulfill()
+            })
+        )
+
+        let alignment = AudioAlignment(
+            chars: ["H", "e", "l", "l", "o"],
+            charStartTimesMs: [0, 100, 200, 300, 400],
+            charDurationsMs: [100, 100, 100, 100, 100]
+        )
+        await conversation.handleIncomingEvent(
+            .audio(AudioEvent(audioBase64: "base64", eventId: 1, alignment: alignment))
+        )
+        await fulfillment(of: [receivedAlignment], timeout: 1)
+    }
+
+    // MARK: - Client Tool Calls
+
+    func testClientToolCallIsQueuedInPendingToolCalls() async throws {
+        let toolCall = try ClientToolCallEvent(
+            toolName: "test_tool",
+            toolCallId: "call_123",
+            parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
+            eventId: 1,
+            expectsResponse: false
+        )
+        await conversation.handleIncomingEvent(.clientToolCall(toolCall))
+
+        XCTAssertEqual(conversation.pendingToolCalls.count, 1)
+        XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
     }
 }
