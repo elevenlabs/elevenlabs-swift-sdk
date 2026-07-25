@@ -14,7 +14,7 @@ public final class ConversationClient: ObservableObject {
 
     @Published public private(set) var state: ConversationState = .idle
     @Published public private(set) var messages: [Message] = []
-    @Published public private(set) var agentState: ElevenLabs.AgentState = .listening
+    @Published public private(set) var agentState: AgentState = .listening
     @Published public private(set) var isMicMuted: Bool = false
 
     /// Stream of client tool calls that need to be executed by the app
@@ -33,6 +33,7 @@ public final class ConversationClient: ObservableObject {
 
     private let callbacks: ConversationCallbacks
     private let dependencyProvider: (any ConversationDependencyProvider)?
+    private let logLevel: LogLevel
 
     /// The current single-use session. Internal plumbing — never exposed.
     private var session: Conversation?
@@ -43,14 +44,16 @@ public final class ConversationClient: ObservableObject {
     private var agentAudioObservers: [any ConversationAudioObserver] = []
     private var micAudioObservers: [any ConversationAudioObserver] = []
 
-    public init(callbacks: ConversationCallbacks = .init()) {
+    public init(callbacks: ConversationCallbacks = .init(), logLevel: LogLevel = .warning) {
         self.callbacks = callbacks
+        self.logLevel = logLevel
         dependencyProvider = nil
     }
 
     /// Test-only initializer that injects a dependency provider.
     init(callbacks: ConversationCallbacks = .init(), dependencyProvider: any ConversationDependencyProvider) {
         self.callbacks = callbacks
+        logLevel = .warning
         self.dependencyProvider = dependencyProvider
     }
 
@@ -104,7 +107,7 @@ public final class ConversationClient: ObservableObject {
     ) async throws -> ConversationStartResult {
         let previousConversation = session
         let conversation = Conversation(
-            dependencyProvider: dependencyProvider ?? Dependencies(endpoints: config.endpoints),
+            dependencyProvider: dependencyProvider ?? Dependencies(logLevel: logLevel, endpoints: config.endpoints),
             config: config,
             callbacks: callbacks,
             initialMicMuted: isMicMuted
