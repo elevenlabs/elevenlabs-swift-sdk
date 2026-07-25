@@ -16,16 +16,16 @@ import Foundation
 
 /// Service for managing ElevenLabs authentication
 /// This is designed to be stateless and SDK-friendly
-public struct TokenService: Sendable {
+struct TokenService: Sendable {
     private let endpoints: Endpoints
     private let urlSession: URLSession
 
     // Development-only API key for testing private agents
     // This should only be set in debug builds for local testing
     #if DEBUG
-    public let debugApiKey: String?
+    let debugApiKey: String?
 
-    public init(
+    init(
         endpoints: Endpoints = .production,
         urlSession: URLSession = .shared,
         debugApiKey: String? = nil
@@ -35,7 +35,7 @@ public struct TokenService: Sendable {
         self.debugApiKey = debugApiKey
     }
     #else
-    public init(
+    init(
         endpoints: Endpoints = .production,
         urlSession: URLSession = .shared
     ) {
@@ -48,7 +48,7 @@ public struct TokenService: Sendable {
     ///
     /// Translates internal `TokenError`s into public `ConversationError`s so
     /// callers only ever deal with one error type.
-    public func fetchToken(for credentials: ConversationCredentials) async throws -> String {
+    func fetchToken(for credentials: ConversationCredentials) async throws -> String {
         do {
             switch credentials.authSource {
             case let .publicAgentId(agentId):
