@@ -100,7 +100,7 @@ struct ChatPopupView: View {
     }
 
     private func orb(size: CGFloat) -> some View {
-        ChatOrbView(state: vm.orbState, size: size, theme: vm.widgetConfig.theme)
+        ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: size, theme: vm.widgetConfig.theme)
     }
 
     private var header: some View {

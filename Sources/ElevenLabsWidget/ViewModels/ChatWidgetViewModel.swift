@@ -36,6 +36,7 @@ final class ChatWidgetViewModel: ObservableObject {
     var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
+    let audioLevels = OrbAudioLevels()
 
     /// Tool calls already dispatched, so a re-published snapshot doesn't run them twice.
     private var dispatchedToolCallIds: Set<String> = []
@@ -61,8 +62,15 @@ final class ChatWidgetViewModel: ObservableObject {
         self.conversationConfig = conversationConfig
         self.onClientToolCall = onClientToolCall
 
-        // The client is durable across sessions, so every subscription is wired once.
+        // The client is durable across sessions, so every subscription and
+        // observer is wired once.
+        client.addMicAudioObserver(audioLevels.micMonitor)
+        client.addAgentAudioObserver(audioLevels.agentMonitor)
+
         client.$state.assign(to: &$conversationState)
+        client.$state
+            .sink { [weak self] in self?.audioLevels.isActive = $0.isConnected }
+            .store(in: &cancellables)
         client.$agentState.assign(to: &$agentState)
         client.$isMicMuted.assign(to: &$isMicMuted)
         client.$messages
@@ -153,7 +161,12 @@ final class ChatWidgetViewModel: ObservableObject {
         switch conversationState {
         case .idle, .ended, .error: .disconnected
         case .connecting: .connecting
-        case .connected: agentState == .speaking ? .speaking : .listening
+        case .connected:
+            switch agentState {
+            case .speaking: .speaking
+            case .thinking: .thinking
+            case .listening: .listening
+            }
         }
     }
 

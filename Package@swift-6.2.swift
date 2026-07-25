@@ -45,6 +45,15 @@ let package = Package(
             name: "ElevenLabsWidget",
             dependencies: [
                 "ElevenLabs"
+            ],
+            resources: [
+                .process("Resources/OrbShader.metal")
+            ]
+        ),
+        .testTarget(
+            name: "ElevenLabsWidgetTests",
+            dependencies: [
+                "ElevenLabsWidget"
             ]
         ),
         .testTarget(
