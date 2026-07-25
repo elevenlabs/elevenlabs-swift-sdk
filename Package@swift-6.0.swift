@@ -16,6 +16,10 @@ let package = Package(
         .library(
             name: "ElevenLabs",
             targets: ["ElevenLabs"]
+        ),
+        .library(
+            name: "ElevenLabsWidget",
+            targets: ["ElevenLabsWidget"]
         )
     ],
     dependencies: [
@@ -35,6 +39,12 @@ let package = Package(
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy")
+            ]
+        ),
+        .target(
+            name: "ElevenLabsWidget",
+            dependencies: [
+                "ElevenLabs"
             ]
         ),
         .testTarget(
