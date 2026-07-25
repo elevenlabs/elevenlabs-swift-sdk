@@ -17,29 +17,7 @@ import Foundation
 /// Service for managing ElevenLabs authentication
 /// This is designed to be stateless and SDK-friendly
 public struct TokenService: Sendable {
-    public struct ConnectionDetails: Codable, Sendable {
-        public let serverUrl: String
-        public let roomName: String
-        public let participantName: String
-        public let participantToken: String
-    }
-
-    /// Optional configuration for advanced use cases
-    public struct Configuration: Sendable {
-        /// Custom API endpoint (for testing or enterprise deployments)
-        public let apiEndpoint: String?
-        /// Custom WebSocket URL (for testing or enterprise deployments)
-        public let websocketURL: String?
-
-        public init(apiEndpoint: String? = nil, websocketURL: String? = nil) {
-            self.apiEndpoint = apiEndpoint
-            self.websocketURL = websocketURL
-        }
-
-        public static let `default` = Configuration()
-    }
-
-    private let configuration: Configuration
+    private let endpoints: Endpoints
     private let urlSession: URLSession
 
     // Development-only API key for testing private agents
@@ -48,53 +26,45 @@ public struct TokenService: Sendable {
     public let debugApiKey: String?
 
     public init(
-        configuration: Configuration = .default,
+        endpoints: Endpoints = .production,
         urlSession: URLSession = .shared,
         debugApiKey: String? = nil
     ) {
-        self.configuration = configuration
+        self.endpoints = endpoints
         self.urlSession = urlSession
         self.debugApiKey = debugApiKey
     }
     #else
     public init(
-        configuration: Configuration = .default,
+        endpoints: Endpoints = .production,
         urlSession: URLSession = .shared
     ) {
-        self.configuration = configuration
+        self.endpoints = endpoints
         self.urlSession = urlSession
     }
     #endif
 
-    /// Fetch connection details for ElevenLabs conversation.
+    /// Resolve the token a voice conversation authenticates with.
     ///
     /// Translates internal `TokenError`s into public `ConversationError`s so
     /// callers only ever deal with one error type.
-    public func fetchConnectionDetails(configuration: ConversationCredentials) async throws -> ConnectionDetails {
+    public func fetchToken(for credentials: ConversationCredentials) async throws -> String {
         do {
-            let token: String = switch configuration.authSource {
+            switch credentials.authSource {
             case let .publicAgentId(agentId):
-                try await fetchTokenFromAPI(agentId: agentId, environment: configuration.environment)
+                return try await fetchTokenFromAPI(
+                    agentId: agentId,
+                    environment: credentials.environment
+                )
             case let .conversationToken(conversationToken):
-                conversationToken
+                return conversationToken
             case .signedWebSocketURL:
                 throw ConversationError.authenticationFailed(
                     "Signed WebSocket URLs are only supported for text-only conversations."
                 )
             case let .customTokenProvider(provider):
-                try await provider()
+                return try await provider()
             }
-
-            let websocketURL = self.configuration.websocketURL ?? ConnectionConstants.voiceConversationUrl
-
-            // ElevenLabs tokens contain room name and participant identity in the JWT
-            // LiveKit will extract these automatically, so we provide empty values
-            return ConnectionDetails(
-                serverUrl: websocketURL,
-                roomName: "", // LiveKit extracts from JWT
-                participantName: "", // LiveKit extracts from JWT
-                participantToken: token
-            )
         } catch let error as ConversationError {
             throw error
         } catch let error as TokenError {
@@ -104,14 +74,18 @@ public struct TokenService: Sendable {
         }
     }
 
-    private func fetchTokenFromAPI(agentId: String, environment: String? = nil) async throws -> String {
-        // Build URL with agent ID as query parameter
-        let apiUrl = configuration.apiEndpoint ?? ConnectionConstants.tokenUrl
-
-        guard var components = URLComponents(string: apiUrl) else {
+    private func fetchTokenFromAPI(
+        agentId: String,
+        environment: String? = nil
+    ) async throws -> String {
+        guard var components = URLComponents(
+            url: endpoints.conversationToken,
+            resolvingAgainstBaseURL: false
+        ) else {
             throw TokenError.invalidURL
         }
-        var queryItems = [
+        var queryItems = components.queryItems ?? []
+        queryItems += [
             URLQueryItem(name: "agent_id", value: agentId),
             URLQueryItem(name: "source", value: "swift_sdk"),
             URLQueryItem(name: "version", value: SDKVersion.version)

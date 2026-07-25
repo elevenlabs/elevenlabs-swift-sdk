@@ -232,6 +232,16 @@ ElevenLabs.configure(
 )
 ```
 
+### Custom Endpoints
+
+Point the HTTP API base or either WebSocket endpoint at a proxy, regional host, or staging:
+
+```swift
+let config = ConversationConfig(
+    endpoints: Endpoints(apiBase: URL(string: "https://my-proxy.example.com")!)
+)
+```
+
 ### Fine-Grained Callbacks
 
 Want to handle events without Combine? Use `ConversationCallbacks`:

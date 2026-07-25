@@ -10,19 +10,16 @@ final class ElevenLabsSDKTests: XCTestCase {
     func testDefaultConfiguration() {
         let config = ElevenLabs.Configuration.default
 
-        XCTAssertNil(config.apiEndpoint)
         XCTAssertEqual(config.logLevel, .warning)
         XCTAssertFalse(config.debugMode)
     }
 
     func testCustomConfiguration() {
         let config = ElevenLabs.Configuration(
-            apiEndpoint: URL(string: "https://custom.api.com"),
             logLevel: .debug,
             debugMode: true
         )
 
-        XCTAssertEqual(config.apiEndpoint, URL(string: "https://custom.api.com"))
         XCTAssertEqual(config.logLevel, .debug)
         XCTAssertTrue(config.debugMode)
     }
@@ -30,15 +27,11 @@ final class ElevenLabsSDKTests: XCTestCase {
     @MainActor
     func testConfigureSDK() {
         let config = ElevenLabs.Configuration(
-            apiEndpoint: URL(string: "https://test.api.com"),
             logLevel: .info,
             debugMode: false
         )
 
         ElevenLabs.configure(config)
-
-        // Verify configuration was applied (in real implementation)
-        // This would require exposing the internal configuration for testing
     }
 
     @MainActor
@@ -104,12 +97,46 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertEqual(errorConfig.logLevel, .error)
     }
 
+    func testEndpointsDefaultToProduction() {
+        XCTAssertEqual(ConversationConfig().endpoints, .production)
+        XCTAssertEqual(Endpoints(), .production)
+    }
+
+    func testEndpointsOverrideIndividualHosts() throws {
+        let endpoints = try Endpoints(voiceWebSocket: XCTUnwrap(URL(string: "wss://rtc.example.com")))
+        XCTAssertEqual(endpoints.voiceWebSocket.absoluteString, "wss://rtc.example.com")
+        XCTAssertEqual(endpoints.textWebSocket, Endpoints.production.textWebSocket)
+        XCTAssertEqual(endpoints.apiBase, Endpoints.production.apiBase)
+    }
+
+    func testConversationTokenDerivesFromAPIBase() throws {
+        let endpoints = try Endpoints(apiBase: XCTUnwrap(URL(string: "https://proxy.example.com/eleven")))
+        XCTAssertEqual(
+            endpoints.conversationToken.absoluteString,
+            "https://proxy.example.com/eleven/v1/convai/conversation/token"
+        )
+        XCTAssertEqual(
+            Endpoints.production.conversationToken.absoluteString,
+            "https://api.elevenlabs.io/v1/convai/conversation/token"
+        )
+    }
+
+    func testWebsocketUrlKeepsEndpointQueryItems() throws {
+        let endpoints = try Endpoints(textWebSocket: XCTUnwrap(URL(string: "wss://proxy.example.com/ws?tenant=acme")))
+        let url = try WebSocketConnectionManager.websocketUrl(
+            for: .publicAgent(id: "agent-123"),
+            endpoints: endpoints
+        )
+        XCTAssertEqual(url.absoluteString, "wss://proxy.example.com/ws?tenant=acme&agent_id=agent-123")
+    }
+
     func testConversationConfigDefaults() {
         let config = ConversationConfig()
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
         XCTAssertFalse(config.conversationOverrides.textOnly)
+        XCTAssertEqual(config.endpoints, .production)
     }
 
     func testAuthenticationMethods() {

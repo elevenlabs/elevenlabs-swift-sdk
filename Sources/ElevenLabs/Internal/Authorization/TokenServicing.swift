@@ -1,10 +1,9 @@
 import Foundation
 
 protocol TokenServicing: Sendable {
-    /// Fetch connection details for ElevenLabs conversation
-    /// - Parameter configuration: The configuration to use for fetching connection details
-    /// - Returns: The connection details for the ElevenLabs conversation
-    func fetchConnectionDetails(configuration: ConversationCredentials) async throws -> TokenService.ConnectionDetails
+    /// Resolve the token a voice conversation authenticates with.
+    /// - Parameter credentials: The credentials to authenticate with
+    func fetchToken(for credentials: ConversationCredentials) async throws -> String
 }
 
 extension TokenService: TokenServicing {}
