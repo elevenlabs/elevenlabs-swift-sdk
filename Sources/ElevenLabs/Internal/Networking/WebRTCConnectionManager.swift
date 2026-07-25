@@ -124,7 +124,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         switch await waitForAgentReady(timeout: agentTimeout) {
         case let .success(elapsed):
             metrics.agentReady = elapsed
-            onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
+            onStartupStateChange(.agentReady(elapsed: elapsed))
         case let .timedOut(elapsed):
             metrics.agentReady = elapsed
             metrics.total = Date().timeIntervalSince(startTime)
