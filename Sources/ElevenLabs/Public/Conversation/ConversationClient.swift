@@ -104,7 +104,7 @@ public final class ConversationClient: ObservableObject {
     ) async throws -> ConversationStartResult {
         let previousConversation = session
         let conversation = Conversation(
-            dependencyProvider: dependencyProvider ?? Dependencies(),
+            dependencyProvider: dependencyProvider ?? Dependencies(endpoints: config.endpoints),
             config: config,
             callbacks: callbacks,
             initialMicMuted: isMicMuted
