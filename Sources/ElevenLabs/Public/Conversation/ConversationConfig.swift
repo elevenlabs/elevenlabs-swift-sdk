@@ -35,6 +35,9 @@ public struct ConversationConfig: Sendable {
     /// instead of relying on LiveKit's isSpeaking detection.
     public var agentStateConfiguration: AgentStateConfiguration?
 
+    /// Network endpoints to connect to. Override for proxies, regional hosts, or staging.
+    public var endpoints: Endpoints
+
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
@@ -47,7 +50,8 @@ public struct ConversationConfig: Sendable {
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
         networkConfiguration: WebRTCConfiguration = .default,
-        agentStateConfiguration: AgentStateConfiguration? = nil
+        agentStateConfiguration: AgentStateConfiguration? = nil,
+        endpoints: Endpoints = .production
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
@@ -61,6 +65,7 @@ public struct ConversationConfig: Sendable {
         self.audioConfiguration = audioConfiguration
         self.networkConfiguration = networkConfiguration
         self.agentStateConfiguration = agentStateConfiguration
+        self.endpoints = endpoints
     }
 }
 
@@ -113,4 +118,34 @@ public struct ConversationOverrides: Sendable {
         self.textOnly = textOnly
         self.clientEvents = clientEvents
     }
+}
+
+/// The network endpoints the SDK talks to. Defaults to ``production``.
+///
+/// Override for proxies, regional hosts, or staging. Credentials follow these
+/// endpoints — conversation tokens are sent to whichever `conversationToken`
+/// URL is configured.
+public struct Endpoints: Sendable, Equatable {
+    /// LiveKit signaling endpoint for voice conversations.
+    public var voiceWebSocket: URL
+    /// WebSocket endpoint for text-only conversations.
+    public var textWebSocket: URL
+    /// HTTP endpoint that issues conversation tokens.
+    public var conversationToken: URL
+
+    public init(
+        voiceWebSocket: URL = Endpoints.production.voiceWebSocket,
+        textWebSocket: URL = Endpoints.production.textWebSocket,
+        conversationToken: URL = Endpoints.production.conversationToken
+    ) {
+        self.voiceWebSocket = voiceWebSocket
+        self.textWebSocket = textWebSocket
+        self.conversationToken = conversationToken
+    }
+
+    public static let production = Endpoints(
+        voiceWebSocket: URL(string: "wss://livekit.rtc.elevenlabs.io")!,
+        textWebSocket: URL(string: "wss://api.elevenlabs.io/v1/convai/conversation")!,
+        conversationToken: URL(string: "https://api.elevenlabs.io/v1/convai/conversation/token")!
+    )
 }

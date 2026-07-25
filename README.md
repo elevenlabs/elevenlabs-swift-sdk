@@ -232,6 +232,18 @@ ElevenLabs.configure(
 )
 ```
 
+### Custom Endpoints
+
+Override any of the three endpoints for a proxy, regional host, or staging:
+
+```swift
+let config = ConversationConfig(
+    endpoints: Endpoints(
+        conversationToken: URL(string: "https://my-proxy.example.com/v1/convai/conversation/token")!
+    )
+)
+```
+
 ### Fine-Grained Callbacks
 
 Want to handle events without Combine? Use `ConversationCallbacks`:

@@ -34,7 +34,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         var metrics = ConversationStartupMetrics()
 
         do {
-            lastConnectedURL = try WebSocketConnectionManager.url(for: auth)
+            lastConnectedURL = try WebSocketConnectionManager.url(for: auth, endpoints: config.endpoints)
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)

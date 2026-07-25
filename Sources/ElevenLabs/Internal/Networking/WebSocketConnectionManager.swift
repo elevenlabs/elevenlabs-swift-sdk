@@ -17,12 +17,14 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
     private let urlSession: URLSession
     private let logger: any Logging
+    private let endpoints: Endpoints
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
-    init(logger: any Logging) {
+    init(logger: any Logging, endpoints: Endpoints = .production) {
         self.logger = logger
+        self.endpoints = endpoints
         urlSession = URLSession(configuration: .default)
     }
 
@@ -46,7 +48,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
         let url: URL
         do {
-            url = try Self.url(for: auth)
+            url = try Self.url(for: auth, endpoints: endpoints)
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
             let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
@@ -147,10 +149,10 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    static func url(for auth: ConversationCredentials) throws -> URL {
+    static func url(for auth: ConversationCredentials, endpoints: Endpoints) throws -> URL {
         switch auth.authSource {
         case let .publicAgentId(agentId):
-            var components = URLComponents(string: ConnectionConstants.textConversationUrl)
+            var components = URLComponents(url: endpoints.textWebSocket, resolvingAgainstBaseURL: false)
             components?.queryItems = [URLQueryItem(name: "agent_id", value: agentId)]
             guard let url = components?.url else {
                 throw ConversationError.authenticationFailed("Invalid conversation URL")
