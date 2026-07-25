@@ -6,7 +6,7 @@ public struct ConversationCallbacks: Sendable {
     public var onAgentReady: (@Sendable () -> Void)?
 
     /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable (DisconnectionReason) -> Void)?
+    public var onDisconnect: (@Sendable (EndReason) -> Void)?
 
     /// Called when a startup-related error occurs
     public var onError: (@Sendable (ConversationError) -> Void)?
@@ -53,7 +53,7 @@ public struct ConversationCallbacks: Sendable {
 
     public init(
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
+        onDisconnect: (@Sendable (EndReason) -> Void)? = nil,
         onError: (@Sendable (ConversationError) -> Void)? = nil,
         onSpeechDetectedWhileMuted: (@Sendable () -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
