@@ -1,39 +1,42 @@
 #if os(iOS)
 import SwiftUI
 
-enum ChatOrbState {
-    case connecting
-    case listening
-    case speaking
-    case disconnected
-}
-
-/// Placeholder orb: a themed gradient sphere that breathes while the agent is
-/// speaking. Replaced by the Metal visualizer without changing its call sites.
+/// The audio-reactive orb, driven by the sampled mic and agent levels.
 @available(iOS 16, macCatalyst 16, *)
 struct ChatOrbView: View {
+    /// Observed here so level changes redraw only the orb, not the whole widget.
+    @ObservedObject var levels: OrbAudioLevels
     let state: ChatOrbState
     let size: CGFloat
     var theme: ChatWidgetTheme = .default
 
-    @State private var isPulsing = false
-
     var body: some View {
-        Circle()
-            .fill(
-                LinearGradient(
-                    colors: [theme.orbSecondary, theme.orbPrimary],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .opacity(state == .disconnected ? 0.55 : 1)
-            .scaleEffect(isPulsing ? 1 : 0.92)
-            .frame(width: size, height: size)
-            // Only the breathing itself repeats; settling back is a one-shot.
-            .animation(isPulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .easeOut(duration: 0.25), value: isPulsing)
-            .onAppear { isPulsing = state == .speaking || state == .connecting }
-            .onChange(of: state) { isPulsing = $0 == .speaking || $0 == .connecting }
+        Orb(
+            color1: theme.orbPrimary,
+            color2: theme.orbSecondary,
+            inputVolume: levels.input,
+            outputVolume: levels.output,
+            agentState: state.visualizerState
+        )
+        .frame(width: size, height: size)
+    }
+}
+
+enum ChatOrbState {
+    case connecting
+    case listening
+    case thinking
+    case speaking
+    case disconnected
+
+    var visualizerState: VisualizerAgentState {
+        switch self {
+        case .connecting: .connecting
+        case .listening: .listening
+        case .thinking: .thinking
+        case .speaking: .speaking
+        case .disconnected: .disconnected
+        }
     }
 }
 #endif
