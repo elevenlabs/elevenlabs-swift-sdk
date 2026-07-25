@@ -7,33 +7,6 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertFalse(ElevenLabs.version.isEmpty)
     }
 
-    func testDefaultConfiguration() {
-        let config = ElevenLabs.Configuration.default
-
-        XCTAssertEqual(config.logLevel, .warning)
-        XCTAssertFalse(config.debugMode)
-    }
-
-    func testCustomConfiguration() {
-        let config = ElevenLabs.Configuration(
-            logLevel: .debug,
-            debugMode: true
-        )
-
-        XCTAssertEqual(config.logLevel, .debug)
-        XCTAssertTrue(config.debugMode)
-    }
-
-    @MainActor
-    func testConfigureSDK() {
-        let config = ElevenLabs.Configuration(
-            logLevel: .info,
-            debugMode: false
-        )
-
-        ElevenLabs.configure(config)
-    }
-
     @MainActor
     func testStartConversationWithAgentId() async {
         let config = ConversationConfig()
@@ -85,18 +58,6 @@ final class ElevenLabsSDKTests: XCTestCase {
         }
     }
 
-    func testConfigurationLogLevels() {
-        let debugConfig = ElevenLabs.Configuration(logLevel: .debug)
-        let infoConfig = ElevenLabs.Configuration(logLevel: .info)
-        let warningConfig = ElevenLabs.Configuration(logLevel: .warning)
-        let errorConfig = ElevenLabs.Configuration(logLevel: .error)
-
-        XCTAssertEqual(debugConfig.logLevel, .debug)
-        XCTAssertEqual(infoConfig.logLevel, .info)
-        XCTAssertEqual(warningConfig.logLevel, .warning)
-        XCTAssertEqual(errorConfig.logLevel, .error)
-    }
-
     func testEndpointsDefaultToProduction() {
         XCTAssertEqual(ConversationConfig().endpoints, .production)
         XCTAssertEqual(Endpoints(), .production)
@@ -136,7 +97,6 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
         XCTAssertFalse(config.conversationOverrides.textOnly)
-        XCTAssertEqual(config.endpoints, .production)
     }
 
     func testAuthenticationMethods() {
@@ -170,11 +130,12 @@ final class ElevenLabsSDKTests: XCTestCase {
 
     func testSDKModuleImports() {
         // Verify that all necessary types are accessible
-        XCTAssertNotNil(ElevenLabs.self)
         XCTAssertNotNil(ConversationClient.self)
         XCTAssertNotNil(ConversationConfig.self)
         XCTAssertNotNil(ConversationError.self)
         XCTAssertNotNil(ConversationState.self)
         XCTAssertNotNil(Language.self)
+        XCTAssertNotNil(LogLevel.self)
+        XCTAssertNotNil(AgentState.self)
     }
 }
