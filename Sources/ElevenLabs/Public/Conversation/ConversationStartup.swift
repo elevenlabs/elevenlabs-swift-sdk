@@ -1,5 +1,17 @@
 import Foundation
 
+/// In-flight startup stage while `ConversationState` is `.connecting`.
+public enum ConversationStartupState: Sendable, Equatable {
+    /// Session teardown / wiring before transport-specific stages begin.
+    case preparing
+    case resolvingToken
+    case connectingRoom
+    case waitingForAgent(timeout: TimeInterval)
+    case agentReady(elapsed: TimeInterval)
+    case sendingConversationInit
+    case waitingForInitiationMetadata(timeout: TimeInterval)
+}
+
 public struct ConversationStartupMetrics: Sendable, Equatable {
     public var total: TimeInterval?
     public var tokenFetch: TimeInterval?
@@ -29,4 +41,9 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
         self.conversationInit = conversationInit
         self.initiationMetadata = initiationMetadata
     }
+}
+
+public struct ConversationStartResult: Equatable, Sendable {
+    public let callInfo: CallInfo
+    public let metrics: ConversationStartupMetrics
 }
