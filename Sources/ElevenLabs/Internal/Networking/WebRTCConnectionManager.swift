@@ -67,10 +67,12 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     private let logger: any Logging
     private let tokenService: any TokenServicing
+    private let endpoints: Endpoints
 
-    init(logger: any Logging, tokenService: any TokenServicing) {
+    init(logger: any Logging, tokenService: any TokenServicing, endpoints: Endpoints) {
         self.logger = logger
         self.tokenService = tokenService
+        self.endpoints = endpoints
     }
 
     // MARK: – Public API
@@ -92,12 +94,12 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         var metrics = ConversationStartupMetrics()
         logger.info("Starting conversation startup sequence", context: ["agentId": auth.agentId])
 
-        // 1. Resolve token / connection details.
+        // 1. Resolve the conversation token.
         onStartupStateChange(.resolvingToken)
-        let connectionDetails = try await runPhase(
+        let token = try await runPhase(
             timing: \.tokenFetch, metrics: &metrics, startTime: startTime
         ) {
-            try await tokenService.fetchConnectionDetails(configuration: auth)
+            try await tokenService.fetchToken(for: auth)
         }
 
         // 2. Request microphone permission (denial doesn't block startup).
@@ -110,7 +112,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             timing: \.roomConnect, metrics: &metrics, startTime: startTime
         ) {
             try await connectToRoom(
-                details: connectionDetails,
+                token: token,
                 enableMic: permissionGranted,
                 throwOnMicrophoneFailure: throwOnMicFailure,
                 networkConfiguration: config.networkConfiguration,
@@ -217,12 +219,12 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// used by `connect`).
     ///
     /// - Parameters:
-    ///   - details: Token-service credentials (URL + participant token).
+    ///   - token: Conversation token to authenticate the room with.
     ///   - enableMic: Whether to enable the local microphone immediately.
     ///   - throwOnMicrophoneFailure: If true, throws error when microphone setup fails.
     ///     If false, logs warning and continues.
     private func connectToRoom(
-        details: TokenService.ConnectionDetails,
+        token: String,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool,
         networkConfiguration: WebRTCConfiguration,
@@ -258,8 +260,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         let connectStart = Date()
         do {
             try await room.connect(
-                url: details.serverUrl,
-                token: details.participantToken,
+                url: endpoints.voiceWebSocket.absoluteString,
+                token: token,
                 connectOptions: connectOptions
             )
             logger.info("LiveKit room.connect completed", context: ["duration": "\(Date().timeIntervalSince(connectStart))"])
