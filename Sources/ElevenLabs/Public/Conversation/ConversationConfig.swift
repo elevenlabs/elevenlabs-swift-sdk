@@ -145,3 +145,119 @@ public struct Endpoints: Sendable, Equatable {
         apiBase.appendingPathComponent("v1/convai/conversation/token")
     }
 }
+
+public struct ConversationStartupConfiguration: Sendable, Equatable {
+    public var agentReadyTimeout: TimeInterval
+    public var initiationMetadataTimeout: TimeInterval
+
+    public init(
+        agentReadyTimeout: TimeInterval = 3.0,
+        initiationMetadataTimeout: TimeInterval = 5.0
+    ) {
+        self.agentReadyTimeout = agentReadyTimeout
+        self.initiationMetadataTimeout = initiationMetadataTimeout
+    }
+
+    public static let `default` = ConversationStartupConfiguration()
+}
+
+/// Controls how the SDK establishes WebRTC connections.
+///
+/// The default configuration gathers all ICE candidate types. Use ``Strategy/relayOnly``
+/// to restrict connections to TURN relays.
+public struct WebRTCConfiguration: Sendable {
+    /// Describes how ICE transport candidates should be gathered.
+    public enum Strategy: Sendable, Equatable {
+        /// Gather all candidate types.
+        case automatic
+        /// Force TURN relay candidates only.
+        case relayOnly
+    }
+
+    /// The strategy to use for ICE gathering. Defaults to ``Strategy/automatic``.
+    public var strategy: Strategy
+
+    public init(strategy: Strategy = .automatic) {
+        self.strategy = strategy
+    }
+
+    /// Default configuration using automatic ICE candidate gathering.
+    public static let `default` = WebRTCConfiguration()
+}
+
+/// Configuration for event-based agent state management using VAD and client events.
+/// Pass `nil` to use the default LiveKit-based behaviour.
+public struct AgentStateConfiguration: Sendable {
+    public var vadSpeakingThreshold: Double
+    public var minSpeechDuration: TimeInterval
+    public var minSilenceDuration: TimeInterval
+    public var speakingToListeningDelay: TimeInterval
+
+    public init(
+        vadSpeakingThreshold: Double = 0.5,
+        minSpeechDuration: TimeInterval = 0.15,
+        minSilenceDuration: TimeInterval = 0.05,
+        speakingToListeningDelay: TimeInterval = 0.5
+    ) {
+        self.vadSpeakingThreshold = vadSpeakingThreshold
+        self.minSpeechDuration = minSpeechDuration
+        self.minSilenceDuration = minSilenceDuration
+        self.speakingToListeningDelay = speakingToListeningDelay
+    }
+
+    public static let `default` = AgentStateConfiguration()
+}
+
+/// Configures microphone pipeline and voice activity reporting exposed by the SDK.
+public struct AudioPipelineConfiguration: Sendable {
+    /// Override the microphone mute strategy. Defaults to `.inputMixer` to match previous SDK behaviour.
+    public var microphoneMuteMode: MicrophoneMuteMode?
+
+    /// Keep the recording engine warm to avoid first-spoken-word latency. Defaults to `true`.
+    public var recordingAlwaysPrepared: Bool?
+
+    /// Bypass WebRTC voice processing (AEC/NS/VAD). Leave `nil` to preserve system defaults.
+    public var voiceProcessingBypassed: Bool?
+
+    /// Toggle Auto Gain Control. Leave `nil` to preserve system defaults.
+    public var voiceProcessingAGCEnabled: Bool?
+
+    public init(
+        microphoneMuteMode: MicrophoneMuteMode? = .inputMixer,
+        recordingAlwaysPrepared: Bool? = true,
+        voiceProcessingBypassed: Bool? = nil,
+        voiceProcessingAGCEnabled: Bool? = nil
+    ) {
+        self.microphoneMuteMode = microphoneMuteMode
+        self.recordingAlwaysPrepared = recordingAlwaysPrepared
+        self.voiceProcessingBypassed = voiceProcessingBypassed
+        self.voiceProcessingAGCEnabled = voiceProcessingAGCEnabled
+    }
+
+    public static let `default` = AudioPipelineConfiguration()
+}
+
+/// Strategy used when muting the local microphone. Exactly one strategy is active
+/// at a time.
+public enum MicrophoneMuteMode: Sendable, Equatable {
+    /// Mutes instantly by silencing the input mixer. The mic stays open and the
+    /// audio session remains active. Recommended default.
+    case inputMixer
+
+    /// Mutes by restarting the engine without mic input. Releases the mic, but
+    /// mute/unmute is slower and speech detection is unavailable.
+    case restart
+
+    /// Mutes the voice-processing input. Fast, supports
+    /// ``ConversationCallbacks/onSpeechDetectedWhileMuted``, and keeps the audio
+    /// session active.
+    case voiceProcessing
+
+    /// Mutes in software by zeroing captured audio before it leaves the device.
+    /// Supports ``ConversationCallbacks/onSpeechDetectedWhileMuted``.
+    ///
+    /// - Parameters:
+    ///   - speechThreshold: dB threshold for muted-speech detection.
+    ///   - notificationThrottle: Minimum interval between muted-speech callbacks.
+    case software(speechThreshold: Float = -35, notificationThrottle: TimeInterval = 3.0)
+}
