@@ -726,7 +726,7 @@ final class ConversationTests: XCTestCase {
         let config = makeConfig()
         let callbacks = makeCallbacks(configure: { callbacks in
             callbacks.onDisconnect = { reason in
-                XCTAssertEqual(reason, .agent)
+                XCTAssertEqual(reason, .remoteDisconnected)
                 gotDisconnect.fulfill()
             }
         })

@@ -1,12 +1,5 @@
 import Foundation
 
-/// Reason for the conversation disconnection
-public enum DisconnectionReason: Sendable {
-    case agent
-    case user
-    case error
-}
-
 /// Main configuration for a conversation session
 public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
