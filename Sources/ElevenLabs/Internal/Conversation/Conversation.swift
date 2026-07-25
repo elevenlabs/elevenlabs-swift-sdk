@@ -246,12 +246,9 @@ final class Conversation: ObservableObject {
 
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
-    func endConversation(
-        disconnectReason: DisconnectionReason = .user,
-        endReason: EndReason = .userEnded
-    ) async {
+    func endConversation(reason: EndReason = .userEnded) async {
         if state == .idle {
-            state = .ended(reason: endReason)
+            state = .ended(reason: reason)
             tearDownActiveSession()
             return
         }
@@ -259,13 +256,12 @@ final class Conversation: ObservableObject {
         guard state.isConnected || state.isConnecting,
               let connectionManager = activeConnectionManager
         else { return }
-        state = .ended(reason: endReason)
+        state = .ended(reason: reason)
 
         tearDownActiveSession()
         await connectionManager.disconnect()
 
-        // Call user's onDisconnect callback if provided
-        callbacks.onDisconnect?(disconnectReason)
+        callbacks.onDisconnect?(reason)
     }
 
     /// Send a text message to the agent.
@@ -402,7 +398,7 @@ final class Conversation: ObservableObject {
         }
         connectionManager.onDisconnected = { [weak self] in
             guard let self else { return }
-            await endConversation(disconnectReason: .agent, endReason: .remoteDisconnected)
+            await endConversation(reason: .remoteDisconnected)
         }
     }
 
