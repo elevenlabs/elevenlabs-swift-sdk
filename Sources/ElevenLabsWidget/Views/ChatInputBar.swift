@@ -27,7 +27,7 @@ struct ChatInputBar: View {
 
             HStack(spacing: 10) {
                 if vm.canToggleMicMute {
-                    ChatMicButton(vm: vm, diameter: 38, theme: theme)
+                    ChatMicButton(vm: vm, levels: vm.audioLevels, diameter: 38, theme: theme)
                 }
                 Spacer(minLength: 0)
                 if vm.hasActiveConversation {

@@ -78,12 +78,7 @@ public struct ChatWidget: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(vm.widgetConfig.strings.openChatLabel)
         } else {
-            FloatingChatButton(
-                orbState: vm.orbState,
-                theme: vm.widgetConfig.theme,
-                accessibilityLabel: vm.widgetConfig.strings.openChatLabel,
-                onTap: vm.toggleOpen
-            )
+            FloatingChatButton(vm: vm, onTap: vm.toggleOpen)
         }
     }
 }

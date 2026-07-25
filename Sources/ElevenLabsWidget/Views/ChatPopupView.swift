@@ -19,7 +19,7 @@ struct ChatPopupView: View {
             Divider()
             if vm.messages.isEmpty {
                 Spacer(minLength: 0)
-                ChatOrbView(state: vm.orbState, size: 128, theme: vm.widgetConfig.theme)
+                ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: 128, theme: vm.widgetConfig.theme)
                 Spacer(minLength: 0)
             } else {
                 ChatTranscriptView(vm: vm)
@@ -41,7 +41,7 @@ struct ChatPopupView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            ChatOrbView(state: vm.orbState, size: 36, theme: vm.widgetConfig.theme)
+            ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: 36, theme: vm.widgetConfig.theme)
             Text(strings.title)
                 .font(.headline)
             Spacer(minLength: 0)
