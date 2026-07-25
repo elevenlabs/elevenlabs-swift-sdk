@@ -222,14 +222,12 @@ Task {
 
 ## Configuration & Tuning
 
-### Global Setup
+### Logging
 
-Configure logging and global behaviors at app launch:
+Set verbosity per client:
 
 ```swift
-ElevenLabs.configure(
-    ElevenLabs.Configuration(logLevel: .info)
-)
+let client = ConversationClient(logLevel: .info)
 ```
 
 ### Custom Endpoints

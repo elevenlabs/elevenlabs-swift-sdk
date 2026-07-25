@@ -14,9 +14,8 @@ final class Dependencies: ConversationDependencyProvider {
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
-    init(endpoints: Endpoints = .production) {
-        let globalConfig = ElevenLabs.Global.shared.configuration
-        let logger = SDKLogger(logLevel: globalConfig.logLevel)
+    init(logLevel: LogLevel = .warning, endpoints: Endpoints = .production) {
+        let logger = SDKLogger(logLevel: logLevel)
         self.logger = logger
         webRTCConnectionManager = WebRTCConnectionManager(
             logger: logger,

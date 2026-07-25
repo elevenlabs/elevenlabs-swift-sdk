@@ -2,6 +2,4 @@
 // Run Scripts/generate-version.sh to update
 import Foundation
 
-enum SDKVersion {
-    static let version = "3.2.2"
-}
+public let version = "3.2.2"
