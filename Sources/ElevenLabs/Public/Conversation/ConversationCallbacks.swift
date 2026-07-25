@@ -49,7 +49,7 @@ public struct ConversationCallbacks: Sendable {
     public var onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
     /// Called whenever the agent state changes (event-based mode only).
-    public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
+    public var onAgentStateChange: (@Sendable (AgentState) -> Void)?
 
     public init(
         onAgentReady: (@Sendable () -> Void)? = nil,
@@ -67,7 +67,7 @@ public struct ConversationCallbacks: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
-        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
+        onAgentStateChange: (@Sendable (AgentState) -> Void)? = nil
     ) {
         self.onAgentReady = onAgentReady
         self.onDisconnect = onDisconnect

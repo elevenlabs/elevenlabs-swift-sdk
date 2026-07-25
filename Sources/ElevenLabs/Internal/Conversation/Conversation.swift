@@ -15,7 +15,7 @@ final class Conversation: ObservableObject {
 
     @Published var state: ConversationState = .idle
     @Published var messages: [Message] = []
-    @Published var agentState: ElevenLabs.AgentState = .listening
+    @Published var agentState: AgentState = .listening
 
     /// Stream of client tool calls that need to be executed by the app
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
@@ -44,7 +44,7 @@ final class Conversation: ObservableObject {
     var agentStateManager: AgentStateManager?
 
     /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
-    func applyStateSignal(_ signal: AgentStateSignal, fallback: ElevenLabs.AgentState) {
+    func applyStateSignal(_ signal: AgentStateSignal, fallback: AgentState) {
         if let manager = agentStateManager {
             manager.processSignal(signal)
         } else {

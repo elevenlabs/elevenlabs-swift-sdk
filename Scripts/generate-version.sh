@@ -12,7 +12,7 @@ VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
 VERSION=${VERSION#v}
 
 # Path to the Version.swift file
-VERSION_FILE="Sources/ElevenLabs/Internal/Version.swift"
+VERSION_FILE="Sources/ElevenLabs/Public/Version.swift"
 
 # Generate the Version.swift file
 cat > "$VERSION_FILE" << EOF
@@ -20,9 +20,7 @@ cat > "$VERSION_FILE" << EOF
 // Run Scripts/generate-version.sh to update
 import Foundation
 
-enum SDKVersion {
-    static let version = "$VERSION"
-}
+public let version = "$VERSION"
 EOF
 
 echo "Generated Version.swift with version: $VERSION"

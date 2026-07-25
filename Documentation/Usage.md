@@ -716,9 +716,7 @@ The SDK uses `os.Logger` for high-performance logging. You can filter logs in Xc
 Adjust the verbosity of the SDK:
 
 ```swift
-ElevenLabs.configure(
-    ElevenLabs.Configuration(logLevel: .debug) // .trace for full event logs
-)
+let client = ConversationClient(logLevel: .debug) // .trace for full event logs
 ```
 
 ---
