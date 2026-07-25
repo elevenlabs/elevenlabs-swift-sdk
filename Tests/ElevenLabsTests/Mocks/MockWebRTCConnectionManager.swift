@@ -91,7 +91,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         switch await waitForAgentReady(timeout: config.startupConfiguration.agentReadyTimeout) {
         case let .success(elapsed):
             metrics.agentReady = elapsed
-            onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
+            onStartupStateChange(.agentReady(elapsed: elapsed))
         case let .timedOut(elapsed):
             metrics.agentReady = elapsed
             throw ConversationError.agentTimeout
