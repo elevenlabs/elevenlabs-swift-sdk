@@ -14,6 +14,7 @@ import SwiftUI
 public struct ChatWidget: View {
     @StateObject private var vm: ChatWidgetViewModel
     private let controller: ChatWidgetController?
+    private let widgetConfig: ChatWidgetConfig
     private let launcher: (() -> AnyView)?
 
     /// - Parameters:
@@ -31,6 +32,7 @@ public struct ChatWidget: View {
         onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)? = nil
     ) {
         self.controller = controller
+        self.widgetConfig = widgetConfig
         self.launcher = launcher
         // Built inside the autoclosure so SwiftUI only creates it once, rather
         // than on every re-init of this view.
@@ -69,6 +71,8 @@ public struct ChatWidget: View {
         // view update — otherwise the host's controller invalidates the view that
         // is still being built.
         .task { if let controller { vm.attach(to: controller) } }
+        // The view model outlives every re-init, so config changes are pushed to it.
+        .onChange(of: widgetConfig) { vm.widgetConfig = $0 }
     }
 
     @ViewBuilder

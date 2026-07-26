@@ -16,7 +16,9 @@ final class ChatWidgetViewModel: ObservableObject {
     @Published private(set) var isMicMuted = false
     @Published private(set) var isSending = false
 
-    let widgetConfig: ChatWidgetConfig
+    /// Mirrors the config the host passes to ``ChatWidget``, so changes take
+    /// effect without recreating the conversation.
+    @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
     let audioLevels = OrbAudioLevels()
 
@@ -79,7 +81,27 @@ final class ChatWidgetViewModel: ObservableObject {
     }
 
     var canToggleMicMute: Bool {
-        widgetConfig.enableMicMuteControl && conversationState.isConnected
+        widgetConfig.enableMicMuteControl && mode.supportsVoice && conversationState.isConnected
+    }
+
+    var canShowTextInput: Bool {
+        mode.supportsTextInput
+    }
+
+    var canStartVoiceConversation: Bool {
+        mode.supportsVoice && !hasActiveConversation
+    }
+
+    private var mode: WidgetConversationMode {
+        widgetConfig.conversationMode
+    }
+
+    /// Text-only widgets run the conversation without audio.
+    private var effectiveConversationConfig: ConversationConfig {
+        guard !mode.supportsVoice else { return conversationConfig }
+        var config = conversationConfig
+        config.conversationOverrides.textOnly = true
+        return config
     }
 
     var orbState: ChatOrbState {
@@ -133,7 +155,7 @@ final class ChatWidgetViewModel: ObservableObject {
         if let startTask { return try await startTask.value }
         guard !hasActiveConversation else { return }
         let task = Task {
-            _ = try await client.startConversation(auth: authProvider(), config: conversationConfig)
+            _ = try await client.startConversation(auth: authProvider(), config: effectiveConversationConfig)
         }
         startTask = task
         defer { startTask = nil }

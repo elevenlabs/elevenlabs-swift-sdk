@@ -8,6 +8,7 @@ struct ContentView: View {
     private static let agentId = ""
 
     @StateObject private var chat = ChatWidgetController()
+    @State private var conversationMode: WidgetConversationMode = .voiceAndText
 
     private var hasAgentId: Bool {
         !Self.agentId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,6 +51,7 @@ struct ContentView: View {
             if hasAgentId {
                 ChatWidget(
                     authProvider: { .publicAgent(id: Self.agentId) },
+                    widgetConfig: ChatWidgetConfig(conversationMode: conversationMode),
                     controller: chat
                 )
             }
@@ -61,6 +63,13 @@ struct ContentView: View {
             Text(stateDescription)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Picker("Mode", selection: $conversationMode) {
+                Text("Voice + text").tag(WidgetConversationMode.voiceAndText)
+                Text("Voice only").tag(WidgetConversationMode.voiceOnly)
+                Text("Text only").tag(WidgetConversationMode.textOnly)
+            }
+            .pickerStyle(.segmented)
 
             HStack(spacing: 12) {
                 Button("Open chat") { chat.open() }

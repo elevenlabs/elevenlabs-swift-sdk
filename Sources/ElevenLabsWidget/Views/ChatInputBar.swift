@@ -17,25 +17,34 @@ struct ChatInputBar: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            TextField(strings.inputPlaceholder, text: $vm.input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1 ... 3)
-                .padding(.horizontal, 8)
-                .frame(minHeight: 36)
-                .focused(isInputFocused)
-                .onSubmit(vm.send)
+            if vm.canShowTextInput {
+                TextField(strings.inputPlaceholder, text: $vm.input, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1 ... 3)
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 36)
+                    .focused(isInputFocused)
+                    .onSubmit(vm.send)
+            }
 
             HStack(spacing: 10) {
                 if vm.canToggleMicMute {
                     ChatMicButton(vm: vm, levels: vm.audioLevels, diameter: 38, theme: theme)
                 }
+                // Without a composer there is nothing to push the call controls
+                // away from, so they sit centered instead.
                 Spacer(minLength: 0)
                 if vm.hasActiveConversation {
                     endConversationButton
-                } else {
+                } else if vm.canStartVoiceConversation {
                     startConversationButton
                 }
-                sendButton
+                if vm.canShowTextInput {
+                    sendButton
+                }
+                if !vm.canShowTextInput {
+                    Spacer(minLength: 0)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -50,7 +59,7 @@ struct ChatInputBar: View {
                 .strokeBorder(theme.border, lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onTapGesture { isInputFocused.wrappedValue = true }
+        .onTapGesture { if vm.canShowTextInput { isInputFocused.wrappedValue = true } }
     }
 
     private var startConversationButton: some View {

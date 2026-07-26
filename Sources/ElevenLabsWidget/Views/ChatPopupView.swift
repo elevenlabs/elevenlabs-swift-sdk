@@ -19,9 +19,14 @@ struct ChatPopupView: View {
             Divider()
             if vm.messages.isEmpty {
                 Spacer(minLength: 0)
-                ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: 128, theme: vm.widgetConfig.theme)
+                orb(size: 128)
                 Spacer(minLength: 0)
             } else {
+                // A voice-only drawer has no composer to anchor it, so the orb
+                // stays visible above the transcript.
+                if !vm.canShowTextInput {
+                    orb(size: 96).padding(.vertical, 12)
+                }
                 ChatTranscriptView(vm: vm)
             }
             ChatInputBar(vm: vm, isInputFocused: $isInputFocused)
@@ -39,9 +44,13 @@ struct ChatPopupView: View {
         .padding(.bottom, 8)
     }
 
+    private func orb(size: CGFloat) -> some View {
+        ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: size, theme: vm.widgetConfig.theme)
+    }
+
     private var header: some View {
         HStack(spacing: 12) {
-            ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: 36, theme: vm.widgetConfig.theme)
+            orb(size: 36)
             Text(strings.title)
                 .font(.headline)
             Spacer(minLength: 0)
