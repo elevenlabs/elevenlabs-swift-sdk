@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import Foundation
 
 /// Behavior and appearance of ``ChatWidget``.

@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import SwiftUI
 
 /// Circular microphone toggle with a muted slash.
@@ -12,7 +12,7 @@ struct ChatMicButton: View {
         Button(action: vm.toggleMicMute) {
             Image(systemName: vm.isMicMuted ? "mic.slash.fill" : "mic.fill")
                 .font(.system(size: diameter * 0.42))
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
                 .frame(width: diameter, height: diameter)
                 .background(Circle().fill(Color(.systemBackground)))
                 .overlay(Circle().strokeBorder(theme.border, lineWidth: 1))

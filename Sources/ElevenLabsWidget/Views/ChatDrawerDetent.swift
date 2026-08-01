@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import Foundation
 
 /// Drawer heights the user can drag between.

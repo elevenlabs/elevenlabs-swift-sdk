@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import SwiftUI
 
 /// Visual styling for ``ChatWidget``. Defaults mirror the ElevenLabs web widget.

@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import ElevenLabs
 import SwiftUI
 import UIKit
@@ -16,6 +16,7 @@ public struct ChatWidget: View {
     @StateObject private var vm: ChatWidgetViewModel
     private let mode: WidgetConversationMode
     private let widgetConfig: ChatWidgetConfig
+    private let conversationConfig: ConversationConfig
     private let controller: ChatWidgetController?
     private let launcher: (() -> AnyView)?
     private let onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?
@@ -39,6 +40,7 @@ public struct ChatWidget: View {
     ) {
         self.mode = mode
         self.widgetConfig = widgetConfig
+        self.conversationConfig = conversationConfig
         self.controller = controller
         self.launcher = launcher
         self.onClientToolCall = onClientToolCall
@@ -55,10 +57,11 @@ public struct ChatWidget: View {
 
     public var body: some View {
         // This view is rebuilt on every host update while the view model
-        // survives, so the host's closures — credential mints and the tool
-        // handler — are handed over fresh here rather than left at whatever the
-        // first mount captured. Neither is published, so nothing is invalidated.
+        // survives, so session configuration and host closures are handed over
+        // fresh here rather than left at whatever the first mount captured.
+        // None are published, so these assignments invalidate nothing.
         vm.mode = mode
+        vm.conversationConfig = conversationConfig
         vm.onClientToolCall = onClientToolCall
         return ZStack(alignment: .bottomTrailing) {
             if vm.widgetConfig.showBackdrop {
@@ -82,10 +85,14 @@ public struct ChatWidget: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         // Attaching seeds the controller's mirrors, so it has to happen outside a
         // view update — otherwise the host's controller invalidates the view that
         // is still being built.
         .task { if let controller { vm.attach(to: controller) } }
+        // The private client belongs to this visible widget. Once the host
+        // removes it, no UI remains to represent a live microphone or session.
+        .onDisappear(perform: vm.endConversation)
         // Published, so it can't be assigned mid-update like the mode above.
         .onChange(of: widgetConfig) { vm.widgetConfig = $0 }
     }

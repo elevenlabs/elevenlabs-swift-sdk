@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import ElevenLabs
 import Foundation
 

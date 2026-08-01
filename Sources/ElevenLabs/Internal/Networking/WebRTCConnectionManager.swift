@@ -104,6 +104,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
         // 2. Request microphone permission (denial doesn't block startup).
         let permissionGranted = await requestMicrophonePermission()
+        try Task.checkCancellation()
 
         // 3. Connect the LiveKit room.
         onStartupStateChange(.connectingRoom)

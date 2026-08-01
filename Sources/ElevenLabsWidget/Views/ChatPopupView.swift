@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import SwiftUI
 
 /// The drawer: grabber, banner, header with the orb, transcript, composer.
@@ -26,7 +26,7 @@ struct ChatPopupView: View {
 
     /// The transcript is the only content worth the taller detent.
     private var isShowingTranscript: Bool {
-        vm.showsTranscript && !vm.messages.isEmpty
+        vm.showsTranscript && (!vm.messages.isEmpty || vm.endedConversation != nil)
     }
 
     var body: some View {
@@ -73,7 +73,12 @@ struct ChatPopupView: View {
             // Text-only opens straight into typing; wait out the drawer animation
             // so the keyboard reliably comes up.
             guard !vm.supportsVoice, vm.canShowTextInput else { return }
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 450_000_000)
+            } catch {
+                return
+            }
+            guard !vm.supportsVoice, vm.canShowTextInput else { return }
             isInputFocused = true
         }
     }

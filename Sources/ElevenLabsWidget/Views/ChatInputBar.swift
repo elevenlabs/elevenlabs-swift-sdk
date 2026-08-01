@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import SwiftUI
 
 /// Composer plus the mic / start / end / send controls.
@@ -63,7 +63,7 @@ struct ChatInputBar: View {
 
     private var startConversationButton: some View {
         Button(action: vm.startConversation) {
-            circle(fill: Color(.systemBackground), glyph: "phone.fill", tint: .black)
+            circle(fill: Color(.systemBackground), glyph: "phone.fill", tint: .primary)
                 .overlay(Circle().strokeBorder(theme.border, lineWidth: 1))
         }
         .buttonStyle(.plain)

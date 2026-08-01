@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import SwiftUI
 
 /// Failures and permission problems, shown across the top of the drawer.
