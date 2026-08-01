@@ -123,6 +123,10 @@ final class Conversation: ObservableObject {
             try await startVoiceConversation(auth: auth)
         }
 
+        guard !Task.isCancelled, state.isConnecting else {
+            await activeConnectionManager?.disconnect()
+            throw CancellationError()
+        }
         state = .connected(result.callInfo)
         callbacks.onAgentReady?()
         return result
@@ -417,9 +421,10 @@ final class Conversation: ObservableObject {
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
-        guard state.isConnecting else { return }
-        state = .ended(reason: .userEnded)
-        tearDownActiveSession()
+        if state.isConnecting {
+            state = .ended(reason: .userEnded)
+            tearDownActiveSession()
+        }
         await connectionManager.disconnect()
     }
 

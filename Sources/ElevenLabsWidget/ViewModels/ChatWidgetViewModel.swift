@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import Combine
 import ElevenLabs
 import Foundation
@@ -29,14 +29,14 @@ final class ChatWidgetViewModel: ObservableObject {
         let endedByUser: Bool
     }
 
-    /// All three mirror what the host passes to ``ChatWidget``, so changes land
+    /// All four mirror what the host passes to ``ChatWidget``, so changes land
     /// on the live view model instead of needing a new conversation.
     var mode: WidgetConversationMode
+    var conversationConfig: ConversationConfig
     var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
 
-    private let conversationConfig: ConversationConfig
     /// Tool calls already dispatched, so a re-published snapshot doesn't run them twice.
     private var dispatchedToolCallIds: Set<String> = []
     /// The in-flight startup, so overlapping callers join it instead of racing.
@@ -69,6 +69,9 @@ final class ChatWidgetViewModel: ObservableObject {
             .map { $0.map(ChatMessage.init) }
             .assign(to: &$messages)
         client.$pendingToolCalls
+            .combineLatest(client.$state)
+            .filter { _, state in state.isConnected }
+            .map { calls, _ in calls }
             .sink { [weak self] in self?.dispatchNewToolCalls($0) }
             .store(in: &cancellables)
         // Only a finished session clears the kind: the client rebinds to a fresh
@@ -80,6 +83,7 @@ final class ChatWidgetViewModel: ObservableObject {
                 switch state {
                 case let .ended(reason):
                     sessionKind = nil
+                    dismissBanner()
                     endedConversation = EndedConversation(
                         id: client.conversationMetadata?.conversationId,
                         endedByUser: reason == .userEnded
@@ -185,7 +189,6 @@ final class ChatWidgetViewModel: ObservableObject {
         Task {
             do {
                 try await startConversationAndWait()
-                warnIfMicrophoneUnavailable()
             } catch is CancellationError {
                 // The user ended the call before it connected.
             } catch {
@@ -219,10 +222,14 @@ final class ChatWidgetViewModel: ObservableObject {
         // No start in flight, so a kind here means a session already connected.
         guard sessionKind == nil else { return }
         let mode = mode
+        let client = client
         let config = conversationConfig(for: kind)
+        dispatchedToolCallIds.removeAll()
         let task = Task {
+            let credentials = try await mode.credentials(for: kind)
+            try Task.checkCancellation()
             _ = try await client.startConversation(
-                auth: mode.credentials(for: kind),
+                auth: credentials,
                 config: config
             )
         }
@@ -236,19 +243,22 @@ final class ChatWidgetViewModel: ObservableObject {
         defer { if sessionGeneration == generation { startTask = nil } }
         do {
             try await task.value
+            warnIfMicrophoneUnavailable()
         } catch {
             // Minting can fail before the client ever leaves idle, and then no
             // state arrives to retire the session this would have been.
             if sessionGeneration == generation { sessionKind = nil }
+            if task.isCancelled || error is CancellationError {
+                throw CancellationError()
+            }
             throw error
         }
     }
 
     /// Text-only sessions run the conversation without audio.
     private func conversationConfig(for kind: WidgetSessionKind) -> ConversationConfig {
-        guard kind == .textOnly else { return conversationConfig }
         var config = conversationConfig
-        config.conversationOverrides.textOnly = true
+        config.conversationOverrides.textOnly = kind == .textOnly
         return config
     }
 
@@ -259,17 +269,11 @@ final class ChatWidgetViewModel: ObservableObject {
     /// Ending has to outrank a start that is still resolving credentials, or the
     /// connection lands afterwards and leaves the microphone live.
     func endConversationAndWait() async {
-        let start = startTask
-        let generation = sessionGeneration
+        let task = startTask?.task
         startTask = nil
         sessionKind = nil
-        start?.task.cancel()
+        task?.cancel()
         await client.endConversation()
-        guard let start else { return }
-        // A start that ignored the cancel still connects, so wait it out and
-        // tear it down — unless a newer session has begun in the meantime.
-        _ = try? await start.task.value
-        if sessionGeneration == generation { await client.endConversation() }
     }
 
     func send() {
@@ -277,10 +281,12 @@ final class ChatWidgetViewModel: ObservableObject {
         guard !text.isEmpty, !isSending else { return }
         input = ""
         isSending = true
-        dismissBanner()
+        if banner?.offersSettings != true { dismissBanner() }
         Task {
             do {
                 try await send(text)
+            } catch is CancellationError {
+                if input.isEmpty { input = text }
             } catch {
                 // Hand the text back so the user can retry rather than losing it.
                 if input.isEmpty { input = text }
@@ -304,17 +310,20 @@ final class ChatWidgetViewModel: ObservableObject {
     private func show(_ banner: ChatWidgetBanner) {
         self.banner = banner
         bannerDismissal?.cancel()
+        bannerDismissal = nil
         // A banner offering Settings needs to stay until it is acted on.
         guard !banner.offersSettings else { return }
         bannerDismissal = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard !Task.isCancelled else { return }
             self?.banner = nil
+            self?.bannerDismissal = nil
         }
     }
 
     func dismissBanner() {
         bannerDismissal?.cancel()
+        bannerDismissal = nil
         banner = nil
     }
 
@@ -328,36 +337,33 @@ final class ChatWidgetViewModel: ObservableObject {
     private func dispatchNewToolCalls(_ calls: [ClientToolCallEvent]) {
         let ids = Set(calls.map(\.toolCallId))
         let added = ids.subtracting(dispatchedToolCallIds)
-        dispatchedToolCallIds = ids
+        dispatchedToolCallIds.formUnion(added)
         for call in calls where added.contains(call.toolCallId) {
             dispatch(call)
         }
     }
 
     private func dispatch(_ call: ClientToolCallEvent) {
-        guard let onClientToolCall else {
-            respond(to: call, with: .init(
-                toolCallId: call.toolCallId,
-                result: "No client tool handler is configured in the app.",
-                isError: true
-            ))
-            return
-        }
         let generation = sessionGeneration
+        let handler = onClientToolCall
         Task { @MainActor [weak self] in
-            let result = await onClientToolCall(call)
+            let result = if let handler {
+                await handler(call)
+            } else {
+                ClientToolResultEvent(
+                    toolCallId: call.toolCallId,
+                    result: "No client tool handler is configured in the app.",
+                    isError: true
+                )
+            }
             // The host handler can outlive the conversation that asked for it.
             guard let self, generation == sessionGeneration else { return }
-            respond(to: call, with: result)
+            if call.expectsResponse {
+                try? await client.sendToolResult(result)
+            } else {
+                client.markToolCallCompleted(call.toolCallId)
+            }
         }
-    }
-
-    private func respond(to call: ClientToolCallEvent, with result: ClientToolResultEvent) {
-        guard call.expectsResponse else {
-            client.markToolCallCompleted(call.toolCallId)
-            return
-        }
-        Task { try? await client.sendToolResult(result) }
     }
 }
 #endif

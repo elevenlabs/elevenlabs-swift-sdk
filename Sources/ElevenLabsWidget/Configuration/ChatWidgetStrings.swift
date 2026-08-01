@@ -1,4 +1,4 @@
-#if canImport(UIKit)
+#if os(iOS)
 import Foundation
 
 /// User-facing copy for ``ChatWidget``. Override individual fields to localize
