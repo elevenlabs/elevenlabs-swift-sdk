@@ -58,7 +58,7 @@ bool drawOval(float2 polarUv, float2 polarCenter, float a, float b, bool reverse
     float2 p = polarUv - polarCenter;
     float oval = (p.x * p.x) / (a * a) + (p.y * p.y) / (b * b);
     
-    float edge = smoothstep(1.0, 1.0 - softness, oval);
+    float edge = 1.0 - smoothstep(1.0 - softness, 1.0, oval);
     
     if (edge > 0.0) {
         float gradient = reverseGradient ? (1.0 - (p.x / a + 1.0) / 2.0) : ((p.x / a + 1.0) / 2.0);
@@ -134,7 +134,9 @@ fragment float4 orbFragmentShader(VertexOut in [[stage_in]],
     );
 
     float noise = flow(decomposed, radius * 0.03 - uniforms.animation * 0.2) - 0.5;
-    theta += noise * mix(0.5, 1.0, uniforms.outputVolume);
+    float inputResponse = sqrt(uniforms.inputVolume);
+    float angularStrength = mix(0.1, 6.0, inputResponse);
+    theta += noise * angularStrength;
 
     float4 color = float4(1.0, 1.0, 1.0, 1.0);
 
@@ -151,7 +153,7 @@ fragment float4 orbFragmentShader(VertexOut in [[stage_in]],
     for (int i = 0; i < 7; i++) {
         float noise = perlinTexture(float2(fmod(centers[i] + uniforms.time * 0.05, 1.0), 0.5));
         a = 0.5 + noise * 0.5; // Increased variance: goes from 0.0 to 1.0
-        b = noise * mix(4.5, 3.0, uniforms.inputVolume); // Tall semi-minor axis
+        b = noise * mix(4.5, 3.0, uniforms.outputVolume); // Tall semi-minor axis
         bool reverseGradient = (i % 2 == 1); // Reverse gradient for every second oval
 
         // Calculate the distance in polar coordinates
@@ -174,13 +176,13 @@ fragment float4 orbFragmentShader(VertexOut in [[stage_in]],
     float ringRadius1 = sharpRing(decomposed, uniforms.time * 0.1);
     float ringRadius2 = smoothRing(decomposed, uniforms.time * 0.1);
     
-    float inputRadius1 = radius + uniforms.inputVolume * 0.3;
-    float inputRadius2 = radius + uniforms.inputVolume * 0.2;
-    float opacity1 = mix(0.3, 0.8, uniforms.inputVolume);
-    float opacity2 = mix(0.25, 0.6, uniforms.inputVolume);
+    float outputRadius1 = radius + uniforms.outputVolume * 0.3;
+    float outputRadius2 = radius + uniforms.outputVolume * 0.2;
+    float opacity1 = mix(0.3, 0.8, uniforms.outputVolume);
+    float opacity2 = mix(0.25, 0.6, uniforms.outputVolume);
 
-    float ringAlpha1 = (inputRadius2 >= ringRadius1) ? opacity1 : 0.0;
-    float ringAlpha2 = smoothstep(ringRadius2 - 0.05, ringRadius2 + 0.05, inputRadius1) * opacity2;
+    float ringAlpha1 = (outputRadius2 >= ringRadius1) ? opacity1 : 0.0;
+    float ringAlpha2 = smoothstep(ringRadius2 - 0.05, ringRadius2 + 0.05, outputRadius1) * opacity2;
     
     float totalRingAlpha = max(ringAlpha1, ringAlpha2);
     
