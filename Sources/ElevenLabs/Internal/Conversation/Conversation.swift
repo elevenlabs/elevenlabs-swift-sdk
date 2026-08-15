@@ -387,23 +387,26 @@ final class Conversation: ObservableObject {
 
         setupAgentStateManager()
 
-        connectionManager.onEventReceived = { [weak self, weak connectionManager] event in
-            Task { @MainActor [weak self, weak connectionManager] in
-                guard let self,
-                      let connectionManager,
-                      activeConnectionManager === connectionManager,
-                      state.isConnecting || state.isConnected
-                else {
-                    return
-                }
-
-                await handleIncomingEvent(event)
+        let connectionManagerID = ObjectIdentifier(connectionManager)
+        connectionManager.onEventReceived = { [weak self] event in
+            Task { @MainActor [weak self] in
+                await self?.handleIncomingEvent(event, from: connectionManagerID)
             }
         }
         connectionManager.onDisconnected = { [weak self] in
             guard let self else { return }
             await endConversation(reason: .remoteDisconnected)
         }
+    }
+
+    private func handleIncomingEvent(_ event: IncomingEvent, from connectionManagerID: ObjectIdentifier) async {
+        guard let activeConnectionManager,
+              ObjectIdentifier(activeConnectionManager) == connectionManagerID,
+              state.isConnecting || state.isConnected
+        else {
+            return
+        }
+        await handleIncomingEvent(event)
     }
 
     private func handleStartupFailure(

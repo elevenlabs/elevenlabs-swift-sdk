@@ -10,7 +10,6 @@ import LiveKit
 final class ConversationAudioManager {
     private(set) var softwareMuteProcessor: SoftwareMuteProcessor?
 
-    private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
@@ -22,7 +21,7 @@ final class ConversationAudioManager {
 
     deinit {
         if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
         }
     }
 
@@ -34,22 +33,22 @@ final class ConversationAudioManager {
         let muteMode = audioConfig?.microphoneMuteMode ?? .inputMixer
 
         do {
-            try audioManager.set(microphoneMuteMode: muteMode.toLiveKit())
+            try AudioManager.shared.set(microphoneMuteMode: muteMode.toLiveKit())
         } catch {
             logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
         }
 
         if let bypass = audioConfig?.voiceProcessingBypassed {
-            audioManager.isVoiceProcessingBypassed = bypass
+            AudioManager.shared.isVoiceProcessingBypassed = bypass
         }
 
         if let agc = audioConfig?.voiceProcessingAGCEnabled {
-            audioManager.isVoiceProcessingAGCEnabled = agc
+            AudioManager.shared.isVoiceProcessingAGCEnabled = agc
         }
 
         if let prepared = audioConfig?.recordingAlwaysPrepared {
             do {
-                try await audioManager.setRecordingAlwaysPreparedMode(prepared)
+                try await AudioManager.shared.setRecordingAlwaysPreparedMode(prepared)
             } catch {
                 logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
             }
@@ -70,7 +69,7 @@ final class ConversationAudioManager {
     private func setupInitialConfiguration() {
         // Set initial microphone mute mode
         do {
-            try audioManager.set(microphoneMuteMode: LiveKit.MicrophoneMuteMode.inputMixer)
+            try AudioManager.shared.set(microphoneMuteMode: LiveKit.MicrophoneMuteMode.inputMixer)
         } catch {
             logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
         }
@@ -79,7 +78,7 @@ final class ConversationAudioManager {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await audioManager.setRecordingAlwaysPreparedMode(true)
+                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
             } catch {
                 logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
             }
@@ -89,14 +88,13 @@ final class ConversationAudioManager {
     private func configureSpeechHandler(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
         if muteMode == .voiceProcessing, let onSpeechDetectedWhileMuted = callbacks.onSpeechDetectedWhileMuted {
             if !audioSpeechHandlerInstalled {
-                previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
+                previousSpeechActivityHandler = AudioManager.shared.onMutedSpeechActivity
                 audioSpeechHandlerInstalled = true
             }
-            audioManager.onMutedSpeechActivity = { _, event in
+            AudioManager.shared.onMutedSpeechActivity = { _, event in
+                guard event == .started else { return }
                 Task { @MainActor in
-                    if event == .started {
-                        onSpeechDetectedWhileMuted()
-                    }
+                    onSpeechDetectedWhileMuted()
                 }
             }
         } else if audioSpeechHandlerInstalled {
@@ -122,7 +120,7 @@ final class ConversationAudioManager {
 
     private func cleanupSpeechHandler() {
         if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
             previousSpeechActivityHandler = nil
             audioSpeechHandlerInstalled = false
         }

@@ -82,6 +82,7 @@ final class ElevenLabsSDKTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testWebsocketUrlKeepsEndpointQueryItems() throws {
         let endpoints = try Endpoints(textWebSocket: XCTUnwrap(URL(string: "wss://proxy.example.com/ws?tenant=acme")))
         let url = try WebSocketConnectionManager.websocketUrl(

@@ -5,6 +5,7 @@ enum ConnectionManagerError: Error {
     case notConnected
 }
 
+@MainActor
 protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
     var onDisconnected: (() async -> Void)? { get set }
@@ -21,8 +22,10 @@ protocol ConnectionManaging: AnyObject {
     func send(data: Data) async throws
 }
 
+@MainActor
 protocol WebSocketConnectionManaging: ConnectionManaging {}
 
+@MainActor
 protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     /// Fired when an audio track is published/subscribed/unpublished/unsubscribed.
@@ -35,17 +38,19 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
 }
 
 extension ConnectionManaging {
-    func handleIncomingData(
+    /// Parses transport data off the main actor before delivering events on it.
+    nonisolated static func handleIncomingData(
         _ data: Data,
         metadataWaiter: ConversationInitiationMetadataWaiter,
-        logger: any Logging
-    ) {
+        logger: any Logging,
+        onEvent: @escaping @MainActor @Sendable (IncomingEvent) -> Void
+    ) async {
         do {
             if let event = try EventParser.parseIncomingEvent(from: data) {
                 if case let .conversationMetadata(metadata) = event {
-                    Task { await metadataWaiter.observe(metadata) }
+                    await metadataWaiter.observe(metadata)
                 }
-                onEventReceived?(event)
+                await onEvent(event)
             }
         } catch let EventParseError.unknownEventType(type) {
             // Unrecognized event types are expected (newer server) — not errors.

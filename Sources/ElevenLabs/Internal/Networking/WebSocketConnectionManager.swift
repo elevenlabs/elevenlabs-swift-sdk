@@ -10,6 +10,7 @@ import Foundation
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
 /// without media.
+@MainActor
 final class WebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
@@ -75,9 +76,20 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
 
         // Socket is up and the init message is sent. Start consuming responses.
+        let logger = logger
         receiveTask = Task { [weak self, weak task] in
-            guard let self, let task else { return }
-            await receiveLoop(task: task, metadataWaiter: waiter)
+            guard let task else { return }
+            await Self.receiveLoop(
+                task: task,
+                metadataWaiter: waiter,
+                logger: logger,
+                onEvent: { [weak self] event in
+                    self?.deliver(event)
+                },
+                onFailure: { [weak self] error in
+                    await self?.handleReceiveFailure(error)
+                }
+            )
         }
 
         let metadata = try await waitForInitiationMetadata(
@@ -120,19 +132,23 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    private func receiveLoop(
+    private nonisolated static func receiveLoop(
         task: URLSessionWebSocketTask,
-        metadataWaiter: ConversationInitiationMetadataWaiter
+        metadataWaiter: ConversationInitiationMetadataWaiter,
+        logger: any Logging,
+        onEvent: @escaping @MainActor @Sendable (IncomingEvent) -> Void,
+        onFailure: @escaping @Sendable (Error) async -> Void
     ) async {
         while !Task.isCancelled {
             do {
                 let message = try await task.receive()
                 switch message {
                 case let .string(text):
-                    handleIncomingData(
+                    await Self.handleIncomingData(
                         Data(text.utf8),
                         metadataWaiter: metadataWaiter,
-                        logger: logger
+                        logger: logger,
+                        onEvent: onEvent
                     )
                 case .data:
                     logger.warning("Ignoring binary WebSocket message")
@@ -141,12 +157,20 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                self.task = nil
-                errorHandler?(error)
-                await onDisconnected?()
+                await onFailure(error)
                 return
             }
         }
+    }
+
+    private func deliver(_ event: IncomingEvent) {
+        onEventReceived?(event)
+    }
+
+    private func handleReceiveFailure(_ error: Error) async {
+        task = nil
+        errorHandler?(error)
+        await onDisconnected?()
     }
 
     static func websocketUrl(for auth: ConversationCredentials, endpoints: Endpoints) throws -> URL {

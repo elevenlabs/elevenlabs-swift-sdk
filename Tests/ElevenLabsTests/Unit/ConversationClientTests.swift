@@ -50,7 +50,7 @@ final class ConversationClientTests: XCTestCase {
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
-        mockWebRTCConnectionManager.receive(data: data)
+        await mockWebRTCConnectionManager.receive(data: data)
         await waitForPublished(client.$messages) { $0.last?.content == "Hello from the agent" }
 
         XCTAssertEqual(client.messages.last?.content, "Hello from the agent")
@@ -129,7 +129,8 @@ final class ConversationClientTests: XCTestCase {
                 "event_id": 1
             ]
         ]
-        try mockWebRTCConnectionManager.receive(data: JSONSerialization.data(withJSONObject: payload))
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        await mockWebRTCConnectionManager.receive(data: data)
         await waitForPublished(client.$messages) { $0.last?.content == "Hello" }
 
         await client.reset()

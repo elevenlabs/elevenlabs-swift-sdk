@@ -14,8 +14,8 @@ final class OrbAudioLevels: ObservableObject {
     let micMonitor = ConversationAudioLevelMonitor()
     let agentMonitor = ConversationAudioLevelMonitor()
 
-    private static let interval: TimeInterval = 1.0 / 30
-    private var timer: Timer?
+    private static let intervalNanoseconds: UInt64 = 1_000_000_000 / 30
+    private var samplingTask: Task<Void, Never>?
 
     var isActive: Bool = false {
         didSet {
@@ -24,24 +24,29 @@ final class OrbAudioLevels: ObservableObject {
         }
     }
 
-    deinit { timer?.invalidate() }
+    deinit { samplingTask?.cancel() }
 
     private func start() {
         // Clears anything the audio thread wrote after the last stop, which would
         // otherwise surface as leftover loudness from the previous call.
         micMonitor.reset()
         agentMonitor.reset()
-        let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sample() }
+        samplingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: Self.intervalNanoseconds)
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                sample()
+            }
         }
-        // Common mode, so the levels keep updating while the transcript scrolls.
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     private func stop() {
-        timer?.invalidate()
-        timer = nil
+        samplingTask?.cancel()
+        samplingTask = nil
         micMonitor.reset()
         agentMonitor.reset()
         input = 0

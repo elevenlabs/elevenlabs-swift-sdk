@@ -1,6 +1,7 @@
 @testable import ElevenLabs
 import XCTest
 
+@MainActor
 final class ConversationInitiationMetadataWaiterTests: XCTestCase {
     func testMetadataReceivedBeforeWait() async throws {
         let waiter = ConversationInitiationMetadataWaiter(timeout: 1)

@@ -141,7 +141,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         room = nil
         // Only cancel an in-flight agent-ready wait — don't stash `.cancelled` for the next connect.
         if waitContinuation != nil {
-            await cancelAgentReady(elapsed: 0)
+            cancelAgentReady(elapsed: 0)
         }
         await initiationMetadataWaiter?.cancel()
         initiationMetadataWaiter = nil
@@ -187,14 +187,18 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     // MARK: - Helpers
 
-    func receive(data: Data) {
+    @MainActor
+    func receive(data: Data) async {
         guard let initiationMetadataWaiter else {
             preconditionFailure("Cannot receive data before connecting")
         }
-        handleIncomingData(
+        await Self.handleIncomingData(
             data,
             metadataWaiter: initiationMetadataWaiter,
-            logger: SDKLogger(logLevel: .error)
+            logger: SDKLogger(logLevel: .error),
+            onEvent: { [weak self] event in
+                self?.onEventReceived?(event)
+            }
         )
     }
 
