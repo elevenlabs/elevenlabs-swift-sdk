@@ -100,14 +100,18 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         sentPayloads.append(data)
     }
 
-    func receive(data: Data) {
+    @MainActor
+    func receive(data: Data) async {
         guard let initiationMetadataWaiter else {
             preconditionFailure("Cannot receive data before connecting")
         }
-        handleIncomingData(
+        await Self.handleIncomingData(
             data,
             metadataWaiter: initiationMetadataWaiter,
-            logger: SDKLogger(logLevel: .error)
+            logger: SDKLogger(logLevel: .error),
+            onEvent: { [weak self] event in
+                self?.onEventReceived?(event)
+            }
         )
     }
 

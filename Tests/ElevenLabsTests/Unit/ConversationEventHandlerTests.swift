@@ -16,7 +16,7 @@ final class ConversationEventHandlerTests: XCTestCase {
         conversation = Conversation(dependencyProvider: mockDependencyProvider)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         conversation = nil
         mockDependencyProvider = nil
         mockWebRTCConnectionManager = nil

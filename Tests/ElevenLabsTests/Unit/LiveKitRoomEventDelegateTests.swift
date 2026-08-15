@@ -53,12 +53,12 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     }
 
     func testIgnoresNonDisconnectedConnectionState() async {
-        nonisolated(unsafe) var called = false
-        let delegate = makeDelegate(onRemoteDisconnect: { called = true })
+        let notCalled = expectation(description: "disconnect")
+        notCalled.isInverted = true
+        let delegate = makeDelegate(onRemoteDisconnect: { notCalled.fulfill() })
 
         delegate.room?(Room(), didUpdateConnectionState: .connected, from: .connecting)
-        await Task { @MainActor in }.value
 
-        XCTAssertFalse(called)
+        await fulfillment(of: [notCalled], timeout: 0.1)
     }
 }

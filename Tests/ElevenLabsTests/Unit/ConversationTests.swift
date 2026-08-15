@@ -95,7 +95,7 @@ final class ConversationTests: XCTestCase {
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
 
-        mockWebRTCConnectionManager.receive(data: data)
+        await mockWebRTCConnectionManager.receive(data: data)
         await waitForPublished(conversation.$messages) { $0.last?.content == "Hello from raw data" }
 
         XCTAssertEqual(conversation.messages.last?.content, "Hello from raw data")
@@ -132,7 +132,7 @@ final class ConversationTests: XCTestCase {
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
 
-        mockWebRTCConnectionManager.receive(data: data)
+        await mockWebRTCConnectionManager.receive(data: data)
         await waitForPublished(conversation.$conversationMetadata) { $0?.conversationId == "conversation-before-ready" }
 
         XCTAssertEqual(conversation.conversationMetadata?.conversationId, "conversation-before-ready")
@@ -225,7 +225,7 @@ final class ConversationTests: XCTestCase {
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
-        mockWebSocketConnectionManager.receive(data: data)
+        await mockWebSocketConnectionManager.receive(data: data)
         await waitForPublished(conversation.$messages) { $0.last?.content == "Hello over WebSocket" }
 
         XCTAssertEqual(conversation.messages.last?.content, "Hello over WebSocket")

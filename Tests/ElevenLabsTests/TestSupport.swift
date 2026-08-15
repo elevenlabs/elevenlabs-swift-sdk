@@ -4,6 +4,7 @@ import Combine
 import LiveKit
 import XCTest
 
+@MainActor
 extension XCTestCase {
     /// Waits for a `@Published` property to emit a value matching `predicate`.
     func waitForPublished<P: Publisher>(
@@ -24,7 +25,7 @@ extension XCTestCase {
     }
 
     /// Waits until `recorder` has at least `count` values, then returns the snapshot.
-    func waitForValues<T>(
+    func waitForValues<T: Sendable>(
         _ recorder: ValueRecorder<T>,
         count: Int,
         timeout: TimeInterval = 1.0
@@ -39,7 +40,7 @@ extension XCTestCase {
     }
 
     /// Waits until `recorder`'s latest value matches `predicate`, then returns that value.
-    func waitForLastValue<T>(
+    func waitForLastValue<T: Sendable>(
         _ recorder: ValueRecorder<T>,
         timeout: TimeInterval = 1.0,
         matching predicate: @escaping @Sendable (T) -> Bool
@@ -69,7 +70,7 @@ extension XCTestCase {
     }
 }
 
-actor ValueRecorder<Value> {
+actor ValueRecorder<Value: Sendable> {
     private var storage: [Value] = []
     private var countWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
     private var valueWaiters: [(predicate: @Sendable (Value) -> Bool, continuation: CheckedContinuation<Void, Never>)] = []

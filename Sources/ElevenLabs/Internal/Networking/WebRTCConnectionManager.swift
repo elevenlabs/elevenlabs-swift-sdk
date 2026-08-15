@@ -24,6 +24,7 @@ enum WebRTCConnectionManagerError: Error {
 ///
 /// LiveKit room/track types stay internal to this manager; consumers observe
 /// audio via ``ConversationAudioObserver`` rather than LiveKit track APIs.
+@MainActor
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
     var onDisconnected: (() async -> Void)?
@@ -62,6 +63,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     private var eventDelegate: LiveKitRoomEventDelegate?
     private var readinessDelegate: LiveKitReadinessDelegate?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
+    private var dataTask: Task<Void, Never>?
 
     private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
@@ -185,7 +187,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             }
             let first = await group.next()!
             if case .timedOut = first {
-                await delegate.release()
+                delegate.release()
             }
             group.cancelAll()
             return first
@@ -231,23 +233,42 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         networkConfiguration: WebRTCConfiguration,
         metadataWaiter: ConversationInitiationMetadataWaiter
     ) async throws {
-        await readinessDelegate?.release()
+        dataTask?.cancel()
+        readinessDelegate?.release()
 
-        let readinessDelegate = await LiveKitReadinessDelegate(logger: logger)
+        let readinessDelegate = LiveKitReadinessDelegate(logger: logger)
         self.readinessDelegate = readinessDelegate
 
         let logger = logger
+        let (dataStream, dataContinuation) = AsyncStream.makeStream(of: Data.self)
         let eventDelegate = LiveKitRoomEventDelegate(
-            onData: { [weak self] data in
-                self?.handleIncomingData(data, metadataWaiter: metadataWaiter, logger: logger)
+            onData: { dataContinuation.yield($0) },
+            onRemoteSpeaking: { [weak self] isSpeaking in
+                Task { @MainActor [weak self] in
+                    self?.onRemoteSpeakingChanged?(isSpeaking)
+                }
             },
-            onRemoteSpeaking: { [weak self] isSpeaking in self?.onRemoteSpeakingChanged?(isSpeaking) },
-            onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() },
+            onRemoteDisconnect: { [weak self] in
+                await self?.handleRemoteDisconnect()
+            },
             onTracksChanged: { [weak self] in
                 Task { @MainActor in self?.onTracksChanged?() }
             }
         )
         self.eventDelegate = eventDelegate
+        // One consumer preserves packet order while parsing off the main actor.
+        dataTask = Task { [weak self] in
+            for await data in dataStream {
+                await Self.handleIncomingData(
+                    data,
+                    metadataWaiter: metadataWaiter,
+                    logger: logger,
+                    onEvent: { [weak self] event in
+                        self?.onEventReceived?(event)
+                    }
+                )
+            }
+        }
 
         let room = Room(roomOptions: RoomOptions(singlePeerConnection: true))
         self.room = room
@@ -299,12 +320,18 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
         await initiationMetadataWaiter?.cancel()
         initiationMetadataWaiter = nil
-        await readinessDelegate?.release()
+        dataTask?.cancel()
+        dataTask = nil
+        readinessDelegate?.release()
         readinessDelegate = nil
 
         await room?.disconnect()
         room = nil
         eventDelegate = nil
+    }
+
+    private func handleRemoteDisconnect() async {
+        await onDisconnected?()
     }
 
     // MARK: – Private helpers
@@ -313,7 +340,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// let `CancellationError` propagate unwrapped, and wrap any other error as
     /// `ConversationError` (stamping `total`).
     @MainActor
-    private func runPhase<T>(
+    private func runPhase<T: Sendable>(
         timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
         metrics: inout ConversationStartupMetrics,
         startTime: Date,
