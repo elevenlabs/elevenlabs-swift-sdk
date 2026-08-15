@@ -12,8 +12,9 @@ final class ConversationAudioLevelMonitor: ConversationAudioObserver, @unchecked
     private static let release: Float = 0.75
 
     private let lock = NSLock()
+    private let scratchLock = NSLock()
     private var storedLevel: Float = 0
-    /// Only touched from the audio thread, which delivers buffers serially.
+    /// Reused for Int16 conversion.
     private var scratch: [Float] = []
 
     /// The loudest level since the last read, leaving one release step behind.
@@ -43,14 +44,16 @@ final class ConversationAudioLevelMonitor: ConversationAudioObserver, @unchecked
         if let channel = buffer.floatChannelData?[0] {
             vDSP_rmsqv(channel, stride, &rms, vDSP_Length(frames))
         } else if let channel = buffer.int16ChannelData?[0] {
-            // Grown, never reallocated per buffer: this is the audio thread.
-            if scratch.count < frames { scratch = [Float](repeating: 0, count: frames) }
-            scratch.withUnsafeMutableBufferPointer { floats in
-                guard let samples = floats.baseAddress else { return }
-                vDSP_vflt16(channel, stride, samples, 1, vDSP_Length(frames))
-                var scale = 1 / Float(Int16.max)
-                vDSP_vsmul(samples, 1, &scale, samples, 1, vDSP_Length(frames))
-                vDSP_rmsqv(samples, 1, &rms, vDSP_Length(frames))
+            scratchLock.withLock {
+                // Grown, never reallocated per buffer: this is the audio thread.
+                if scratch.count < frames { scratch = [Float](repeating: 0, count: frames) }
+                scratch.withUnsafeMutableBufferPointer { floats in
+                    guard let samples = floats.baseAddress else { return }
+                    vDSP_vflt16(channel, stride, samples, 1, vDSP_Length(frames))
+                    var scale = 1 / Float(Int16.max)
+                    vDSP_vsmul(samples, 1, &scale, samples, 1, vDSP_Length(frames))
+                    vDSP_rmsqv(samples, 1, &rms, vDSP_Length(frames))
+                }
             }
         } else {
             return nil
