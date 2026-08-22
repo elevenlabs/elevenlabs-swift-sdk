@@ -26,16 +26,16 @@ This document provides in-depth examples and advanced configuration options for 
 
 The `Conversation` object provides reactive `@Published` properties for seamless UI integration.
 
-### Message Handling
+### Chat History
 
-Monitor real-time transcriptions for both the agent and the user. The `messages` array is automatically updated.
+Observe messages and tool calls in one reconciled history.
 
 ```swift
-conversation.$messages
+conversation.$chatHistory
     .receive(on: DispatchQueue.main)
-    .sink { messages in
-        // messages are of type [Message]
-        // Each message has role (.user or .agent) and content
+    .sink { history in
+        let messages = history.compactMap(\.message)
+        let toolCalls = history.compactMap(\.toolCall)
     }
     .store(in: &cancellables)
 ```
@@ -106,10 +106,11 @@ let conversation = try await ElevenLabs.startConversation(
 try await conversation.sendMessage("Hi! Tell me about the weather.")
 
 // 3) Receive responses (reactive)
-conversation.$messages
+conversation.$chatHistory
     .receive(on: DispatchQueue.main)
-    .sink { messages in
-        guard let last = messages.last, last.role == .agent else { return }
+    .compactMap { $0.compactMap(\.message).last }
+    .sink { last in
+        guard last.role == .agent else { return }
         print("Agent:", last.content)
     }
     .store(in: &cancellables)

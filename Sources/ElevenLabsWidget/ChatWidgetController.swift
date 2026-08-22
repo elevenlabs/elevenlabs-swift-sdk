@@ -54,10 +54,10 @@ public final class ChatWidgetController: ObservableObject {
         try await binding?.client.setMicMuted(muted)
     }
 
-    /// Snapshot of the conversation's messages. Not reactive — read it when you
+    /// Snapshot of the conversation's chat history. Not reactive — read it when you
     /// need it (e.g. on end of call).
-    public func messages() -> [Message] {
-        binding?.client.messages ?? []
+    public func chatHistory() -> [any ChatHistoryItem] {
+        binding?.client.chatHistory ?? []
     }
 
     /// Set by the widget on attach. Weak so the controller can outlive the widget.

@@ -28,7 +28,7 @@ final class ConversationClientTests: XCTestCase {
 
     func testInitialStateIsIdleBeforeAnyStart() {
         XCTAssertEqual(client.state, .idle)
-        XCTAssertTrue(client.messages.isEmpty)
+        XCTAssertTrue(client.chatHistory.isEmpty)
         XCTAssertFalse(client.isMicMuted)
     }
 
@@ -46,14 +46,17 @@ final class ConversationClientTests: XCTestCase {
             "type": "agent_response",
             "agent_response_event": [
                 "agent_response": "Hello from the agent",
-                "event_id": 1
+                "event_id": 1,
+                "response_id": "response-1"
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         await mockWebRTCConnectionManager.receive(data: data)
-        await waitForPublished(client.$messages) { $0.last?.content == "Hello from the agent" }
+        await waitForPublished(client.$chatHistory) {
+            $0.last?.message?.content == "Hello from the agent"
+        }
 
-        XCTAssertEqual(client.messages.last?.content, "Hello from the agent")
+        XCTAssertEqual(client.chatHistory.last?.message?.content, "Hello from the agent")
 
         await client.endConversation()
         XCTAssertEqual(client.state, .ended(reason: .userEnded))
@@ -72,7 +75,7 @@ final class ConversationClientTests: XCTestCase {
         _ = try await client.startConversation(auth: .publicAgent(id: "second-agent"))
 
         assertConnected(agentId: "second-agent")
-        XCTAssertTrue(client.messages.isEmpty)
+        XCTAssertTrue(client.chatHistory.isEmpty)
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 2)
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
     }
@@ -84,7 +87,7 @@ final class ConversationClientTests: XCTestCase {
         _ = try await client.startConversation(auth: .publicAgent(id: "second-agent"))
 
         assertConnected(agentId: "second-agent")
-        XCTAssertTrue(client.messages.isEmpty)
+        XCTAssertTrue(client.chatHistory.isEmpty)
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 2)
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
     }
@@ -126,17 +129,20 @@ final class ConversationClientTests: XCTestCase {
             "type": "agent_response",
             "agent_response_event": [
                 "agent_response": "Hello",
-                "event_id": 1
+                "event_id": 1,
+                "response_id": "response-1"
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         await mockWebRTCConnectionManager.receive(data: data)
-        await waitForPublished(client.$messages) { $0.last?.content == "Hello" }
+        await waitForPublished(client.$chatHistory) {
+            $0.last?.message?.content == "Hello"
+        }
 
         await client.reset()
 
         XCTAssertEqual(client.state, .idle)
-        XCTAssertTrue(client.messages.isEmpty)
+        XCTAssertTrue(client.chatHistory.isEmpty)
         XCTAssertTrue(client.pendingToolCalls.isEmpty)
         XCTAssertNil(client.conversationMetadata)
         XCTAssertFalse(client.isMicMuted)

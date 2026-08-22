@@ -27,21 +27,28 @@ enum EventParser {
         case "agent_response":
             if let event = json["agent_response_event"] as? [String: Any],
                let response = event["agent_response"] as? String,
-               let eventId = event["event_id"] as? Int
+               let eventId = event["event_id"] as? Int,
+               let responseId = event["response_id"] as? String
             {
-                return .agentResponse(AgentResponseEvent(response: response, eventId: eventId))
+                return .agentResponse(AgentResponseEvent(
+                    response: response,
+                    eventId: eventId,
+                    responseId: responseId
+                ))
             }
 
         case "agent_response_correction":
             if let event = json["agent_response_correction_event"] as? [String: Any],
                let originalResponse = event["original_agent_response"] as? String,
                let correctedResponse = event["corrected_agent_response"] as? String,
-               let eventId = event["event_id"] as? Int
+               let eventId = event["event_id"] as? Int,
+               let responseId = event["response_id"] as? String
             {
                 return .agentResponseCorrection(AgentResponseCorrectionEvent(
                     originalAgentResponse: originalResponse,
                     correctedAgentResponse: correctedResponse,
-                    eventId: eventId
+                    eventId: eventId,
+                    responseId: responseId
                 ))
             }
 
@@ -246,12 +253,18 @@ enum EventParser {
         case "agent_chat_response_part":
             if let event = json["text_response_part"] as? [String: Any],
                let text = event["text"] as? String,
-               let eventId = event["event_id"] as? Int
+               let eventId = event["event_id"] as? Int,
+               let responseId = event["response_id"] as? String
             {
                 let partTypeStr = event["type"] as? String ?? "delta"
                 let partType = AgentChatResponsePartType(rawValue: partTypeStr) ?? .delta
                 return .agentChatResponsePart(
-                    AgentChatResponsePartEvent(text: text, type: partType, eventId: eventId)
+                    AgentChatResponsePartEvent(
+                        text: text,
+                        type: partType,
+                        eventId: eventId,
+                        responseId: responseId
+                    )
                 )
             }
 

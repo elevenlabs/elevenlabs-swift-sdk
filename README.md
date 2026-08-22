@@ -76,15 +76,16 @@ struct ChatView: View {
 
                 // Real-time transcriptions
                 ScrollViewReader { proxy in
+                    let messages = conversation.chatHistory.compactMap(\.message)
                     ScrollView {
-                        ForEach(conversation.messages) { msg in
+                        ForEach(messages) { msg in
                             Text("**\(msg.role)**: \(msg.content)")
                                 .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
                                 .id(msg.id)
                         }
                     }
-                    .onChange(of: conversation.messages.count) { _ in
-                        proxy.scrollTo(conversation.messages.last?.id)
+                    .onChange(of: messages.count) { _ in
+                        proxy.scrollTo(messages.last?.id)
                     }
                 }
 

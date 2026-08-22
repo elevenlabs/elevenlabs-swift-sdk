@@ -14,8 +14,10 @@ final class Conversation: ObservableObject {
     // MARK: - State
 
     @Published var state: ConversationState = .idle
-    @Published var messages: [Message] = []
+    @Published var chatHistory: [any ChatHistoryItem] = []
     @Published var agentState: AgentState = .listening
+
+    private var chatHistoryReconciler = ChatHistoryReconciler()
 
     /// Stream of client tool calls that need to be executed by the app
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
@@ -275,7 +277,7 @@ final class Conversation: ObservableObject {
         }
         let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
         try await publish(event)
-        appendMessage(role: .user, content: text)
+        updateChatHistory { $0.appendUserMessage(text) }
     }
 
     /// Mute or unmute the local microphone.
@@ -432,7 +434,7 @@ final class Conversation: ObservableObject {
     }
 
     /// Tear down operational state when an active session ends.
-    /// Preserves user-visible display state (messages, MCP activity, conversation
+    /// Preserves user-visible display state (history, MCP activity, conversation
     /// metadata) so `ConversationClient` can keep the completed transcript visible.
     private func tearDownActiveSession() {
         cleanupTransientResources()
@@ -480,17 +482,17 @@ final class Conversation: ObservableObject {
     func handleIncomingEvent(_ event: IncomingEvent) async {
         switch event {
         case let .userTranscript(e):
-            insertUserTranscript(content: e.transcript, eventId: e.eventId)
+            updateChatHistory { $0.receive(e) }
             agentStateManager?.processSignal(.userTranscript)
             callbacks.onUserTranscript?(e.transcript, e.eventId)
 
         case let .agentResponse(e):
-            upsertAgentMessage(content: e.response, eventId: e.eventId)
+            updateChatHistory { $0.receive(e) }
             agentStateManager?.processSignal(.agentResponse)
             callbacks.onAgentResponse?(e.response, e.eventId)
 
         case let .agentResponseCorrection(correction):
-            upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
+            updateChatHistory { $0.receive(correction) }
             callbacks.onAgentResponseCorrection?(
                 correction.originalAgentResponse,
                 correction.correctedAgentResponse,
@@ -504,8 +506,7 @@ final class Conversation: ObservableObject {
             )
 
         case let .agentChatResponsePart(e):
-            let existing = messages.last(where: { $0.role == .agent && $0.eventId == e.eventId })?.content ?? ""
-            upsertAgentMessage(content: existing + e.text, eventId: e.eventId)
+            updateChatHistory { $0.receive(e) }
 
         case let .audio(audioEvent):
             if let alignment = audioEvent.alignment {
@@ -534,6 +535,7 @@ final class Conversation: ObservableObject {
             callbacks.onVadScore?(vad.vadScore)
 
         case let .agentToolResponse(toolResponse):
+            updateChatHistory { $0.receive(toolResponse) }
             applyStateSignal(.agentToolResponse, fallback: .listening)
 
             if toolResponse.toolName == "end_call" {
@@ -545,8 +547,8 @@ final class Conversation: ObservableObject {
             applyStateSignal(.agentToolRequest, fallback: .thinking)
             callbacks.onAgentToolRequest?(toolRequest)
 
-        case .tentativeUserTranscript:
-            break
+        case let .tentativeUserTranscript(transcript):
+            updateChatHistory { $0.receive(transcript) }
 
         case let .mcpToolCall(toolCall):
             if let index = mcpToolCalls.firstIndex(where: { $0.toolCallId == toolCall.toolCallId }) {
@@ -564,50 +566,9 @@ final class Conversation: ObservableObject {
         }
     }
 
-    // MARK: - Message Helpers
-
-    func appendMessage(role: Message.Role, content: String, eventId: Int? = nil) {
-        messages.append(
-            Message(
-                id: UUID().uuidString,
-                role: role,
-                content: content,
-                timestamp: Date(),
-                eventId: eventId
-            )
-        )
-    }
-
-    /// Inserts the user transcript before the agent message with the same `eventId`
-    /// if one exists, since the agent's response may be received before the transcript.
-    private func insertUserTranscript(content: String, eventId: Int) {
-        let message = Message(
-            id: UUID().uuidString,
-            role: .user,
-            content: content,
-            timestamp: Date(),
-            eventId: eventId
-        )
-        if let agentIdx = messages.firstIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
-            messages.insert(message, at: agentIdx)
-        } else {
-            messages.append(message)
-        }
-    }
-
-    private func upsertAgentMessage(content: String, eventId: Int) {
-        if let idx = messages.lastIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
-            let existing = messages[idx]
-            messages[idx] = Message(
-                id: existing.id,
-                role: .agent,
-                content: content,
-                timestamp: existing.timestamp,
-                eventId: eventId
-            )
-        } else {
-            appendMessage(role: .agent, content: content, eventId: eventId)
-        }
+    private func updateChatHistory(_ update: (inout ChatHistoryReconciler) -> Void) {
+        update(&chatHistoryReconciler)
+        chatHistory = chatHistoryReconciler.items
     }
 }
 
