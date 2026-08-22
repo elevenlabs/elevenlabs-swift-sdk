@@ -74,7 +74,7 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$agentState.assign(to: &$agentState)
         client.$isMicMuted.assign(to: &$isMicMuted)
         client.$chatHistory
-            .map { $0.compactMap(\.message).map(ChatMessage.init) }
+            .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
         client.$pendingToolCalls
             .combineLatest(client.$state)

@@ -96,7 +96,7 @@ final class ChatHistoryReconcilerTests: XCTestCase {
         XCTAssertEqual(messages[0].content, "Updated")
     }
 
-    func testStoppedPartOnlyStreamRemainsStreaming() {
+    func testStoppedPartFinalizesStream() {
         var reconciler = ChatHistoryReconciler()
 
         reconciler.receive(AgentChatResponsePartEvent(
@@ -118,7 +118,9 @@ final class ChatHistoryReconcilerTests: XCTestCase {
             responseId: "response-1"
         ))
 
-        XCTAssertEqual(messages(in: reconciler).first?.isFinal, false)
+        let message = messages(in: reconciler)[0]
+        XCTAssertEqual(message.content, "Partial")
+        XCTAssertTrue(message.isFinal)
     }
 
     func testLatePartDoesNotMutateFinalizedMessage() {
