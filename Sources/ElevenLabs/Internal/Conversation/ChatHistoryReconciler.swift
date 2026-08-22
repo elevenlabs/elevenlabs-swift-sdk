@@ -41,10 +41,12 @@ struct ChatHistoryReconciler {
     }
 
     mutating func receive(_ event: AgentChatResponsePartEvent) {
+        let isEnd = event.type == .stop
         if let index = items.firstIndex(where: { $0.id == event.responseId }) {
             updateMessage(at: index) {
                 guard !$0.isFinal else { return }
                 $0.content += event.text
+                $0.isFinal = isEnd
             }
             return
         }
@@ -52,7 +54,7 @@ struct ChatHistoryReconciler {
         items.append(Message(
             role: .agent,
             content: event.text,
-            isFinal: false,
+            isFinal: isEnd,
             eventId: event.eventId,
             responseId: event.responseId
         ))
@@ -115,5 +117,4 @@ struct ChatHistoryReconciler {
                 && !message.isFinal
         }
     }
-
 }

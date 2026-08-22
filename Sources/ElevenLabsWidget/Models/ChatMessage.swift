@@ -10,12 +10,14 @@ struct ChatMessage: Identifiable, Equatable {
     let role: Role
     let content: String
     let timestamp: Date
+    let isFinal: Bool
 
     init(_ message: Message) {
         id = message.id
         role = message.role == .user ? .user : .agent
         content = message.content
         timestamp = message.timestamp
+        isFinal = message.isFinal
     }
 }
 #endif
