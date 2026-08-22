@@ -45,6 +45,7 @@ public struct TentativeUserTranscriptEvent: Sendable {
 public struct AgentResponseEvent: Sendable {
     public let response: String
     public let eventId: Int
+    public let responseId: String
 }
 
 /// Agent's response correction
@@ -52,6 +53,7 @@ public struct AgentResponseCorrectionEvent: Sendable {
     public let originalAgentResponse: String
     public let correctedAgentResponse: String
     public let eventId: Int
+    public let responseId: String
 }
 
 /// Agent response metadata
@@ -64,6 +66,7 @@ public struct AgentChatResponsePartEvent: Sendable {
     public let text: String
     public let type: AgentChatResponsePartType
     public let eventId: Int
+    public let responseId: String
 }
 
 /// Audio alignment data showing character-level timing information

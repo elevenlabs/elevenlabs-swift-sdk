@@ -49,7 +49,7 @@ final class ConversationIntegrationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test that message streams are empty initially
-        XCTAssertTrue(conversation.messages.isEmpty)
+        XCTAssertTrue(conversation.chatHistory.isEmpty)
 
         // In a real integration test:
         // - Connect to test agent

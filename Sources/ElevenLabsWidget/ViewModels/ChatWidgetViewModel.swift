@@ -73,8 +73,8 @@ final class ChatWidgetViewModel: ObservableObject {
             .store(in: &cancellables)
         client.$agentState.assign(to: &$agentState)
         client.$isMicMuted.assign(to: &$isMicMuted)
-        client.$messages
-            .map { $0.map(ChatMessage.init) }
+        client.$chatHistory
+            .map { $0.compactMap(\.message).map(ChatMessage.init) }
             .assign(to: &$messages)
         client.$pendingToolCalls
             .combineLatest(client.$state)

@@ -13,7 +13,7 @@ public final class ConversationClient: ObservableObject {
     // MARK: - Public State
 
     @Published public private(set) var state: ConversationState = .idle
-    @Published public private(set) var messages: [Message] = []
+    @Published public private(set) var chatHistory: [any ChatHistoryItem] = []
     @Published public private(set) var agentState: AgentState = .listening
     @Published public private(set) var isMicMuted: Bool = false
 
@@ -118,7 +118,7 @@ public final class ConversationClient: ObservableObject {
         return try await conversation.start(auth: auth)
     }
 
-    /// End the current conversation, if any. Mirrored state (messages, etc.) is kept
+    /// End the current conversation, if any. Mirrored state (history, etc.) is kept
     /// so the UI can still show the last session until `reset()` or a new start.
     public func endConversation() async {
         await session?.endConversation()
@@ -132,7 +132,7 @@ public final class ConversationClient: ObservableObject {
         session = nil
 
         state = .idle
-        messages = []
+        chatHistory = []
         agentState = .listening
         isMicMuted = false
         pendingToolCalls = []
@@ -147,7 +147,7 @@ public final class ConversationClient: ObservableObject {
         self.session = session
 
         session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
-        session.$messages.sink { [weak self] in self?.messages = $0 }.store(in: &cancellables)
+        session.$chatHistory.sink { [weak self] in self?.chatHistory = $0 }.store(in: &cancellables)
         session.$agentState.sink { [weak self] in self?.agentState = $0 }.store(in: &cancellables)
         session.$pendingToolCalls.sink { [weak self] in self?.pendingToolCalls = $0 }.store(in: &cancellables)
         session.$conversationMetadata.sink { [weak self] in self?.conversationMetadata = $0 }.store(in: &cancellables)

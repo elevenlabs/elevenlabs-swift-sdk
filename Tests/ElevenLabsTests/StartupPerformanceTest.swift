@@ -77,10 +77,11 @@ final class StartupPerformanceTest: XCTestCase {
         }
 
         // Check for existing messages
-        if !client.messages.isEmpty {
+        let messages = client.chatHistory.compactMap(\.message)
+        if !messages.isEmpty {
             hasReceivedFirstMessage = true
-            print("  [\(String(format: "%.3f", elapsed))s] Messages already present: \(client.messages.count)")
-            if let firstMessage = client.messages.first {
+            print("  [\(String(format: "%.3f", elapsed))s] Messages already present: \(messages.count)")
+            if let firstMessage = messages.first {
                 print("  📨 Message: \(firstMessage.content)")
             }
         }

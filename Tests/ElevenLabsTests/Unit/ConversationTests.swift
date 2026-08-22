@@ -41,7 +41,7 @@ final class ConversationTests: XCTestCase {
     @MainActor
     func testConversationInitialState() {
         XCTAssertEqual(conversation.state, .idle)
-        XCTAssertTrue(conversation.messages.isEmpty)
+        XCTAssertTrue(conversation.chatHistory.isEmpty)
     }
 
     func testStartConversationSuccessReturnsResult() async throws {
@@ -96,10 +96,12 @@ final class ConversationTests: XCTestCase {
         let data = try JSONSerialization.data(withJSONObject: payload)
 
         await mockWebRTCConnectionManager.receive(data: data)
-        await waitForPublished(conversation.$messages) { $0.last?.content == "Hello from raw data" }
+        await waitForPublished(conversation.$chatHistory) {
+            $0.last?.message?.content == "Hello from raw data"
+        }
 
-        XCTAssertEqual(conversation.messages.last?.content, "Hello from raw data")
-        XCTAssertEqual(conversation.messages.last?.role, .user)
+        XCTAssertEqual(conversation.chatHistory.last?.message?.content, "Hello from raw data")
+        XCTAssertEqual(conversation.chatHistory.last?.message?.role, .user)
     }
 
     func testStartConversationHandlesIncomingDataBeforeAgentReady() async throws {
@@ -155,11 +157,15 @@ final class ConversationTests: XCTestCase {
 
         await conversation.endConversation()
 
-        staleHandler(.agentResponse(AgentResponseEvent(response: "This should be ignored", eventId: 101)))
+        staleHandler(.agentResponse(AgentResponseEvent(
+            response: "This should be ignored",
+            eventId: 101,
+            responseId: "response-101"
+        )))
         // Drain the MainActor so the handler's spawned Task has run (and been rejected).
         await Task { @MainActor in }.value
 
-        XCTAssertTrue(conversation.messages.isEmpty)
+        XCTAssertTrue(conversation.chatHistory.isEmpty)
     }
 
     func testStartConversationConfiguresRoomObservationHandlers() async throws {
@@ -221,15 +227,18 @@ final class ConversationTests: XCTestCase {
             "type": "agent_response",
             "agent_response_event": [
                 "agent_response": "Hello over WebSocket",
-                "event_id": 101
+                "event_id": 101,
+                "response_id": "response-101"
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         await mockWebSocketConnectionManager.receive(data: data)
-        await waitForPublished(conversation.$messages) { $0.last?.content == "Hello over WebSocket" }
+        await waitForPublished(conversation.$chatHistory) {
+            $0.last?.message?.content == "Hello over WebSocket"
+        }
 
-        XCTAssertEqual(conversation.messages.last?.content, "Hello over WebSocket")
-        XCTAssertEqual(conversation.messages.last?.role, .agent)
+        XCTAssertEqual(conversation.chatHistory.last?.message?.content, "Hello over WebSocket")
+        XCTAssertEqual(conversation.chatHistory.last?.message?.role, .agent)
     }
 
     func testStartTextOnlySignedURLUsesProvidedWebSocketURL() async throws {
