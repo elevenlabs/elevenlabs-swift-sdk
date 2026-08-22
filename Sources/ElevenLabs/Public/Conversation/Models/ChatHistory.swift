@@ -2,12 +2,12 @@ import Foundation
 
 public protocol ChatHistoryItem: Identifiable, Sendable where ID == String {}
 
-public extension ChatHistoryItem {
-    var message: Message? {
+extension ChatHistoryItem {
+    public var message: Message? {
         self as? Message
     }
 
-    var toolCall: ConversationToolCall? {
+    public var toolCall: ConversationToolCall? {
         self as? ConversationToolCall
     }
 }
@@ -35,7 +35,7 @@ public struct Message: ChatHistoryItem {
         eventId: Int? = nil,
         responseId: String? = nil
     ) {
-        self.id = responseId ?? UUID().uuidString
+        id = responseId ?? UUID().uuidString
         self.role = role
         self.content = content
         self.timestamp = timestamp
@@ -45,13 +45,10 @@ public struct Message: ChatHistoryItem {
 }
 
 public struct ConversationToolCall: ChatHistoryItem {
-    public var id: String { "tool_call:\(toolCallId)" }
+    public var id: String {
+        "tool_call:\(toolCallId)"
+    }
 
     public let toolCallId: String
     public let toolName: String
-
-    init(toolCallId: String, toolName: String) {
-        self.toolCallId = toolCallId
-        self.toolName = toolName
-    }
 }
