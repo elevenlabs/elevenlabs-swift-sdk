@@ -236,7 +236,7 @@ final class ConversationEventHandlerTests: XCTestCase {
             toolName: "end_call", toolCallId: "id", toolType: "action", isError: false, eventId: 1
         )))
 
-        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
+        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded))
     }
 
     // MARK: - Audio Alignment

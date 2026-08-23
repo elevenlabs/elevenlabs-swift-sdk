@@ -40,5 +40,6 @@ public struct CallInfo: Equatable, Sendable {
 
 public enum EndReason: Equatable, Sendable {
     case userEnded
+    case agentEnded
     case remoteDisconnected
 }
