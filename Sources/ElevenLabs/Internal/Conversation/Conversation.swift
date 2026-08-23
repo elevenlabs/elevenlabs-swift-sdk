@@ -519,7 +519,7 @@ final class Conversation: ObservableObject {
             applyStateSignal(.agentToolResponse, fallback: .listening)
 
             if toolResponse.toolName == "end_call" {
-                await endConversation()
+                await endConversation(reason: .agentEnded)
             }
             callbacks.onAgentToolResponse?(toolResponse)
 
