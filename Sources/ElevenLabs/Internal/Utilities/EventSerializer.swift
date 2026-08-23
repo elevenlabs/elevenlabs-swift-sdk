@@ -128,6 +128,10 @@ enum EventSerializer {
             json["user_id"] = userId
         }
 
+        if let environment = config.environment {
+            json["environment"] = environment
+        }
+
         return json
     }
 }
