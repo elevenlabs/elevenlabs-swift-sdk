@@ -101,7 +101,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         let token = try await runPhase(
             timing: \.tokenFetch, metrics: &metrics, startTime: startTime
         ) {
-            try await tokenService.fetchToken(for: auth)
+            try await tokenService.fetchToken(for: auth, environment: config.environment)
         }
 
         // 2. Request microphone permission (denial doesn't block startup).
