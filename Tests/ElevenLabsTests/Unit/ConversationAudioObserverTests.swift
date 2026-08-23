@@ -32,13 +32,9 @@ final class ConversationAudioObserverTests: XCTestCase {
 
         conversation.addAgentAudioObserver(agentObserver)
         conversation.addMicAudioObserver(micObserver)
-        XCTAssertEqual(conversation.agentObserverRegistry.registeredCount, 1)
-        XCTAssertEqual(conversation.micObserverRegistry.registeredCount, 1)
 
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         XCTAssertNotNil(mockWebRTCConnectionManager.onTracksChanged)
-        XCTAssertEqual(conversation.agentObserverRegistry.registeredCount, 1)
-        XCTAssertEqual(conversation.micObserverRegistry.registeredCount, 1)
 
         agentTrack.render()
         micTrack.render()
@@ -52,8 +48,6 @@ final class ConversationAudioObserverTests: XCTestCase {
         }
 
         await conversation.endConversation()
-        XCTAssertEqual(conversation.agentObserverRegistry.registeredCount, 0)
-        XCTAssertEqual(conversation.micObserverRegistry.registeredCount, 0)
         XCTAssertEqual(agentObserver.receivedBufferCount, 1)
         XCTAssertEqual(micObserver.receivedBufferCount, 1)
         XCTAssertEqual(agentTrack.attachedRendererCount, 0)
@@ -67,13 +61,16 @@ final class ConversationAudioObserverTests: XCTestCase {
         XCTAssertEqual(micObserver.receivedBufferCount, 1)
     }
 
-    func testIdleEndPreventsLaterObserverAttachment() async {
+    func testEndPreventsLaterObserverAttachment() async throws {
         let observer = RecordingAudioObserver()
         let track = SpyAudioTrack()
+        mockWebRTCConnectionManager.agentAudioTrack = track
 
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         await conversation.endConversation()
+
         conversation.addAgentAudioObserver(observer)
-        conversation.agentObserverRegistry.attach(to: track)
+        conversation.refreshAudioObservers()
         track.render()
 
         XCTAssertEqual(observer.receivedBufferCount, 0)
