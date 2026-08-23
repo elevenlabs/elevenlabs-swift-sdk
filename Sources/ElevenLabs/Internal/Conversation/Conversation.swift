@@ -6,9 +6,8 @@ import LiveKit
 
 /// A single-use conversation session, created by and owned by `ConversationClient`.
 ///
-/// Manages the lifecycle of one conversation: network layer
-/// (`WebRTCConnectionManager`|`WebSocketConnectionManager`), protocol parser
-/// (`EventParser`), and audio device setup.
+/// Owns one conversation's transport (`WebRTCConnectionManager` or
+/// `WebSocketConnectionManager`) and audio device setup.
 @MainActor
 final class Conversation: ObservableObject {
     // MARK: - State
@@ -16,8 +15,6 @@ final class Conversation: ObservableObject {
     @Published var state: ConversationState = .idle
     @Published var chatHistory: [any ChatHistoryItem] = []
     @Published var agentState: AgentState = .listening
-
-    private var chatHistoryReconciler = ChatHistoryReconciler()
 
     /// Stream of client tool calls that need to be executed by the app
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
@@ -31,54 +28,42 @@ final class Conversation: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
 
-    /// Pending mute state to apply after connection completes.
-    /// Allows setting mute state during connection phase.
-    private var pendingMuteState: Bool?
+    private var activeConnectionManager: (any ConnectionManaging)?
+    private var agentStateManager: AgentStateManager?
+    private let callbacks: ConversationCallbacks
+    private var chatHistoryReconciler = ChatHistoryReconciler()
+    private let config: ConversationConfig
+    private let dependencyProvider: any ConversationDependencyProvider
+    private var isTearingDown = false
+    private nonisolated let logger: any Logging
+
+    // Voice-related state
+
+    private var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
+        activeConnectionManager as? any WebRTCConnectionManaging
+    }
 
     /// Audio device management
     private var audioManager: ConversationAudioManager?
 
+    /// Pending mute state to apply after connection completes.
+    /// Allows setting mute state during connection phase.
+    private var pendingMuteState: Bool?
+
     /// Externally registered audio observers. Kept attached across track swaps.
-    let agentObserverRegistry = AudioObserverRegistry()
-    let micObserverRegistry = AudioObserverRegistry()
-
-    /// Agent state manager for event-based state tracking
-    var agentStateManager: AgentStateManager?
-
-    /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
-    func applyStateSignal(_ signal: AgentStateSignal, fallback: AgentState) {
-        if let manager = agentStateManager {
-            manager.processSignal(signal)
-        } else {
-            agentState = fallback
-        }
-    }
-
-    func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
-        if let manager = agentStateManager {
-            manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
-        } else if isSpeaking {
-            speakingTimer?.cancel()
-            agentState = .speaking
-        } else {
-            scheduleBackToListening(delay: 1.0)
-        }
-    }
-
-    /// Internal logger, accessible from nonisolated contexts.
-    nonisolated let logger: any Logging
-
-    /// Context for logging (e.g. agentId)
-    private var activeContext: [String: String]?
+    private let agentObserverRegistry = AudioObserverRegistry()
+    private let micObserverRegistry = AudioObserverRegistry()
 
     /// Internal LiveKit tracks used to attach ``ConversationAudioObserver``s.
-    var inputTrack: (any AudioTrackProtocol)? {
+    private var inputTrack: (any AudioTrackProtocol)? {
         activeWebRTCConnectionManager?.inputTrack
     }
 
-    var agentAudioTrack: (any AudioTrackProtocol)? {
+    private var agentAudioTrack: (any AudioTrackProtocol)? {
         activeWebRTCConnectionManager?.agentAudioTrack
     }
+
+    private var speakingTimer: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -93,16 +78,6 @@ final class Conversation: ObservableObject {
         self.callbacks = callbacks
         pendingMuteState = initialMicMuted
         logger = dependencyProvider.logger
-    }
-
-    private func setupAgentStateManager() {
-        guard let configuration = config.agentStateConfiguration else { return }
-        let manager = AgentStateManager(configuration: configuration)
-        manager.onStateChange = { [weak self] state in
-            self?.agentState = state
-            self?.callbacks.onAgentStateChange?(state)
-        }
-        agentStateManager = manager
     }
 
     // MARK: - API
@@ -156,6 +131,18 @@ final class Conversation: ObservableObject {
         return try await setConnected(result)
     }
 
+    func startTextOnlyConversation(_ auth: ConversationAuth.TextOnly) async throws -> ConversationStartResult {
+        let manager = dependencyProvider.webSocketConnectionManager
+        let result = try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
+            try await manager.connect(
+                auth: auth,
+                config: config,
+                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
+            )
+        }
+        return try await setConnected(result)
+    }
+
     // MARK: - Audio observers
 
     /// Register an observer for the agent's decoded output audio.
@@ -185,18 +172,6 @@ final class Conversation: ObservableObject {
         guard !isTearingDown else { return }
         agentObserverRegistry.attach(to: agentAudioTrack)
         micObserverRegistry.attach(to: inputTrack)
-    }
-
-    func startTextOnlyConversation(_ auth: ConversationAuth.TextOnly) async throws -> ConversationStartResult {
-        let manager = dependencyProvider.webSocketConnectionManager
-        let result = try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
-            try await manager.connect(
-                auth: auth,
-                config: config,
-                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
-            )
-        }
-        return try await setConnected(result)
     }
 
     /// End and clean up.
@@ -266,7 +241,7 @@ final class Conversation: ObservableObject {
         try await publish(event)
     }
 
-    /// Contextual update to agent (system prompt-ish).
+    /// Inject context for the agent without interrupting or adding a user-visible message.
     func updateContext(_ context: String) async throws {
         guard state.isConnected else { throw ConversationError.notConnected }
         let event = OutgoingEvent.contextualUpdate(ContextualUpdateEvent(text: context))
@@ -307,23 +282,6 @@ final class Conversation: ObservableObject {
 
     // MARK: - Private
 
-    private let dependencyProvider: any ConversationDependencyProvider
-    private var activeConnectionManager: (any ConnectionManaging)?
-    private var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
-        activeConnectionManager as? any WebRTCConnectionManaging
-    }
-
-    let config: ConversationConfig
-    let callbacks: ConversationCallbacks
-
-    var speakingTimer: Task<Void, Never>?
-    private var isTearingDown = false
-
-    private func updateStartupStage(_ stage: ConversationStartupState) {
-        guard state.isConnecting, state != .connecting(stage) else { return }
-        state = .connecting(stage)
-    }
-
     private func start(
         agentId: String,
         isTextOnly: Bool,
@@ -343,9 +301,8 @@ final class Conversation: ObservableObject {
         state = .connecting(.preparing)
         activeConnectionManager = manager
 
-        activeContext = ["agentId": agentId]
         let mode = isTextOnly ? "text-only" : "voice"
-        logger.info("Starting \(mode) conversation", context: activeContext)
+        logger.info("Starting \(mode) conversation", context: ["agentId": agentId])
 
         setupAgentStateManager()
 
@@ -379,6 +336,41 @@ final class Conversation: ObservableObject {
         state = .connected(result.callInfo)
         callbacks.onAgentReady?()
         return result
+    }
+
+    private func updateStartupStage(_ stage: ConversationStartupState) {
+        guard state.isConnecting, state != .connecting(stage) else { return }
+        state = .connecting(stage)
+    }
+
+    private func setupAgentStateManager() {
+        guard let configuration = config.agentStateConfiguration else { return }
+        let manager = AgentStateManager(configuration: configuration)
+        manager.onStateChange = { [weak self] state in
+            self?.agentState = state
+            self?.callbacks.onAgentStateChange?(state)
+        }
+        agentStateManager = manager
+    }
+
+    /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
+    private func applyStateSignal(_ signal: AgentStateSignal, fallback: AgentState) {
+        if let manager = agentStateManager {
+            manager.processSignal(signal)
+        } else {
+            agentState = fallback
+        }
+    }
+
+    private func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
+        if let manager = agentStateManager {
+            manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+        } else if isSpeaking {
+            speakingTimer?.cancel()
+            agentState = .speaking
+        } else {
+            scheduleBackToListening(delay: 1.0)
+        }
     }
 
     private func handleIncomingEvent(_ event: IncomingEvent, from connectionManagerID: ObjectIdentifier) async {
@@ -448,7 +440,7 @@ final class Conversation: ObservableObject {
         }
     }
 
-    func publish(_ event: OutgoingEvent) async throws {
+    private func publish(_ event: OutgoingEvent) async throws {
         guard let connectionManager = activeConnectionManager else {
             throw ConversationError.notConnected
         }
