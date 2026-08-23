@@ -8,7 +8,8 @@ public struct ConversationConfig: Sendable {
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
     public var userId: String?
-    /// Workspace environment (`production` if nil). Applied to the public-agent token request.
+    /// Workspace environment (`production` if nil). Applied to the public-agent
+    /// token request, signed WebSocket URL, and conversation init.
     public var environment: String?
 
     /// How to handle microphone setup failures during connection.

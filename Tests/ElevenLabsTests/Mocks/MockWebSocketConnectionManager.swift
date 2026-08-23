@@ -37,7 +37,8 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         do {
             resolved = try await WebSocketConnectionManager.websocketUrl(
                 for: auth,
-                endpoints: config.endpoints
+                endpoints: config.endpoints,
+                environment: config.environment
             )
             lastConnectedURL = resolved.url
         } catch {

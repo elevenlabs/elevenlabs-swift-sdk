@@ -56,6 +56,28 @@ final class ElevenLabsSDKTests: XCTestCase {
         XCTAssertEqual(resolved.agentId, "agent-123")
     }
 
+    @MainActor
+    func testWebsocketUrlAppendsPublicAgentEnvironment() async throws {
+        let resolved = try await WebSocketConnectionManager.websocketUrl(
+            for: .publicAgent(id: "agent-123"),
+            endpoints: .production,
+            environment: "staging"
+        )
+        XCTAssertEqual(
+            resolved.url.absoluteString,
+            "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&environment=staging"
+        )
+    }
+
+    func testConversationInitIncludesEnvironment() throws {
+        let config = ConversationConfig(environment: "staging")
+        let data = try EventSerializer.serializeOutgoingEvent(
+            .conversationInit(ConversationInitEvent(config: config))
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["environment"] as? String, "staging")
+    }
+
     func testConversationConfigDefaults() {
         let config = ConversationConfig()
 

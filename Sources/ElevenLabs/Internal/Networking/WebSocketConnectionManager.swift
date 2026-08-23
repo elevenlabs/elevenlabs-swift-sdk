@@ -51,7 +51,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         do {
             resolved = try await Self.websocketUrl(
                 for: auth,
-                endpoints: endpoints
+                endpoints: endpoints,
+                environment: config.environment
             )
         } catch is CancellationError {
             throw CancellationError()
@@ -180,7 +181,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
     static func websocketUrl(
         for auth: ConversationAuth.TextOnly,
-        endpoints: Endpoints
+        endpoints: Endpoints,
+        environment: String? = nil
     ) async throws -> (url: URL, agentId: String) {
         switch auth {
         case let .publicAgent(agentId):
@@ -189,6 +191,9 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             }
             var queryItems = components.queryItems ?? []
             queryItems.append(URLQueryItem(name: "agent_id", value: agentId))
+            if let environment {
+                queryItems.append(URLQueryItem(name: "environment", value: environment))
+            }
             components.queryItems = queryItems
             guard let url = components.url else {
                 throw ConversationError.authenticationFailed("Invalid conversation URL")
