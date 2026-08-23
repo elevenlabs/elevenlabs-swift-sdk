@@ -48,11 +48,11 @@ struct TokenService: Sendable {
     ///
     /// Translates internal `TokenError`s into public `ConversationError`s so
     /// callers only ever deal with one error type.
-    func fetchToken(for auth: ConversationAuth.Voice) async throws -> String {
+    func fetchToken(for auth: ConversationAuth.Voice, environment: String?) async throws -> String {
         do {
             switch auth {
             case let .publicAgent(agentId):
-                return try await fetchTokenFromAPI(agentId: agentId)
+                return try await fetchTokenFromAPI(agentId: agentId, environment: environment)
             case let .conversationToken(mint):
                 return try await mint()
             }
