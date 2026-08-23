@@ -24,8 +24,6 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
     private var eventHandlerInstalled: CheckedContinuation<Void, Never>?
 
-    var room: Room?
-
     var inputTrack: (any AudioTrackProtocol)?
     var agentAudioTrack: (any AudioTrackProtocol)?
     var isMicrophoneMuted = true
@@ -33,6 +31,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     var errorHandler: ((Swift.Error?) -> Void)?
     var onDisconnectStarted: (@MainActor () async -> Void)?
 
+    private(set) var isConnected = false
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
     var tokenError: ConversationError?
@@ -49,6 +48,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     private var startupStateChange: ((ConversationStartupState) -> Void)?
 
     private var waitContinuation: CheckedContinuation<AgentReadyWaitResult, Never>?
+    private var waitingForAgentEntered: CheckedContinuation<Void, Never>?
     private var pendingWaitResult: AgentReadyWaitResult?
 
     /// When `true` (the default), `waitForAgentReady` resolves immediately. Set to `false`
@@ -60,7 +60,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     /// agent-ready continuation (`succeedAgentReady`/`timeoutAgentReady`).
     @MainActor
     func connect(
-        auth: ConversationCredentials,
+        auth: ConversationAuth.Voice,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
@@ -85,7 +85,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             errorHandler?(connectionError)
             throw connectionError as? ConversationError ?? .connectionFailed(connectionError)
         }
-        room = Room()
+        isConnected = true
 
         onStartupStateChange(.waitingForAgent(timeout: config.startupConfiguration.agentReadyTimeout))
         switch await waitForAgentReady(timeout: config.startupConfiguration.agentReadyTimeout) {
@@ -138,7 +138,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         errorHandler = nil
         onRemoteSpeakingChanged = nil
         onTracksChanged = nil
-        room = nil
+        isConnected = false
         // Only cancel an in-flight agent-ready wait — don't stash `.cancelled` for the next connect.
         if waitContinuation != nil {
             cancelAgentReady(elapsed: 0)
@@ -160,11 +160,20 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
 
         return await withCheckedContinuation { continuation in
             waitContinuation = continuation
+            waitingForAgentEntered?.resume()
+            waitingForAgentEntered = nil
         }
     }
 
+    /// Suspends until `waitForAgentReady` has parked.
+    @MainActor
+    func waitUntilWaitingForAgent() async {
+        if waitContinuation != nil { return }
+        await withCheckedContinuation { waitingForAgentEntered = $0 }
+    }
+
     func send(data: Data) async throws {
-        guard room != nil else {
+        guard isConnected else {
             throw ConnectionManagerError.notConnected
         }
         if let publishError {
@@ -175,7 +184,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     func setMicrophoneMuted(_ muted: Bool) async throws {
-        guard room != nil else {
+        guard isConnected else {
             throw WebRTCConnectionManagerError.roomUnavailable
         }
         if let microphoneError {

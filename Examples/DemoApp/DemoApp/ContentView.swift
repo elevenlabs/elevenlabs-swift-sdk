@@ -89,14 +89,14 @@ struct ContentView: View {
         }
     }
 
-    private var voiceAuth: WidgetConversationMode.VoiceAuth {
+    private var voiceAuth: ConversationAuth.Voice {
         switch auth {
         case .publicAgent: .publicAgent(id: agentId.trimmed)
         case .backend: .conversationToken { [token = conversationToken.trimmed] in token }
         }
     }
 
-    private var textOnlyAuth: WidgetConversationMode.TextOnlyAuth {
+    private var textOnlyAuth: ConversationAuth.TextOnly {
         switch auth {
         case .publicAgent: .publicAgent(id: agentId.trimmed)
         case .backend: .signedWebSocketURL { [url = signedWebSocketURL.trimmed] in url }

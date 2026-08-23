@@ -35,7 +35,7 @@ final class ConversationAudioObserverTests: XCTestCase {
         XCTAssertEqual(conversation.agentObserverRegistry.registeredCount, 1)
         XCTAssertEqual(conversation.micObserverRegistry.registeredCount, 1)
 
-        _ = try await conversation.start(auth: .publicAgent(id: "test-agent"))
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         XCTAssertNotNil(mockWebRTCConnectionManager.onTracksChanged)
         XCTAssertEqual(conversation.agentObserverRegistry.registeredCount, 1)
         XCTAssertEqual(conversation.micObserverRegistry.registeredCount, 1)
@@ -87,17 +87,10 @@ final class ConversationAudioObserverTests: XCTestCase {
         mockWebRTCConnectionManager.autoSucceedAgentReady = false
 
         let startTask = Task {
-            try await conversation.start(auth: .publicAgent(id: "test-agent"))
+            try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         }
 
-        await waitForPublished(conversation.$state) {
-            guard case let .connecting(stage) = $0,
-                  case .waitingForAgent = stage
-            else {
-                return false
-            }
-            return true
-        }
+        await mockWebRTCConnectionManager.waitUntilWaitingForAgent()
 
         let staleTracksChanged = mockWebRTCConnectionManager.onTracksChanged
         mockWebRTCConnectionManager.onDisconnectStarted = { [conversation] in
@@ -126,7 +119,7 @@ final class ConversationAudioObserverTests: XCTestCase {
         conversation.addAgentAudioObserver(observer)
 
         let startTask = Task {
-            try await conversation.start(auth: .publicAgent(id: "test-agent"))
+            try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         }
 
         await waitForPublished(conversation.$state) {
@@ -160,11 +153,11 @@ final class ConversationAudioObserverTests: XCTestCase {
         client.addMicAudioObserver(micObserver)
         client.addAgentAudioObserver(agentObserver) // idempotent
 
-        _ = try await client.startConversation(auth: .publicAgent(id: "first-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
         XCTAssertTrue(client.state.isConnected)
 
         await client.reset()
-        _ = try await client.startConversation(auth: .publicAgent(id: "second-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
         XCTAssertTrue(client.state.isConnected)
 
         // Public remove path remains valid after the second session binds.

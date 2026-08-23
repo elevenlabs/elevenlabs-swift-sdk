@@ -48,23 +48,16 @@ struct TokenService: Sendable {
     ///
     /// Translates internal `TokenError`s into public `ConversationError`s so
     /// callers only ever deal with one error type.
-    func fetchToken(for credentials: ConversationCredentials) async throws -> String {
+    func fetchToken(for auth: ConversationAuth.Voice) async throws -> String {
         do {
-            switch credentials.authSource {
-            case let .publicAgentId(agentId):
-                return try await fetchTokenFromAPI(
-                    agentId: agentId,
-                    environment: credentials.environment
-                )
-            case let .conversationToken(conversationToken):
-                return conversationToken
-            case .signedWebSocketURL:
-                throw ConversationError.authenticationFailed(
-                    "Signed WebSocket URLs are only supported for text-only conversations."
-                )
-            case let .customTokenProvider(provider):
-                return try await provider()
+            switch auth {
+            case let .publicAgent(agentId):
+                return try await fetchTokenFromAPI(agentId: agentId)
+            case let .conversationToken(mint):
+                return try await mint()
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as ConversationError {
             throw error
         } catch let error as TokenError {

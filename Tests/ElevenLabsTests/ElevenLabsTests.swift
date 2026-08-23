@@ -6,7 +6,7 @@ final class ElevenLabsTests: XCTestCase {
         let config = ConversationConfig()
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertFalse(config.conversationOverrides.textOnly)
+        XCTAssertNil(config.conversationOverrides.clientEvents)
         XCTAssertEqual(config.endpoints, .production)
     }
 }

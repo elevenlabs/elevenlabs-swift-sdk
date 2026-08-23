@@ -101,14 +101,11 @@ public struct TTSOverrides: Sendable {
 
 /// Conversation behavior overrides
 public struct ConversationOverrides: Sendable {
-    public var textOnly: Bool
+    /// Set when starting a text conversation. Sent as `text_only` on conversation init.
+    var textOnly = false
     public var clientEvents: [String]?
 
-    public init(
-        textOnly: Bool = false,
-        clientEvents: [String]? = nil
-    ) {
-        self.textOnly = textOnly
+    public init(clientEvents: [String]? = nil) {
         self.clientEvents = clientEvents
     }
 }

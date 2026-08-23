@@ -52,9 +52,7 @@ final class StartupPerformanceTest: XCTestCase {
 
         // Start the conversation
         print("  [\(String(format: "%.3f", 0.0))s] Starting conversation...")
-        let result = try await client.startConversation(
-            agentId: "agent_4601k18km8yde6ftyzzwfdk6jvez"
-        )
+        let result = try await client.startVoiceConversation(.publicAgent(id: "agent_4601k18km8yde6ftyzzwfdk6jvez"))
 
         // Since starting already handles the startup, just monitor the result
         // Check the current state immediately

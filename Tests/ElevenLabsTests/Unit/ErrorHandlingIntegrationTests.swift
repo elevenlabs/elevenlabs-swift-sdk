@@ -54,9 +54,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Use an invalid agent ID to trigger an error
         do {
-            _ = try await conversation.start(
-                auth: ConversationCredentials.publicAgent(id: "invalid_agent_id_12345")
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "invalid_agent_id_12345"))
             XCTFail("Should have thrown an error")
         } catch {
             print("❌ Caught error: \(error)")
@@ -115,9 +113,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         self.conversation = conversation
 
         do {
-            let result = try await conversation.start(
-                auth: ConversationCredentials.publicAgent(id: testAgentId)
-            )
+            let result = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
             await fulfillment(of: [readyExpectation], timeout: 15.0)
 
@@ -184,9 +180,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         )
         self.conversation = conversation
 
-        _ = try await conversation.start(
-            auth: ConversationCredentials.publicAgent(id: testAgentId)
-        )
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
         await fulfillment(of: [readyExpectation], timeout: 15.0)
 
@@ -239,9 +233,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             )
 
             do {
-                _ = try await conversation.start(
-                    auth: ConversationCredentials.publicAgent(id: testAgentId)
-                )
+                _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
                 print("  ✅ Connection \(attempt) successful")
                 XCTAssertTrue(conversation.state.isConnected)
@@ -289,9 +281,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Use invalid agent to trigger failure
         do {
-            _ = try await conversation.start(
-                auth: ConversationCredentials.publicAgent(id: "invalid_agent")
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "invalid_agent"))
         } catch {
             // Expected
         }
@@ -329,13 +319,11 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Provide a token provider that throws an error
         do {
-            _ = try await conversation.start(
-                auth: .customTokenProvider {
-                    throw NSError(domain: "TestError", code: 500, userInfo: [
-                        NSLocalizedDescriptionKey: "Custom token provider failed"
-                    ])
-                }
-            )
+            _ = try await conversation.startVoiceConversation(.conversationToken {
+                throw NSError(domain: "TestError", code: 500, userInfo: [
+                    NSLocalizedDescriptionKey: "Custom token provider failed"
+                ])
+            })
             XCTFail("Should have thrown error")
         } catch {
             print("✅ Caught error: \(error)")
@@ -371,9 +359,7 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Attempt connection - may succeed or fail depending on network
         do {
-            _ = try await conversation.start(
-                auth: ConversationCredentials.publicAgent(id: testAgentId)
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
             print("✅ Connection succeeded (network available)")
             await conversation.endConversation()
         } catch {
@@ -446,9 +432,7 @@ extension ErrorHandlingIntegrationTests {
         print("\n🚀 Starting connection...")
 
         do {
-            _ = try await conversation.start(
-                auth: ConversationCredentials.publicAgent(id: testAgentId)
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
             print("\n✅ CONNECTION SUCCESSFUL")
             print("   State: \(conversation.state)")

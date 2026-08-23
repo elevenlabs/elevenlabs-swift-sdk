@@ -5,31 +5,19 @@ import Foundation
 /// How the user can talk to the agent through ``ChatWidget``, and how each kind
 /// of session authenticates.
 ///
-/// Voice runs over WebRTC and text-only over a WebSocket, and the two take
-/// different credentials. Carrying the credentials in the mode means a widget
-/// can never be configured for a session it has no way to authenticate.
+/// Voice and text-only take different grants. Carrying ``ConversationAuth/Voice``
+/// and ``ConversationAuth/TextOnly`` in the mode means a widget can never be
+/// configured for a session it has no way to authenticate.
 public enum WidgetConversationMode: Sendable {
     /// Typed messages only; the conversation runs without audio.
-    case textOnly(TextOnlyAuth)
+    case textOnly(ConversationAuth.TextOnly)
     /// A voice call with no composer.
-    case voiceOnly(VoiceAuth, showsTranscript: Bool = true)
+    case voiceOnly(ConversationAuth.Voice, showsTranscript: Bool = true)
     /// A voice call the user can also type into.
-    case voiceAndText(VoiceAuth)
+    case voiceAndText(ConversationAuth.Voice)
     /// The user picks per session: the call button starts a voice call, typing
     /// the first message starts a text-only one.
-    case voiceOrTextOnly(voice: VoiceAuth, textOnly: TextOnlyAuth)
-
-    public enum VoiceAuth: Sendable {
-        case publicAgent(id: String, environment: String? = nil)
-        /// Mints a conversation token from your backend for each call.
-        case conversationToken(@Sendable () async throws -> String)
-    }
-
-    public enum TextOnlyAuth: Sendable {
-        case publicAgent(id: String, environment: String? = nil)
-        /// Mints a signed WebSocket URL from your backend for each session.
-        case signedWebSocketURL(@Sendable () async throws -> String)
-    }
+    case voiceOrTextOnly(voice: ConversationAuth.Voice, textOnly: ConversationAuth.TextOnly)
 }
 
 /// The session ``ChatWidget`` is about to open.
@@ -74,42 +62,23 @@ extension WidgetConversationMode {
         }
     }
 
-    /// Minted per start, so tokens and signed URLs are never reused across sessions.
-    func credentials(for kind: WidgetSessionKind) async throws -> ConversationCredentials {
+    func start(
+        _ kind: WidgetSessionKind,
+        client: ConversationClient,
+        config: ConversationConfig
+    ) async throws {
         switch self {
         case let .textOnly(auth):
-            try await auth.credentials()
-        case let .voiceOnly(auth, _):
-            try await auth.credentials()
-        case let .voiceAndText(auth):
-            try await auth.credentials()
+            _ = try await client.startTextOnlyConversation(auth, config: config)
+        case let .voiceOnly(auth, _), let .voiceAndText(auth):
+            _ = try await client.startVoiceConversation(auth, config: config)
         case let .voiceOrTextOnly(voice, textOnly):
             switch kind {
-            case .voice: try await voice.credentials()
-            case .textOnly: try await textOnly.credentials()
+            case .voice:
+                _ = try await client.startVoiceConversation(voice, config: config)
+            case .textOnly:
+                _ = try await client.startTextOnlyConversation(textOnly, config: config)
             }
-        }
-    }
-}
-
-extension WidgetConversationMode.VoiceAuth {
-    func credentials() async throws -> ConversationCredentials {
-        switch self {
-        case let .publicAgent(id, environment):
-            .publicAgent(id: id, environment: environment)
-        case let .conversationToken(mint):
-            try await .conversationToken(mint())
-        }
-    }
-}
-
-extension WidgetConversationMode.TextOnlyAuth {
-    func credentials() async throws -> ConversationCredentials {
-        switch self {
-        case let .publicAgent(id, environment):
-            .publicAgent(id: id, environment: environment)
-        case let .signedWebSocketURL(mint):
-            try await .signedWebSocketURL(mint())
         }
     }
 }

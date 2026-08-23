@@ -83,7 +83,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// connect room → wait for agent → send init → wait for initiation metadata.
     @MainActor
     func connect(
-        auth: ConversationCredentials,
+        auth: ConversationAuth.Voice,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {

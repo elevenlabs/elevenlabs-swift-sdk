@@ -236,15 +236,10 @@ final class ChatWidgetViewModel: ObservableObject {
         guard sessionKind == nil else { return }
         let mode = mode
         let client = client
-        let config = conversationConfig(for: kind)
+        let config = conversationConfig
         dispatchedToolCallIds.removeAll()
         let task = Task {
-            let credentials = try await mode.credentials(for: kind)
-            try Task.checkCancellation()
-            _ = try await client.startConversation(
-                auth: credentials,
-                config: config
-            )
+            try await mode.start(kind, client: client, config: config)
         }
         sessionKind = kind
         endedConversation = nil
@@ -266,13 +261,6 @@ final class ChatWidgetViewModel: ObservableObject {
             }
             throw error
         }
-    }
-
-    /// Text-only sessions run the conversation without audio.
-    private func conversationConfig(for kind: WidgetSessionKind) -> ConversationConfig {
-        var config = conversationConfig
-        config.conversationOverrides.textOnly = kind == .textOnly
-        return config
     }
 
     func endConversation() {

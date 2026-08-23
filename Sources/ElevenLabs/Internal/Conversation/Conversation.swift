@@ -93,12 +93,6 @@ final class Conversation: ObservableObject {
         self.callbacks = callbacks
         pendingMuteState = initialMicMuted
         logger = dependencyProvider.logger
-        setupAudioManager()
-    }
-
-    private func setupAudioManager() {
-        guard !config.conversationOverrides.textOnly else { return }
-        audioManager = ConversationAudioManager(logger: logger)
     }
 
     private func setupAgentStateManager() {
@@ -113,67 +107,36 @@ final class Conversation: ObservableObject {
 
     // MARK: - API
 
-    /// Start a conversation using authentication configuration.
-    func start(auth: ConversationCredentials) async throws -> ConversationStartResult {
-        guard state == .idle else {
-            throw ConversationError.alreadyStarted
-        }
+    func startVoiceConversation(_ auth: ConversationAuth.Voice) async throws -> ConversationStartResult {
+        let manager = dependencyProvider.webRTCConnectionManager
+        let result = try await start(agentId: auth.agentId, isTextOnly: false, using: manager) { config in
+            let audioManager = ConversationAudioManager(logger: logger)
+            self.audioManager = audioManager
 
-        let result: ConversationStartResult = if config.conversationOverrides.textOnly {
-            try await startTextOnlyConversation(auth: auth)
-        } else {
-            try await startVoiceConversation(auth: auth)
-        }
-
-        guard !Task.isCancelled, state.isConnecting else {
-            await activeConnectionManager?.disconnect()
-            throw CancellationError()
-        }
-        state = .connected(result.callInfo)
-        callbacks.onAgentReady?()
-        return result
-    }
-
-    private func startVoiceConversation(
-        auth: ConversationCredentials
-    ) async throws -> ConversationStartResult {
-        let webRTCConnectionManager = dependencyProvider.webRTCConnectionManager
-        prepareConversationStart(
-            auth: auth,
-            connectionManager: webRTCConnectionManager
-        )
-
-        webRTCConnectionManager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
-            Task { @MainActor in
-                self?.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking)
+            manager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
+                Task { @MainActor in
+                    self?.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking)
+                }
             }
-        }
-        webRTCConnectionManager.onTracksChanged = { [weak self] in
-            Task { @MainActor in
-                self?.refreshAudioObservers()
+            manager.onTracksChanged = { [weak self] in
+                Task { @MainActor in
+                    self?.refreshAudioObservers()
+                }
             }
-        }
+            await audioManager.configure(with: config, callbacks: callbacks)
+            guard state.isConnecting else {
+                audioManager.cleanup()
+                throw CancellationError()
+            }
+            if let pendingMuteState {
+                audioManager.softwareMuteProcessor?.setMuted(pendingMuteState)
+            }
 
-        await audioManager?.configure(with: config, callbacks: callbacks)
-        if let pendingMuteState {
-            audioManager?.softwareMuteProcessor?.setMuted(pendingMuteState)
-        }
-
-        let result: ConversationStartResult
-        do {
-            result = try await webRTCConnectionManager.connect(
+            return try await manager.connect(
                 auth: auth,
                 config: config,
-                onStartupStateChange: { [weak self] stage in
-                    self?.updateStartupStage(stage)
-                }
+                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
             )
-        } catch let error as ConversationError {
-            await handleStartupFailure(error, disconnecting: webRTCConnectionManager)
-            throw error
-        } catch is CancellationError {
-            await handleStartupCancellation(disconnecting: webRTCConnectionManager)
-            throw CancellationError()
         }
 
         if let pendingMute = pendingMuteState {
@@ -182,7 +145,7 @@ final class Conversation: ObservableObject {
                 if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
                     softwareMuteProcessor.setMuted(pendingMute)
                 } else {
-                    try await webRTCConnectionManager.setMicrophoneMuted(pendingMute)
+                    try await manager.setMicrophoneMuted(pendingMute)
                 }
             } catch {
                 logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
@@ -190,7 +153,7 @@ final class Conversation: ObservableObject {
         }
 
         refreshAudioObservers()
-        return result
+        return try await setConnected(result)
     }
 
     // MARK: - Audio observers
@@ -224,30 +187,16 @@ final class Conversation: ObservableObject {
         micObserverRegistry.attach(to: inputTrack)
     }
 
-    private func startTextOnlyConversation(
-        auth: ConversationCredentials
-    ) async throws -> ConversationStartResult {
-        let connectionManager = dependencyProvider.webSocketConnectionManager
-        prepareConversationStart(
-            auth: auth,
-            connectionManager: connectionManager
-        )
-
-        do {
-            return try await connectionManager.connect(
+    func startTextOnlyConversation(_ auth: ConversationAuth.TextOnly) async throws -> ConversationStartResult {
+        let manager = dependencyProvider.webSocketConnectionManager
+        let result = try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
+            try await manager.connect(
                 auth: auth,
                 config: config,
-                onStartupStateChange: { [weak self] stage in
-                    self?.updateStartupStage(stage)
-                }
+                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
             )
-        } catch let error as ConversationError {
-            await handleStartupFailure(error, disconnecting: connectionManager)
-            throw error
-        } catch is CancellationError {
-            await handleStartupCancellation(disconnecting: connectionManager)
-            throw CancellationError()
         }
+        return try await setConnected(result)
     }
 
     /// End and clean up.
@@ -375,30 +324,61 @@ final class Conversation: ObservableObject {
         state = .connecting(stage)
     }
 
-    /// Common preparation shared by voice and text-only startup paths.
-    private func prepareConversationStart(
-        auth: ConversationCredentials,
-        connectionManager: any ConnectionManaging
-    ) {
-        state = .connecting(.preparing)
-        activeConnectionManager = connectionManager
+    private func start(
+        agentId: String,
+        isTextOnly: Bool,
+        using manager: any ConnectionManaging,
+        connect: (ConversationConfig) async throws -> ConversationStartResult
+    ) async throws -> ConversationStartResult {
+        if state != .idle {
+            if state.isEnded, activeConnectionManager == nil {
+                throw CancellationError()
+            }
+            throw ConversationError.alreadyStarted
+        }
 
-        activeContext = ["agentId": auth.agentId]
-        let mode = config.conversationOverrides.textOnly ? "text-only" : "voice"
+        var startConfig = config
+        startConfig.conversationOverrides.textOnly = isTextOnly
+
+        state = .connecting(.preparing)
+        activeConnectionManager = manager
+
+        activeContext = ["agentId": agentId]
+        let mode = isTextOnly ? "text-only" : "voice"
         logger.info("Starting \(mode) conversation", context: activeContext)
 
         setupAgentStateManager()
 
-        let connectionManagerID = ObjectIdentifier(connectionManager)
-        connectionManager.onEventReceived = { [weak self] event in
+        let connectionManagerID = ObjectIdentifier(manager)
+        manager.onEventReceived = { [weak self] event in
             Task { @MainActor [weak self] in
                 await self?.handleIncomingEvent(event, from: connectionManagerID)
             }
         }
-        connectionManager.onDisconnected = { [weak self] in
+        manager.onDisconnected = { [weak self] in
             guard let self else { return }
             await endConversation(reason: .remoteDisconnected)
         }
+
+        do {
+            return try await connect(startConfig)
+        } catch let error as ConversationError {
+            await handleStartupFailure(error, disconnecting: manager)
+            throw error
+        } catch is CancellationError {
+            await handleStartupCancellation(disconnecting: manager)
+            throw CancellationError()
+        }
+    }
+
+    private func setConnected(_ result: ConversationStartResult) async throws -> ConversationStartResult {
+        guard !Task.isCancelled, state.isConnecting else {
+            await activeConnectionManager?.disconnect()
+            throw CancellationError()
+        }
+        state = .connected(result.callInfo)
+        callbacks.onAgentReady?()
+        return result
     }
 
     private func handleIncomingEvent(_ event: IncomingEvent, from connectionManagerID: ObjectIdentifier) async {

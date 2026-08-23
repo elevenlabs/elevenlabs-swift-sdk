@@ -5,9 +5,9 @@ import Foundation
 ///
 /// Create one and hold it for the lifetime of your screen (e.g. a SwiftUI
 /// `@StateObject`). It exposes conversation state as `@Published` properties
-/// and controls as methods. Each `startConversation` call runs a fresh,
-/// single-use session internally; the client itself is reusable — call
-/// `startConversation` again to start another.
+/// and controls as methods. Each start call runs a fresh, single-use
+/// session internally; the client itself is reusable — call start again
+/// to start another.
 @MainActor
 public final class ConversationClient: ObservableObject {
     // MARK: - Public State
@@ -37,7 +37,7 @@ public final class ConversationClient: ObservableObject {
 
     /// The current single-use session. Internal plumbing — never exposed.
     private var session: Conversation?
-    /// Subscriptions mirroring the active session's state; reset on each `startConversation`.
+    /// Subscriptions mirroring the active session's state; reset on each start.
     private var cancellables = Set<AnyCancellable>()
 
     /// Durable observers re-attached to every session this client starts.
@@ -59,51 +59,31 @@ public final class ConversationClient: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// Start a conversation with an ElevenLabs agent using a public agent ID - the most common use case.
-    public func startConversation(
-        agentId: String,
+    /// Start a voice conversation. Any previously-started session still running
+    /// is ended first, then a fresh single-use session is created and connected.
+    public func startVoiceConversation(
+        _ auth: ConversationAuth.Voice,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
-        let authConfig = ConversationCredentials.publicAgent(id: agentId, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config)
+        try await startConversation(config: config) { conversation in
+            try await conversation.startVoiceConversation(auth)
+        }
     }
 
-    /// Start a conversation using a conversation token from your backend - for private agents.
-    public func startConversation(
-        conversationToken: String,
+    /// Start a text-only conversation. Any previously-started session still running
+    /// is ended first, then a fresh single-use session is created and connected.
+    public func startTextOnlyConversation(
+        _ auth: ConversationAuth.TextOnly,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
-        let authConfig = ConversationCredentials.conversationToken(conversationToken, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config)
+        try await startConversation(config: config) { conversation in
+            try await conversation.startTextOnlyConversation(auth)
+        }
     }
 
-    /// Start a conversation using a custom token provider - for advanced authentication scenarios.
-    public func startConversation(
-        tokenProvider: @escaping @Sendable () async throws -> String,
-        config: ConversationConfig = .init()
-    ) async throws -> ConversationStartResult {
-        let authConfig = ConversationCredentials.customTokenProvider(tokenProvider, environment: config.environment)
-        return try await startConversation(auth: authConfig, config: config)
-    }
-
-    /// Start a text-only conversation using a signed WebSocket URL from your backend.
-    public func startConversation(
-        signedWebSocketURL: String,
-        config: ConversationConfig = .init(conversationOverrides: .init(textOnly: true))
-    ) async throws -> ConversationStartResult {
-        let authConfig = try ConversationCredentials.signedWebSocketURL(signedWebSocketURL)
-        var updatedConfig = config
-        updatedConfig.conversationOverrides.textOnly = true
-        return try await startConversation(auth: authConfig, config: updatedConfig)
-    }
-
-    /// Advanced: start a conversation with full authentication control.
-    ///
-    /// Any previously-started session still running is ended first, then a fresh
-    /// single-use session is created and connected.
-    public func startConversation(
-        auth: ConversationCredentials,
-        config: ConversationConfig = .init()
+    private func startConversation(
+        config: ConversationConfig,
+        start: (Conversation) async throws -> ConversationStartResult
     ) async throws -> ConversationStartResult {
         let previousConversation = session
         let conversation = Conversation(
@@ -115,7 +95,7 @@ public final class ConversationClient: ObservableObject {
         bind(conversation)
 
         await previousConversation?.endConversation()
-        return try await conversation.start(auth: auth)
+        return try await start(conversation)
     }
 
     /// End the current conversation, if any. Mirrored state (history, etc.) is kept
