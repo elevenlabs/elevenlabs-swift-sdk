@@ -11,22 +11,27 @@ protocol ConnectionManaging: AnyObject {
     var onDisconnected: (() async -> Void)? { get set }
     var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
-    @MainActor
-    func connect(
-        auth: ConversationCredentials,
-        config: ConversationConfig,
-        onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> ConversationStartResult
-
     func disconnect() async
     func send(data: Data) async throws
 }
 
 @MainActor
-protocol WebSocketConnectionManaging: ConnectionManaging {}
+protocol WebSocketConnectionManaging: ConnectionManaging {
+    func connect(
+        auth: ConversationAuth.TextOnly,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> ConversationStartResult
+}
 
 @MainActor
 protocol WebRTCConnectionManaging: ConnectionManaging {
+    func connect(
+        auth: ConversationAuth.Voice,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> ConversationStartResult
+
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     /// Fired when an audio track is published/subscribed/unpublished/unsubscribed.
     var onTracksChanged: (@Sendable () -> Void)? { get set }

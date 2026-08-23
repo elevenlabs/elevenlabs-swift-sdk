@@ -20,7 +20,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
 
     @MainActor
     func connect(
-        auth: ConversationCredentials,
+        auth: ConversationAuth.TextOnly,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
@@ -33,12 +33,16 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
+        let resolved: (url: URL, agentId: String)
         do {
-            lastConnectedURL = try WebSocketConnectionManager.websocketUrl(for: auth, endpoints: config.endpoints)
+            resolved = try await WebSocketConnectionManager.websocketUrl(
+                for: auth,
+                endpoints: config.endpoints
+            )
+            lastConnectedURL = resolved.url
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw convError
+            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
 
         if let connectError {
@@ -74,7 +78,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             onStartupStateChange: onStartupStateChange
         )
         return ConversationStartResult(
-            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
+            callInfo: CallInfo(agentId: resolved.agentId, conversationId: metadata.conversationId),
             metrics: metrics
         )
     }

@@ -35,7 +35,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
     @MainActor
     func connect(
-        auth: ConversationCredentials,
+        auth: ConversationAuth.TextOnly,
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
@@ -47,14 +47,19 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
-        let url: URL
+        let resolved: (url: URL, agentId: String)
         do {
-            url = try Self.websocketUrl(for: auth, endpoints: endpoints)
+            resolved = try await Self.websocketUrl(
+                for: auth,
+                endpoints: endpoints
+            )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw convError
+            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
+        let url = resolved.url
 
         let task = urlSession.webSocketTask(with: url)
         self.task = task
@@ -100,7 +105,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             onStartupStateChange: onStartupStateChange
         )
         return ConversationStartResult(
-            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
+            callInfo: CallInfo(agentId: resolved.agentId, conversationId: metadata.conversationId),
             metrics: metrics
         )
     }
@@ -173,9 +178,12 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         await onDisconnected?()
     }
 
-    static func websocketUrl(for auth: ConversationCredentials, endpoints: Endpoints) throws -> URL {
-        switch auth.authSource {
-        case let .publicAgentId(agentId):
+    static func websocketUrl(
+        for auth: ConversationAuth.TextOnly,
+        endpoints: Endpoints
+    ) async throws -> (url: URL, agentId: String) {
+        switch auth {
+        case let .publicAgent(agentId):
             guard var components = URLComponents(url: endpoints.textWebSocket, resolvingAgainstBaseURL: false) else {
                 throw ConversationError.authenticationFailed("Invalid conversation URL")
             }
@@ -185,18 +193,25 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             guard let url = components.url else {
                 throw ConversationError.authenticationFailed("Invalid conversation URL")
             }
-            return url
+            return (url, agentId)
 
-        case let .signedWebSocketURL(urlString, _):
+        case let .signedWebSocketURL(mint):
+            let urlString = try await mint()
             guard let url = URL(string: urlString) else {
                 throw ConversationError.authenticationFailed("Invalid signed WebSocket URL")
             }
-            return url
-
-        case .conversationToken, .customTokenProvider:
-            throw ConversationError.authenticationFailed(
-                "Text-only conversations require a public agent ID or signed WebSocket URL."
-            )
+            guard
+                let agentId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "agent_id" })?
+                .value,
+                !agentId.isEmpty
+            else {
+                throw ConversationError.authenticationFailed(
+                    "Signed WebSocket URL is missing the agent_id query parameter."
+                )
+            }
+            return (url, agentId)
         }
     }
 }

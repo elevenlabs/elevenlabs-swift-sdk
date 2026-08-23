@@ -13,48 +13,11 @@ final class ElevenLabsSDKTests: XCTestCase {
         let client = ConversationClient()
 
         do {
-            _ = try await client.startConversation(agentId: "test-agent-123", config: config)
+            _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent-123"))
             // In a proper test environment with mocks, we'd verify connection
         } catch {
             // Expected to fail without proper API setup
             XCTAssertTrue(error is ConversationError)
-        }
-    }
-
-    func testConversationTokenAuthConfiguration() {
-        let auth = ConversationCredentials.conversationToken("test-token-123")
-        switch auth.authSource {
-        case let .conversationToken(token):
-            XCTAssertEqual(token, "test-token-123")
-        default:
-            XCTFail("Expected conversationToken case")
-        }
-    }
-
-    func testSignedWebSocketURLAuthConfiguration() throws {
-        let url = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&conversation_signature=sig"
-        let auth = try ConversationCredentials.signedWebSocketURL(url)
-
-        switch auth.authSource {
-        case let .signedWebSocketURL(signedURL, agentId):
-            XCTAssertEqual(signedURL, url)
-            XCTAssertEqual(agentId, "agent-123")
-            XCTAssertEqual(auth.agentId, "agent-123")
-        default:
-            XCTFail("Expected signedWebSocketURL case")
-        }
-    }
-
-    func testCustomTokenProviderAuthConfiguration() {
-        let tokenProvider: @Sendable () async throws -> String = {
-            "dynamic-token-123"
-        }
-        let auth = ConversationCredentials.customTokenProvider(tokenProvider)
-        switch auth.authSource {
-        case .customTokenProvider:
-            break // Success - provider is configured
-        default:
-            XCTFail("Expected customTokenProvider case")
         }
     }
 
@@ -83,13 +46,14 @@ final class ElevenLabsSDKTests: XCTestCase {
     }
 
     @MainActor
-    func testWebsocketUrlKeepsEndpointQueryItems() throws {
+    func testWebsocketUrlKeepsEndpointQueryItems() async throws {
         let endpoints = try Endpoints(textWebSocket: XCTUnwrap(URL(string: "wss://proxy.example.com/ws?tenant=acme")))
-        let url = try WebSocketConnectionManager.websocketUrl(
+        let resolved = try await WebSocketConnectionManager.websocketUrl(
             for: .publicAgent(id: "agent-123"),
             endpoints: endpoints
         )
-        XCTAssertEqual(url.absoluteString, "wss://proxy.example.com/ws?tenant=acme&agent_id=agent-123")
+        XCTAssertEqual(resolved.url.absoluteString, "wss://proxy.example.com/ws?tenant=acme&agent_id=agent-123")
+        XCTAssertEqual(resolved.agentId, "agent-123")
     }
 
     func testConversationConfigDefaults() {
@@ -97,40 +61,32 @@ final class ElevenLabsSDKTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertFalse(config.conversationOverrides.textOnly)
+        XCTAssertNil(config.conversationOverrides.clientEvents)
     }
 
-    func testAuthenticationMethods() {
-        let agentAuth = ConversationCredentials.publicAgent(id: "agent-123")
-        let tokenAuth = ConversationCredentials.conversationToken("token-456")
-        let providerAuth = ConversationCredentials.customTokenProvider {
-            "provided-token"
-        }
+    func testAuthenticationMethods() async throws {
+        let voice = ConversationAuth.Voice.publicAgent(id: "agent-123")
+        let token = ConversationAuth.Voice.conversationToken("token-456")
+        let text = ConversationAuth.TextOnly.signedWebSocketURL(
+            "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent-123&conversation_signature=sig"
+        )
 
-        switch agentAuth.authSource {
-        case let .publicAgentId(id):
-            XCTAssertEqual(id, "agent-123")
-        default:
-            XCTFail("Expected publicAgentId case")
+        guard case let .publicAgent(id) = voice else {
+            return XCTFail("Expected public voice agent")
         }
+        XCTAssertEqual(id, "agent-123")
+        XCTAssertEqual(token.agentId, "unknown")
 
-        switch tokenAuth.authSource {
-        case let .conversationToken(token):
-            XCTAssertEqual(token, "token-456")
-        default:
-            XCTFail("Expected conversationToken case")
-        }
-
-        switch providerAuth.authSource {
-        case .customTokenProvider:
-            break // Success
-        default:
-            XCTFail("Expected customTokenProvider case")
-        }
+        let resolved = try await WebSocketConnectionManager.websocketUrl(
+            for: text,
+            endpoints: .production
+        )
+        XCTAssertEqual(resolved.agentId, "agent-123")
     }
 
     func testSDKModuleImports() {
         // Verify that all necessary types are accessible
+        XCTAssertNotNil(ConversationAuth.self)
         XCTAssertNotNil(ConversationClient.self)
         XCTAssertNotNil(ConversationConfig.self)
         XCTAssertNotNil(ConversationError.self)

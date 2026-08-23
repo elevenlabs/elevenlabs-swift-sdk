@@ -32,8 +32,13 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertFalse(client.isMicMuted)
     }
 
+    func testConversationTokenReportsUnknownAgentId() async throws {
+        _ = try await client.startVoiceConversation(.conversationToken("tok"))
+        assertConnected(agentId: "unknown")
+    }
+
     func testStartConversationMirrorsSessionStateThroughActiveAndEnd() async throws {
-        let result = try await client.startConversation(auth: .publicAgent(id: "test-agent-id"))
+        let result = try await client.startVoiceConversation(.publicAgent(id: "test-agent-id"))
 
         assertConnected(agentId: "test-agent-id")
         XCTAssertEqual(result.callInfo.agentId, "test-agent-id")
@@ -63,7 +68,7 @@ final class ConversationClientTests: XCTestCase {
     }
 
     func testRestartEndsPreviousSessionAndStartsFresh() async throws {
-        _ = try await client.startConversation(auth: .publicAgent(id: "first-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
         assertConnected(agentId: "first-agent")
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 0)
@@ -72,7 +77,7 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(client.state, .ended(reason: .userEnded))
         XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
 
-        _ = try await client.startConversation(auth: .publicAgent(id: "second-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
 
         assertConnected(agentId: "second-agent")
         XCTAssertTrue(client.chatHistory.isEmpty)
@@ -81,10 +86,10 @@ final class ConversationClientTests: XCTestCase {
     }
 
     func testStartWhileActiveEndsPreviousAndStartsNext() async throws {
-        _ = try await client.startConversation(auth: .publicAgent(id: "first-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
         assertConnected(agentId: "first-agent")
 
-        _ = try await client.startConversation(auth: .publicAgent(id: "second-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
 
         assertConnected(agentId: "second-agent")
         XCTAssertTrue(client.chatHistory.isEmpty)
@@ -96,25 +101,12 @@ final class ConversationClientTests: XCTestCase {
         mockWebRTCConnectionManager.autoSucceedAgentReady = false
 
         let firstStart = Task {
-            try await client.startConversation(auth: .publicAgent(id: "first-agent"))
+            try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
         }
-        await waitForPublished(client.$state) {
-            guard case let .connecting(stage) = $0,
-                  case .waitingForAgent = stage
-            else {
-                return false
-            }
-            return true
-        }
+        await mockWebRTCConnectionManager.waitUntilWaitingForAgent()
 
-        var textConfig = ConversationConfig()
-        textConfig.conversationOverrides = ConversationOverrides(textOnly: true)
-        _ = try await client.startConversation(
-            auth: .publicAgent(id: "second-agent"),
-            config: textConfig
-        )
+        _ = try await client.startTextOnlyConversation(.publicAgent(id: "second-agent"))
 
-        mockWebRTCConnectionManager.succeedAgentReady()
         await XCTAssertThrowsErrorAsync {
             _ = try await firstStart.value
         }
@@ -123,7 +115,7 @@ final class ConversationClientTests: XCTestCase {
     }
 
     func testResetEndsSessionAndClearsMirroredState() async throws {
-        _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
 
         let payload: [String: Any] = [
             "type": "agent_response",
@@ -148,17 +140,15 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertFalse(client.isMicMuted)
 
         // Client is reusable after reset.
-        _ = try await client.startConversation(auth: .publicAgent(id: "after-reset"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "after-reset"))
         assertConnected(agentId: "after-reset")
     }
 
     func testVoiceThenTextOnlyUsesFreshSessionPerTransport() async throws {
-        _ = try await client.startConversation(auth: .publicAgent(id: "voice-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "voice-agent"))
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
 
-        var textConfig = ConversationConfig()
-        textConfig.conversationOverrides = ConversationOverrides(textOnly: true)
-        _ = try await client.startConversation(auth: .publicAgent(id: "text-agent"), config: textConfig)
+        _ = try await client.startTextOnlyConversation(.publicAgent(id: "text-agent"))
 
         assertConnected(agentId: "text-agent")
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
@@ -170,7 +160,7 @@ final class ConversationClientTests: XCTestCase {
         mockWebRTCConnectionManager.tokenError = .authenticationFailed("Mock authentication failed")
 
         await XCTAssertThrowsErrorAsync {
-            _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+            _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
             XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
         }
@@ -188,7 +178,7 @@ final class ConversationClientTests: XCTestCase {
 
         // A later start should still work on the same client.
         mockWebRTCConnectionManager.tokenError = nil
-        _ = try await client.startConversation(auth: .publicAgent(id: "recovered-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "recovered-agent"))
         assertConnected(agentId: "recovered-agent")
     }
 
@@ -218,14 +208,14 @@ final class ConversationClientTests: XCTestCase {
         mockWebRTCConnectionManager.isMicrophoneMuted = false
 
         try await client.setMicMuted(true)
-        _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
 
         XCTAssertTrue(client.isMicMuted)
         XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
     }
 
     func testSetMicMutedIsHarmlessAfterEnd() async throws {
-        _ = try await client.startConversation(auth: .publicAgent(id: "test-agent"))
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         await client.endConversation()
 
         try await client.setMicMuted(true)
