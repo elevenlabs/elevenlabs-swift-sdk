@@ -324,12 +324,16 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         // Verify we got expected state transitions
         XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .resolvingToken = state { return true }
+            if case .resolvingToken = state {
+                return true
+            }
             return false
         }, "Should have resolvingToken state")
 
         XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .failed = state { return true }
+            if case .failed = state {
+                return true
+            }
             return false
         }, "Should have failed state")
     }
