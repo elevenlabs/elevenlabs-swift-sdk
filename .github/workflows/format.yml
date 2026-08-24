@@ -27,7 +27,7 @@ jobs:
           curl --fail --silent --show-error --location \
             --output swiftformat.zip \
             "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
-          echo "${SWIFTFORMAT_SHA256}  swiftformat.zip" | shasum -a 256 --check --status
+          echo "${SWIFTFORMAT_SHA256}  swiftformat.zip" | shasum -a 256 --check
           unzip -q swiftformat.zip -d "${RUNNER_TEMP}/swiftformat"
           chmod +x "${RUNNER_TEMP}/swiftformat/swiftformat"
           echo "${RUNNER_TEMP}/swiftformat" >> "${GITHUB_PATH}"
