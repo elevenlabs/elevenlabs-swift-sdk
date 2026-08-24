@@ -55,13 +55,13 @@ jobs:
         run: swift build
 
       - name: Test (debug)
-        run: swift test
+        run: ./.github/scripts/swift-test-watchdog.sh debug
 
       - name: Build (release)
         run: swift build --configuration release
 
       - name: Test (release)
-        run: swift test --configuration release
+        run: ./.github/scripts/swift-test-watchdog.sh release
 
   # Swift 6 strict build temporarily disabled because LiveKit pins JWTKit to
   # 4.13.x, which lacks Sendable annotations. Re-enable after upstream fixes.
