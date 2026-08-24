@@ -32,10 +32,21 @@ jobs:
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
-          path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          # Dependency sources only, never build products. Caching all of
+          # .build shared compiled modules and linked binaries between refs;
+          # a test binary relinked on top of another ref's artifacts hung at
+          # launch until the 30-minute job timeout.
+          #
+          # Keyed on Package.swift because Package.resolved is gitignored and
+          # therefore absent on CI — hashFiles() returned "" and collapsed the
+          # key to a constant, so every branch shared one bucket.
+          path: |
+            .build/checkouts
+            .build/repositories
+            .build/artifacts
+          key: ${{ runner.os }}-spm-deps-${{ hashFiles('Package.swift') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-spm-deps-
 
       - name: Resolve dependencies
         run: swift package resolve
