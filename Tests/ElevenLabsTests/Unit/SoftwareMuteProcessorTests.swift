@@ -166,12 +166,16 @@ final class SoftwareMuteProcessorTests: XCTestCase {
             }
             var isDone = false
             let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-                if isDone { outStatus.pointee = .noDataNow; return nil }
+                if isDone {
+                    outStatus.pointee = .noDataNow; return nil
+                }
                 outStatus.pointee = .haveData; isDone = true; return readBuffer
             }
             var error: NSError?
             converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
-            if let error { throw error }
+            if let error {
+                throw error
+            }
             outputBuffer = converted
         } else {
             outputBuffer = readBuffer

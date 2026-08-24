@@ -391,7 +391,9 @@ final class LiveKitReadinessDelegate: RoomDelegate {
     /// if the awaiting task is cancelled or `release()` is called (e.g. on disconnect).
     /// Single-caller — there's exactly one `waitForAgentReady` per connection lifetime.
     func awaitRemoteParticipant() async throws {
-        if let outcome { return try outcome.get() }
+        if let outcome {
+            return try outcome.get()
+        }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 if let outcome {
@@ -417,13 +419,17 @@ final class LiveKitReadinessDelegate: RoomDelegate {
 
     nonisolated func roomDidConnect(_ room: Room) {
         Task { @MainActor in
-            if room.remoteParticipants.values.contains(where: isAgentParticipant) { self.markReady() }
+            if room.remoteParticipants.values.contains(where: isAgentParticipant) {
+                self.markReady()
+            }
         }
     }
 
     nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor in
-            if isAgentParticipant(participant) { self.markReady() }
+            if isAgentParticipant(participant) {
+                self.markReady()
+            }
         }
     }
 

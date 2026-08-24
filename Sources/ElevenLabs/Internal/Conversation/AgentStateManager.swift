@@ -53,7 +53,9 @@ final class AgentStateManager {
             transitionTo(.speaking)
 
         case .userTranscript:
-            if currentState != .speaking { transitionTo(.thinking) }
+            if currentState != .speaking {
+                transitionTo(.thinking)
+            }
 
         case .interruption:
             cancelAllTimers()
