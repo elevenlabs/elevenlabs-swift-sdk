@@ -3,7 +3,7 @@ import XCTest
 
 final class ElevenLabsSDKTests: XCTestCase {
     func testSDKVersionExists() {
-        XCTAssertEqual(ElevenLabs.version, "3.2.2")
+        XCTAssertEqual(ElevenLabs.version, "3.3.0")
         XCTAssertFalse(ElevenLabs.version.isEmpty)
     }
 
