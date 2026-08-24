@@ -4,6 +4,16 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+permissions:
+  contents: read
+
+env:
+  # Pinned so the formatter cannot drift underneath us. Bumping this is a
+  # deliberate PR that also reformats the repo; update the checksum alongside it
+  # (shasum -a 256 swiftformat.zip).
+  SWIFTFORMAT_VERSION: 0.62.1
+  SWIFTFORMAT_SHA256: 7cb1cb1fae04932047c7015441c543848e8e60e1572d808d080e0a1f1661114a
+
 jobs:
   swiftformat:
     runs-on: macOS-latest
@@ -11,8 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install SwiftFormat
-        run: brew install swiftformat
+      - name: Install SwiftFormat ${{ env.SWIFTFORMAT_VERSION }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --output swiftformat.zip \
+            "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
+          echo "${SWIFTFORMAT_SHA256}  swiftformat.zip" | shasum -a 256 --check --status
+          unzip -q swiftformat.zip -d "${RUNNER_TEMP}/swiftformat"
+          chmod +x "${RUNNER_TEMP}/swiftformat/swiftformat"
+          echo "${RUNNER_TEMP}/swiftformat" >> "${GITHUB_PATH}"
 
       - name: Run SwiftFormat in Strict Mode
-        run: swiftformat . --strict
+        run: |
+          set -euo pipefail
+          swiftformat --version
+          swiftformat . --strict
