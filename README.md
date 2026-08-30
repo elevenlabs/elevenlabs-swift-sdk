@@ -243,6 +243,17 @@ let config = ConversationConfig(
 let conversation = try await ElevenLabs.startConversation(agentId: "id", config: config)
 ```
 
+### Displaying V3 Voice Responses
+
+Eleven v3 voice responses can include audio tags such as `[laughs]` or `[whispers]` that control speech delivery. When showing a
+voice transcript, remove these tags from the displayed copy while keeping the original response available for other processing:
+
+```swift
+let displayText = ElevenLabs.stripAudioTags(from: message.content)
+```
+
+Apply this only to voice transcripts. Text-only responses can contain bracketed content that should remain visible.
+
 ---
 
 ## Architecture at a Glance
