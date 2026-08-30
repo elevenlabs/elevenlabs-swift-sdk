@@ -594,10 +594,19 @@ public final class Conversation: ObservableObject {
                 id: UUID().uuidString,
                 role: role,
                 content: content,
+                transcript: transcript(for: content, role: role),
                 timestamp: Date(),
                 eventId: eventId
             )
         )
+    }
+
+    func transcript(for content: String, role: Message.Role) -> String {
+        if role == .agent, !options.conversationOverrides.textOnly {
+            AudioTagRemover.remove(from: content)
+        } else {
+            content
+        }
     }
 }
 

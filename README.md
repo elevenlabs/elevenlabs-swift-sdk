@@ -78,7 +78,7 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         ForEach(conversation.messages) { msg in
-                            Text("**\(msg.role)**: \(msg.content)")
+                            Text("**\(msg.role)**: \(msg.transcript)")
                                 .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
                                 .id(msg.id)
                         }
@@ -242,6 +242,18 @@ let config = ConversationConfig(
 
 let conversation = try await ElevenLabs.startConversation(agentId: "id", config: config)
 ```
+
+### Displaying V3 Voice Responses
+
+Eleven v3 voice responses can include audio tags such as `[laughs]` or `[whispers]` that control speech delivery. When showing a
+conversation transcript, use `Message.transcript` to omit those tags while keeping the original response available:
+
+```swift
+Text(message.transcript)
+```
+
+For agent messages in voice conversations, `transcript` removes audio tags and preserves Markdown links. `content` retains the exact
+server response. User messages and text-only agent messages have identical `content` and `transcript` values.
 
 ---
 

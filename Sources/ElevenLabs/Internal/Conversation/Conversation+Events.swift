@@ -119,6 +119,7 @@ extension Conversation {
             id: UUID().uuidString,
             role: .user,
             content: content,
+            transcript: transcript(for: content, role: .user),
             timestamp: Date(),
             eventId: eventId
         )
@@ -136,6 +137,7 @@ extension Conversation {
                 id: existing.id,
                 role: .agent,
                 content: content,
+                transcript: transcript(for: content, role: .agent),
                 timestamp: existing.timestamp,
                 eventId: eventId
             )
