@@ -205,18 +205,12 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             guard let url = URL(string: urlString) else {
                 throw ConversationError.authenticationFailed("Invalid signed WebSocket URL")
             }
-            guard
-                let agentId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            // Only reported back through `CallInfo`, so absence falls back to the sentinel.
+            let parsedAgentId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?
-                .first(where: { $0.name == "agent_id" })?
-                .value,
-                !agentId.isEmpty
-            else {
-                throw ConversationError.authenticationFailed(
-                    "Signed WebSocket URL is missing the agent_id query parameter."
-                )
-            }
-            return (url, agentId)
+                .first { $0.name == "agent_id" }?
+                .value
+            return (url, parsedAgentId.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown")
         }
     }
 }
