@@ -8,14 +8,14 @@ final class MessageTranscriptTests: XCTestCase {
 
         await conversation.handleIncomingEvent(.agentResponse(
             AgentResponseEvent(
-                response: "[warmlyly] Hello [clears throat] read the [docs](https://example.com)",
+                response: "[warmly] Hello [clears throat] read the [docs](https://example.com)",
                 eventId: 1
             )
         ))
 
         XCTAssertEqual(
             conversation.messages.last?.content,
-            "[warmlyly] Hello [clears throat] read the [docs](https://example.com)"
+            "[warmly] Hello [clears throat] read the [docs](https://example.com)"
         )
         XCTAssertEqual(
             conversation.messages.last?.transcript,

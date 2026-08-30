@@ -589,30 +589,24 @@ public final class Conversation: ObservableObject {
     // MARK: - Message Helpers
 
     func appendMessage(role: Message.Role, content: String, eventId: Int? = nil) {
-        messages.append(makeMessage(role: role, content: content, eventId: eventId))
+        messages.append(
+            Message(
+                id: UUID().uuidString,
+                role: role,
+                content: content,
+                transcript: transcript(for: content, role: role),
+                timestamp: Date(),
+                eventId: eventId
+            )
+        )
     }
 
-    func makeMessage(
-        id: String = UUID().uuidString,
-        role: Message.Role,
-        content: String,
-        timestamp: Date = Date(),
-        eventId: Int? = nil
-    ) -> Message {
-        let transcript = if role == .agent, !options.conversationOverrides.textOnly {
-            AudioTagParser.strip(from: content)
+    func transcript(for content: String, role: Message.Role) -> String {
+        if role == .agent, !options.conversationOverrides.textOnly {
+            AudioTagRemover.remove(from: content)
         } else {
             content
         }
-
-        return Message(
-            id: id,
-            role: role,
-            content: content,
-            transcript: transcript,
-            timestamp: timestamp,
-            eventId: eventId
-        )
     }
 }
 

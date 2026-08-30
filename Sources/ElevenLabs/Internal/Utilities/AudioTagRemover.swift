@@ -1,7 +1,7 @@
 import Foundation
 
-enum AudioTagParser {
-    static func strip(from text: String) -> String {
+enum AudioTagRemover {
+    static func remove(from text: String) -> String {
         text
             .replacingOccurrences(
                 of: #"\[[A-Za-z0-9_\s]+\](?!\()\s*"#,
