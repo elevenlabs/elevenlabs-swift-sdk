@@ -84,7 +84,7 @@ final class Conversation: ObservableObject {
 
     func startVoiceConversation(_ auth: ConversationAuth.Voice) async throws -> ConversationStartResult {
         let manager = dependencyProvider.webRTCConnectionManager
-        let result = try await start(agentId: auth.agentId, isTextOnly: false, using: manager) { config in
+        return try await start(agentId: auth.agentId, isTextOnly: false, using: manager) { config in
             let audioManager = ConversationAudioManager(logger: logger)
             self.audioManager = audioManager
 
@@ -107,40 +107,39 @@ final class Conversation: ObservableObject {
                 audioManager.softwareMuteProcessor?.setMuted(pendingMuteState)
             }
 
-            return try await manager.connect(
+            let result = try await manager.connect(
                 auth: auth,
                 config: config,
                 onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
             )
-        }
 
-        if let pendingMute = pendingMuteState {
-            pendingMuteState = nil
-            do {
-                if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
-                    softwareMuteProcessor.setMuted(pendingMute)
-                } else {
-                    try await manager.setMicrophoneMuted(pendingMute)
+            if let pendingMute = pendingMuteState {
+                pendingMuteState = nil
+                do {
+                    if let softwareMuteProcessor = audioManager.softwareMuteProcessor {
+                        softwareMuteProcessor.setMuted(pendingMute)
+                    } else {
+                        try await manager.setMicrophoneMuted(pendingMute)
+                    }
+                } catch {
+                    logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
                 }
-            } catch {
-                logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
             }
-        }
 
-        refreshAudioObservers()
-        return try await setConnected(result)
+            refreshAudioObservers()
+            return result
+        }
     }
 
     func startTextOnlyConversation(_ auth: ConversationAuth.TextOnly) async throws -> ConversationStartResult {
         let manager = dependencyProvider.webSocketConnectionManager
-        let result = try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
+        return try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
             try await manager.connect(
                 auth: auth,
                 config: config,
                 onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
             )
         }
-        return try await setConnected(result)
     }
 
     // MARK: - Audio observers
@@ -318,21 +317,26 @@ final class Conversation: ObservableObject {
         }
 
         do {
-            return try await connect(startConfig)
+            let result = try await connect(startConfig)
+            return try setConnected(result)
         } catch let error as ConversationError {
             await handleStartupFailure(error, disconnecting: manager)
             throw error
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: manager)
             throw CancellationError()
+        } catch {
+            if Task.isCancelled {
+                await handleStartupCancellation(disconnecting: manager)
+            } else {
+                await handleStartupFailure(.connectionFailed(error), disconnecting: manager)
+            }
+            throw error
         }
     }
 
-    private func setConnected(_ result: ConversationStartResult) async throws -> ConversationStartResult {
-        guard !Task.isCancelled, state.isConnecting else {
-            await activeConnectionManager?.disconnect()
-            throw CancellationError()
-        }
+    private func setConnected(_ result: ConversationStartResult) throws -> ConversationStartResult {
+        guard !Task.isCancelled, state.isConnecting else { throw CancellationError() }
         state = .connected(result.callInfo)
         callbacks.onAgentReady?()
         return result

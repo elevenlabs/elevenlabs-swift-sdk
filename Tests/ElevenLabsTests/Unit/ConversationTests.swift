@@ -444,6 +444,28 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
     }
 
+    /// Cancellation arriving after the transport connects still runs startup's teardown.
+    func testCancelledAfterConnectEndsConversation() async {
+        let holder = StartTaskHolder()
+        mockWebRTCConnectionManager.onConnectCompleted = { holder.task?.cancel() }
+
+        let startTask = Task {
+            try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        }
+        // No `await` before this, so the handle lands before the task body can reach `connect`.
+        holder.task = startTask
+
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
+        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
+        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
+    }
+
     func testEndDuringStartupRemainsEnded() async {
         mockWebRTCConnectionManager.autoDeliverInitiationMetadata = false
         let startTask = Task {
@@ -770,4 +792,10 @@ private func conversationInitTextOnly(from data: Data) throws -> Bool? {
     let override = json?["conversation_config_override"] as? [String: Any]
     let conversation = override?["conversation"] as? [String: Any]
     return conversation?["text_only"] as? Bool
+}
+
+/// Lets a mock hook cancel the very task that is awaiting it.
+@MainActor
+private final class StartTaskHolder {
+    var task: Task<ConversationStartResult, Swift.Error>?
 }
