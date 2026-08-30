@@ -301,20 +301,27 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(info.agentId, "agent-private")
     }
 
-    func testSignedWebSocketURLRejectsURLWithoutAgentId() async {
+    func testSignedWebSocketURLWithoutAgentIdFallsBackToSentinel() async throws {
         let urlMissingAgent = "wss://api.elevenlabs.io/v1/convai/conversation?conversation_signature=sig"
-        await XCTAssertThrowsErrorAsync({
-            try await WebSocketConnectionManager.websocketUrl(
-                for: .signedWebSocketURL(urlMissingAgent),
-                endpoints: .production
-            )
-        }) { error in
-            guard let convError = error as? ConversationError,
-                  case .authenticationFailed = convError
-            else {
-                return XCTFail("Expected authenticationFailed, got \(error)")
-            }
-        }
+
+        let resolved = try await WebSocketConnectionManager.websocketUrl(
+            for: .signedWebSocketURL(urlMissingAgent),
+            endpoints: .production
+        )
+
+        XCTAssertEqual(resolved.url.absoluteString, urlMissingAgent)
+        XCTAssertEqual(resolved.agentId, ConversationAuth.TextOnly.signedWebSocketURL { "" }.agentId)
+    }
+
+    func testSignedWebSocketURLWithEmptyAgentIdFallsBackToSentinel() async throws {
+        let urlEmptyAgent = "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=&conversation_signature=sig"
+
+        let resolved = try await WebSocketConnectionManager.websocketUrl(
+            for: .signedWebSocketURL(urlEmptyAgent),
+            endpoints: .production
+        )
+
+        XCTAssertEqual(resolved.agentId, ConversationAuth.TextOnly.signedWebSocketURL { "" }.agentId)
     }
 
     @MainActor
