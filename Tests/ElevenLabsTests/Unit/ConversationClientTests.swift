@@ -214,6 +214,44 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
     }
 
+    // MARK: - Agent mute
+
+    func testAgentStartsUnmuted() {
+        XCTAssertFalse(client.isAgentMuted)
+    }
+
+    func testSetAgentMutedWithNoSessionIsRememberedAndAppliedOnStart() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+
+        client.setAgentMuted(true)
+        XCTAssertTrue(client.isAgentMuted)
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
+    func testAgentMuteCarriesAcrossSessions() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        client.setAgentMuted(true)
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
+
+        XCTAssertTrue(client.isAgentMuted)
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
+    func testResetUnmutesTheAgent() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        client.setAgentMuted(true)
+
+        await client.reset()
+
+        XCTAssertFalse(client.isAgentMuted)
+    }
+
     func testSetMicMutedIsHarmlessAfterEnd() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         await client.endConversation()

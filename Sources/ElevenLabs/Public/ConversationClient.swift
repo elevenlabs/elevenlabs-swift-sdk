@@ -17,6 +17,9 @@ public final class ConversationClient: ObservableObject {
     @Published public private(set) var agentState: AgentState = .listening
     @Published public private(set) var isMicMuted: Bool = false
 
+    /// Whether the agent's voice is silenced.
+    @Published public private(set) var isAgentMuted: Bool = false
+
     /// Stream of client tool calls that need to be executed by the app
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
@@ -90,7 +93,8 @@ public final class ConversationClient: ObservableObject {
             dependencyProvider: dependencyProvider ?? Dependencies(logLevel: logLevel, endpoints: config.endpoints),
             config: config,
             callbacks: callbacks,
-            initialMicMuted: isMicMuted
+            initialMicMuted: isMicMuted,
+            initialAgentMuted: isAgentMuted
         )
         bind(conversation)
 
@@ -115,6 +119,7 @@ public final class ConversationClient: ObservableObject {
         chatHistory = []
         agentState = .listening
         isMicMuted = false
+        isAgentMuted = false
         pendingToolCalls = []
         conversationMetadata = nil
         mcpToolCalls = []
@@ -167,6 +172,14 @@ public final class ConversationClient: ObservableObject {
     public func setMicMuted(_ muted: Bool) async throws {
         try await session?.setMicMuted(muted)
         isMicMuted = muted
+    }
+
+    // MARK: - Agent audio
+
+    /// Silence or restore the agent's voice for the current or next conversation.
+    public func setAgentMuted(_ muted: Bool) {
+        session?.setAgentMuted(muted)
+        isAgentMuted = muted
     }
 
     // MARK: - Audio observers

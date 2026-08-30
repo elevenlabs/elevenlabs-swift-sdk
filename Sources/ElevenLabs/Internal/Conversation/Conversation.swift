@@ -50,6 +50,9 @@ final class Conversation: ObservableObject {
     /// Allows setting mute state during connection phase.
     private var pendingMuteState: Bool?
 
+    /// Whether agent playback is muted.
+    private(set) var isAgentMuted: Bool
+
     /// Externally registered audio observers. Kept attached across track swaps.
     private let agentObserverRegistry = AudioObserverRegistry()
     private let micObserverRegistry = AudioObserverRegistry()
@@ -71,12 +74,14 @@ final class Conversation: ObservableObject {
         dependencyProvider: any ConversationDependencyProvider,
         config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init(),
-        initialMicMuted: Bool = false
+        initialMicMuted: Bool = false,
+        initialAgentMuted: Bool = false
     ) {
         self.dependencyProvider = dependencyProvider
         self.config = config
         self.callbacks = callbacks
         pendingMuteState = initialMicMuted
+        isAgentMuted = initialAgentMuted
         logger = dependencyProvider.logger
     }
 
@@ -171,6 +176,7 @@ final class Conversation: ObservableObject {
         guard !isTearingDown else { return }
         agentObserverRegistry.attach(to: agentAudioTrack)
         micObserverRegistry.attach(to: inputTrack)
+        activeWebRTCConnectionManager?.setAgentMuted(isAgentMuted)
     }
 
     /// End and clean up.
@@ -201,6 +207,12 @@ final class Conversation: ObservableObject {
         let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
         try await publish(event)
         updateChatHistory { $0.appendUserMessage(text) }
+    }
+
+    /// Mute or unmute agent playback.
+    func setAgentMuted(_ muted: Bool) {
+        isAgentMuted = muted
+        activeWebRTCConnectionManager?.setAgentMuted(muted)
     }
 
     /// Mute or unmute the local microphone.

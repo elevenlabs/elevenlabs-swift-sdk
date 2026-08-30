@@ -44,6 +44,58 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.chatHistory.isEmpty)
     }
 
+    // MARK: - Agent mute
+
+    func testAgentStartsUnmutedAndAppliesOnConnect() async throws {
+        XCTAssertFalse(conversation.isAgentMuted)
+
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, false)
+    }
+
+    func testSetAgentMutedReachesTheAgentTrack() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        conversation.setAgentMuted(true)
+
+        XCTAssertTrue(conversation.isAgentMuted)
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+
+        conversation.setAgentMuted(false)
+
+        XCTAssertFalse(conversation.isAgentMuted)
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, false)
+    }
+
+    /// A republished agent track arrives audible, so a muted agent must not come back.
+    func testAgentMuteIsReappliedAfterTrackSwap() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        conversation.setAgentMuted(true)
+
+        let appliedBeforeSwap = mockWebRTCConnectionManager.appliedAgentMutes.count
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        mockWebRTCConnectionManager.onTracksChanged?()
+        // The handler hops through a MainActor Task; drain it before asserting.
+        await Task { @MainActor in }.value
+
+        XCTAssertGreaterThan(mockWebRTCConnectionManager.appliedAgentMutes.count, appliedBeforeSwap)
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
+    func testAgentMuteSetBeforeConnectAppliesOnConnect() async throws {
+        conversation.setAgentMuted(true)
+        XCTAssertNil(mockWebRTCConnectionManager.appliedAgentMuted)
+
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
     func testStartConversationSuccessReturnsResult() async throws {
         let config = makeConfig()
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: config, callbacks: makeCallbacks())

@@ -218,6 +218,10 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
     }
 
+    func setAgentMuted(_ muted: Bool) {
+        (agentAudioTrack as? RemoteAudioTrack)?.volume = muted ? 0 : 1
+    }
+
     /// Establish the LiveKit room connection (the low-level room/mic primitive
     /// used by `connect`).
     ///

@@ -48,6 +48,9 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     private(set) var lastNetworkConfiguration: WebRTCConfiguration = .default
     private(set) var lastWaitTimeout: TimeInterval = 0
     private(set) var publishedPayloads: [Data] = []
+    /// Last mute state that reached a subscribed agent track, and every such value in order.
+    private(set) var appliedAgentMuted: Bool?
+    private(set) var appliedAgentMutes: [Bool] = []
     private var startupStateChange: ((ConversationStartupState) -> Void)?
 
     private var waitContinuation: CheckedContinuation<AgentReadyWaitResult, Never>?
@@ -185,6 +188,13 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             throw publishError
         }
         publishedPayloads.append(data)
+    }
+
+    func setAgentMuted(_ muted: Bool) {
+        // Mirrors the real manager, which can only reach a track once one is subscribed.
+        guard agentAudioTrack != nil else { return }
+        appliedAgentMuted = muted
+        appliedAgentMutes.append(muted)
     }
 
     func setMicrophoneMuted(_ muted: Bool) async throws {

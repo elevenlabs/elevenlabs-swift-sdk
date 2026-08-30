@@ -40,6 +40,8 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     var isMicrophoneMuted: Bool { get }
 
     func setMicrophoneMuted(_ muted: Bool) async throws
+
+    func setAgentMuted(_ muted: Bool)
 }
 
 extension ConnectionManaging {

@@ -193,6 +193,29 @@ struct AudioControlView: View {
 }
 ```
 
+### Agent Mute
+
+Silence the agent's voice independently of the microphone and of any other audio your app is
+playing. Useful while the user reads or types and does not want to be spoken to. The agent keeps
+talking — it just is not heard.
+
+```swift
+client.setAgentMuted(true)
+
+// Mirrored for UI binding, mirroring `isMicMuted`.
+Toggle("Mute agent", isOn: Binding(
+    get: { client.isAgentMuted },
+    set: { client.setAgentMuted($0) }
+))
+```
+
+The setting is scoped to this client's conversations, so it needs no restoring on teardown, and
+it carries across sessions — an agent muted in one conversation stays muted in the next.
+`reset()` unmutes.
+
+Voice conversations only; text-only conversations have no agent audio, so the value is simply
+remembered until a voice conversation starts.
+
 ### Raw Audio Observers
 
 Observe decoded PCM from the agent output or local microphone without taking a LiveKit dependency in app code. Prefer this over reaching for transport tracks.
