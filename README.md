@@ -78,7 +78,7 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         ForEach(conversation.messages) { msg in
-                            Text("**\(msg.role)**: \(msg.content)")
+                            Text("**\(msg.role)**: \(msg.transcript)")
                                 .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
                                 .id(msg.id)
                         }
@@ -246,13 +246,14 @@ let conversation = try await ElevenLabs.startConversation(agentId: "id", config:
 ### Displaying V3 Voice Responses
 
 Eleven v3 voice responses can include audio tags such as `[laughs]` or `[whispers]` that control speech delivery. When showing a
-voice transcript, remove these tags from the displayed copy while keeping the original response available for other processing:
+conversation transcript, use `Message.transcript` to omit those tags while keeping the original response available:
 
 ```swift
-let displayText = ElevenLabs.stripAudioTags(from: message.content)
+Text(message.transcript)
 ```
 
-Apply this only to voice transcripts. Text-only responses can contain bracketed content that should remain visible.
+For agent messages in voice conversations, `transcript` removes audio tags and preserves Markdown links. `content` retains the exact
+server response. User messages and text-only agent messages have identical `content` and `transcript` values.
 
 ---
 

@@ -115,13 +115,7 @@ extension Conversation {
     /// Inserts the user transcript before the agent message with the same `eventId`
     /// if one exists, since the agent's response may be received before the transcript.
     private func insertUserTranscript(content: String, eventId: Int) {
-        let message = Message(
-            id: UUID().uuidString,
-            role: .user,
-            content: content,
-            timestamp: Date(),
-            eventId: eventId
-        )
+        let message = makeMessage(role: .user, content: content, eventId: eventId)
         if let agentIdx = messages.firstIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
             messages.insert(message, at: agentIdx)
         } else {
@@ -132,7 +126,7 @@ extension Conversation {
     private func upsertAgentMessage(content: String, eventId: Int) {
         if let idx = messages.lastIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
             let existing = messages[idx]
-            messages[idx] = Message(
+            messages[idx] = makeMessage(
                 id: existing.id,
                 role: .agent,
                 content: content,
