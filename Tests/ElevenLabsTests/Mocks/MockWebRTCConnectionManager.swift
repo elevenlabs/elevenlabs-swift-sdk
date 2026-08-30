@@ -31,6 +31,9 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     var errorHandler: ((Swift.Error?) -> Void)?
     var onDisconnectStarted: (@MainActor () async -> Void)?
 
+    /// Fires after a successful `connect`, just before the result is returned.
+    var onConnectCompleted: (@MainActor () async -> Void)?
+
     private(set) var isConnected = false
     var shouldFailConnection = false
     var connectionError: Swift.Error = Error.connectionFailed
@@ -120,6 +123,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
             metadataWaiter: waiter,
             onStartupStateChange: onStartupStateChange
         )
+        await onConnectCompleted?()
         return ConversationStartResult(
             callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
             metrics: metrics
