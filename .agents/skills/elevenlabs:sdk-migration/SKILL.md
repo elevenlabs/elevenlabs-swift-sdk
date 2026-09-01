@@ -153,7 +153,7 @@ case .connected(let info): Text("Connected to \(info.agentId)")
 case .connecting(let stage): Text("Connecting… (\(stage))")
 ```
 
-`case .connecting:` without the binding also compiles — only bind the stage if the UI shows it.
+`case .connecting:` without the binding also compiles — only bind the stage if the UI shows it. If the v3 app showed a generic spinner while connecting, suggest an upgrade: the stage enables real progress UI (token fetch → room connect → waiting for agent), and `ConversationStartResult.metrics` gives per-phase timings for startup telemetry.
 
 When migrating:
 
@@ -203,7 +203,7 @@ try await client.sendToolResult(
 )
 ```
 
-`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
+`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
 
 ## Replace LiveKit track access with audio observers
 
@@ -220,7 +220,7 @@ client.addAgentAudioObserver(visualizer)  // agent's voice
 client.addMicAudioObserver(visualizer)    // local microphone
 ```
 
-Observers are durable — they re-attach to every conversation the client starts. Code that used LiveKit types for network configuration maps to `WebRTCConfiguration` (`.automatic` / `.relayOnly`) on `ConversationConfig`.
+Observers are durable — they re-attach to every conversation the client starts. Code that muted or attenuated the agent's `RemoteAudioTrack` volume maps to `client.setAgentMuted(_:)`. Code that used LiveKit types for network configuration maps to `WebRTCConfiguration` (`.automatic` / `.relayOnly`) on `ConversationConfig`.
 
 ## Replace global configuration
 
@@ -288,6 +288,8 @@ Because every v3 conversation was a fresh object, apps accumulated plumbing that
 - **Reconnect scaffolding.** Reconnecting is calling start again on the same client; view models or factories that rebuild the conversation object and re-attach observers after a drop can go.
 - **Double-start guards.** v3 threw `alreadyStarted` on reuse, so apps guard against it or end manually before restarting. In v4 the latest start wins and ends the previous session itself.
 - **Mute restoration.** Code that re-applies a saved mute state after each start is redundant — `isMicMuted` and `isAgentMuted` carry across conversations on the same client.
+- **Leave-during-connect workarounds.** v4 tears startup down cleanly at any stage: cancel the `Task` running the start, or call `endConversation()` while connecting. Delete flags or deferred-teardown code that waited for the connection to finish before ending it.
+- **Custom transcript reconciliation.** If the app merges, dedupes, or filters streaming agent messages before display, delete that — `chatHistory` updates messages in place (keyed by response ID) and marks completion with `isFinal`.
 
 ## Adopt the drop-in widget (optional)
 
