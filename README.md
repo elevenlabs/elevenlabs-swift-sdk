@@ -10,7 +10,8 @@ A Swift SDK for integrating ElevenAgents capabilities into your iOS and macOS ap
 
 - **Ultra-Low Latency**: Built on LiveKit WebRTC for high-performance, real-time audio streaming.
 - **Human-Like Interaction**: Seamlessly handle interruptions and natural speech patterns.
-- **Dev-First API**: Fully supports Swift Concurrency (Async/Await) and SwiftUI observation.
+- **Drop-In Widget**: Ship a complete agent chat UI — voice calls, text input, live transcript, audio-reactive orb — with one view.
+- **Dev-First API**: Fully supports Swift Concurrency (Async/Await), SwiftUI observation, and Swift 6 strict concurrency.
 - **Extensible**: Native support for Client Tools and MCP (Model Context Protocol).
 - **Native Performance**: Optimized for iOS and macOS, ensuring buttery-smooth UI.
 
@@ -20,81 +21,111 @@ A Swift SDK for integrating ElevenAgents capabilities into your iOS and macOS ap
 
 ### 1. Installation
 
-Add the package via Swift Package Manager:
+Add the package via Swift Package Manager. While v4 is in alpha, pin the exact prerelease version:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "3.2.2")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.1")
 ]
 ```
 
+The package provides two libraries:
+
+- **`ElevenLabs`** — the core SDK: start conversations, observe state, build your own UI.
+- **`ElevenLabsWidget`** — an optional drop-in SwiftUI chat widget built on the core SDK (iOS 16+).
+
 ### 2. Requirements & Permissions
 
-- **Platforms**: iOS 13.0+ · macOS 10.15+ · macCatalyst 14.0+ · visionOS 1.0+ · tvOS 17.0+
-- **Tooling**: Xcode 15.0+ · Swift 5.9+
-- **Privacy**: Add `NSMicrophoneUsageDescription` to your `Info.plist`. WebRTC connection discovery may also trigger iOS Local Network permission; add `NSLocalNetworkUsageDescription` if needed, or use `.relayOnly` to restrict ICE to relay candidates.
+- **Platforms**: iOS 13.0+ · macOS 10.15+ · macCatalyst 14.0+ · visionOS 1.0+ · tvOS 17.0+ (`ChatWidget` requires iOS 16+)
+- **Tooling**: Xcode 15.0+ · Swift 5.9+ (Swift 6 supported)
+- **Privacy**: Add `NSMicrophoneUsageDescription` to your `Info.plist`. WebRTC connection discovery may also trigger iOS Local Network permission; add `NSLocalNetworkUsageDescription` if needed, or use the `.relayOnly` network configuration to restrict ICE to relay candidates.
 
-### 3. Basic Usage (SwiftUI)
+### 3. Fastest Path: the Drop-In Widget
 
-The SDK is designed to be reactive. Simply observe the `Conversation` object and the UI will update automatically as the AI speaks and generates transcripts.
+Overlay `ChatWidget` on your UI and you're done — it renders a floating launcher that opens a chat drawer with a voice call, text composer, and live transcript:
+
+```swift
+import ElevenLabsWidget
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        ZStack {
+            YourAppContent()
+            ChatWidget(mode: .voiceAndText(.publicAgent(id: "your-agent-id")))
+        }
+    }
+}
+```
+
+Pick how users talk to the agent with `WidgetConversationMode`:
+
+- `.voiceAndText(...)` — a voice call the user can also type into.
+- `.voiceOnly(...)` — a voice call with no composer.
+- `.textOnly(...)` — typed messages only, no audio.
+- `.voiceOrTextOnly(voice:textOnly:)` — the user picks per session: the call button starts voice, typing starts text.
+
+To observe or drive the widget from your app, pass a `ChatWidgetController`:
+
+```swift
+@StateObject private var chat = ChatWidgetController()
+
+ChatWidget(mode: .voiceAndText(.publicAgent(id: "your-agent-id")), controller: chat)
+
+// Anywhere in the host app:
+chat.open()
+try await chat.startConversation()
+await chat.endConversation()
+```
+
+Appearance and behavior are configurable via `ChatWidgetConfig` (theme, strings, backdrop, mic control), and you can replace the launcher with your own view. See `Examples/DemoApp` for a runnable showcase of every mode.
+
+### 4. Build Your Own UI: `ConversationClient`
+
+For full control, use the core SDK. Create one `ConversationClient` and hold it for the lifetime of your screen — it exposes conversation state as `@Published` properties and stays reusable across conversations, so your UI binds once:
 
 ```swift
 import ElevenLabs
 import SwiftUI
 
-@MainActor
-class ChatViewModel: ObservableObject {
-    @Published var conversation: Conversation?
-
-    func startChat() async {
-        do {
-            // Start session with a public agent ID
-            conversation = try await ElevenLabs.startConversation(agentId: "your-agent-id")
-        } catch {
-            print("Failed to start: \(error)")
-        }
-    }
-}
-
 struct ChatView: View {
-    @StateObject var vm = ChatViewModel()
+    @StateObject private var client = ConversationClient()
 
     var body: some View {
         VStack(spacing: 20) {
-            if let conversation = vm.conversation {
-                // Connection state
-                Group {
-                    switch conversation.state {
-                    case .idle: Text("Status: idle")
-                    case .connecting: Text("Status: connecting")
-                    case .connected(let info): Text("Connected to: \(info.agentId)")
-                    case .ended: Text("Status: ended")
-                    case .error: Text("Status: error")
-                    }
+            // Connection state
+            Group {
+                switch client.state {
+                case .idle: Text("Status: idle")
+                case .connecting: Text("Status: connecting…")
+                case .connected(let info): Text("Connected to \(info.agentId)")
+                case .ended: Text("Status: ended")
+                case .error: Text("Status: error")
                 }
-                .font(.caption).foregroundColor(.secondary)
+            }
+            .font(.caption).foregroundColor(.secondary)
 
-                // Real-time transcriptions
-                ScrollViewReader { proxy in
-                    let messages = conversation.chatHistory.compactMap(\.message)
-                    ScrollView {
-                        ForEach(messages) { msg in
-                            Text("**\(msg.role)**: \(msg.content)")
-                                .padding(8).background(Color.gray.opacity(0.1)).cornerRadius(8)
-                                .id(msg.id)
-                        }
-                    }
-                    .onChange(of: messages.count) { _ in
-                        proxy.scrollTo(messages.last?.id)
-                    }
+            // Live transcript — streamed agent replies update in place
+            ScrollView {
+                ForEach(client.chatHistory.compactMap(\.message)) { message in
+                    Text("**\(message.role == .user ? "You" : "Agent")**: \(message.content)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
 
+            if client.state.isConnected {
                 Button("End Conversation", role: .destructive) {
-                    Task { await conversation.endConversation() }
+                    Task { await client.endConversation() }
                 }
             } else {
                 Button("Start Voice Chat") {
-                    Task { await vm.startChat() }
+                    Task {
+                        do {
+                            _ = try await client.startVoiceConversation(.publicAgent(id: "your-agent-id"))
+                        } catch {
+                            print("Failed to start: \(error)")
+                        }
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -104,102 +135,80 @@ struct ChatView: View {
 }
 ```
 
+`chatHistory` contains messages and tool calls (`item.message` / `item.toolCall`). Starting a conversation returns a `ConversationStartResult` with the call info and startup timing metrics — ignore it with `_ =` if you don't need it.
+
 ### Cancel connecting
 
-If you need to stop connecting (e.g., the user leaves the screen before the connection completes), start the session inside a `Task` and cancel it:
+If the user leaves the screen before the connection completes, cancel the task running the start — startup is torn down cleanly at any stage:
 
 ```swift
-// Start connecting
-let connectTask = Task { () -> Conversation in
-    try await ElevenLabs.startConversation(agentId: "your-agent-id")
-private func handleToolCall(_ toolCall: ClientToolCallEvent) async {
-    do {
-        let parameters = try toolCall.getParameters()
-
-        let result = await executeClientTool(
-            name: toolCall.toolName,
-            parameters: parameters
-        )
-
-        // Send the tool result back to the agent
-        try await conversation?.sendToolResult(
-            .init(toolCallId: toolCall.toolCallId, result: result)
-        )
-    } catch {
-        // Handle tool execution errors
-        try? await conversation?.sendToolResult(
-            .init(
-                toolCallId: toolCall.toolCallId,
-                result: ["error": error.localizedDescription],
-                isError: true
-            )
-        )
-    }
+let startTask = Task {
+    _ = try await client.startVoiceConversation(.publicAgent(id: "your-agent-id"))
 }
 
-// Cancel connecting
-connectTask.cancel()
+// Later:
+startTask.cancel()
+// …or equivalently:
+await client.endConversation()
 ```
 
 ---
 
 ## Authentication Modes
 
+Voice and text-only conversations take different credentials, expressed as `ConversationAuth.Voice` and `ConversationAuth.TextOnly`.
+
 ### Public Agents
 
-Perfect for prototyping. Connect directly using your Agent ID from the ElevenLabs dashboard.
+Perfect for prototyping. Connect directly using your Agent ID from the ElevenLabs dashboard:
 
 ```swift
-let conversation = try await ElevenLabs.startConversation(agentId: "my-public-id")
+_ = try await client.startVoiceConversation(.publicAgent(id: "your-agent-id"))
 ```
 
 ### Private Agents (Production Ready)
 
-For private agents, your backend should generate a temporary **Conversation Token** using your API Key. This keeps your credentials secure.
+For private agents, your backend generates short-lived credentials using your API key: a **conversation token** for voice, or a **signed WebSocket URL** for text-only.
 
 > [!CAUTION]
 > **Security First**: Never store your ElevenLabs API Key directly in your mobile app. Always use a backend proxy.
 
 ```swift
-// 1. Fetch token from YOUR secure backend
-let token = try await myBackend.fetchToken(agentId: "my-private-id")
+// Voice: mint a conversation token on your backend.
+// The closure is called once per start, so tokens are always fresh.
+_ = try await client.startVoiceConversation(
+    .conversationToken { try await myBackend.fetchConversationToken() }
+)
 
-// 2. Start session safely
-let conversation = try await ElevenLabs.startConversation(
-    conversationToken: token
+// Text-only: mint a signed WebSocket URL on your backend
+_ = try await client.startTextOnlyConversation(
+    .signedWebSocketURL { try await myBackend.fetchSignedWebSocketURL() }
 )
 ```
+
+If you already have a credential in hand, pass it directly: `.conversationToken(token)` or `.signedWebSocketURL(url)`.
 
 ---
 
 ## Text-Only Conversations
 
-Skip the microphone entirely and run a chat-style conversation over WebSocket. The `Conversation` API is identical — `sendMessage`, `messages`, `endConversation` all work the same.
+Skip the microphone entirely and run a chat-style conversation over WebSocket. The client API is identical — `sendMessage`, `chatHistory`, `endConversation` all work the same:
 
 ```swift
-// Public agent
-let conversation = try await ElevenLabs.startConversation(
-    agentId: "your-agent-id",
-    config: .init(conversationOverrides: .init(textOnly: true))
-)
-
-try await conversation.sendMessage("Hello!")
-
-// Private agent: backend generates a signed WebSocket URL
-let signedURL = try await myBackend.fetchSignedWebSocketURL(agentId: "my-private-id")
-let conversation = try await ElevenLabs.startConversation(signedWebSocketURL: signedURL)
+_ = try await client.startTextOnlyConversation(.publicAgent(id: "your-agent-id"))
+try await client.sendMessage("Hello!")
 ```
 
 ---
 
 ## Empower Your Agent with Tools
 
-You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**.
+You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**:
 
 ```swift
 // Observe requested tool calls with async/await
 Task {
-    for await calls in conversation.$pendingToolCalls.values {
+    for await calls in client.$pendingToolCalls.values {
         for call in calls {
             // 1. Parse parameters
             let params = (try? call.getParameters()) ?? [:]
@@ -207,13 +216,25 @@ Task {
             // 2. Perform your local logic
             let result = await myAppAction(params)
 
-            // 3. Send result back to the agent
-            try? await conversation.sendToolResult(
+            // 3. Send the result back to the agent
+            try? await client.sendToolResult(
                 .init(toolCallId: call.toolCallId, result: result)
             )
         }
     }
 }
+```
+
+If you use `ChatWidget`, pass a handler instead and the widget wires this up for you:
+
+```swift
+ChatWidget(
+    mode: .voiceAndText(.publicAgent(id: "your-agent-id")),
+    onClientToolCall: { call in
+        let result = await myAppAction((try? call.getParameters()) ?? [:])
+        return .init(toolCallId: call.toolCallId, result: result)
+    }
+)
 ```
 
 > [!TIP]
@@ -222,6 +243,45 @@ Task {
 ---
 
 ## Configuration & Tuning
+
+### Callbacks
+
+Want to handle events without Combine? Pass `ConversationCallbacks` when creating the client — they apply to every conversation it starts:
+
+```swift
+let callbacks = ConversationCallbacks(
+    onDisconnect: { reason in print("Ended: \(reason)") },
+    onAgentResponse: { text, _ in print("Agent said: \(text)") },
+    onUserTranscript: { text, _ in print("User said: \(text)") },
+    onVadScore: { score in print("Voice intensity: \(score)") }
+)
+
+let client = ConversationClient(callbacks: callbacks)
+```
+
+### Muting
+
+```swift
+try await client.setMicMuted(true) // mute the user's microphone
+client.setAgentMuted(true)         // silence the agent's voice
+```
+
+Both states persist across conversations started by the same client.
+
+### Raw Audio Access
+
+Tap decoded PCM audio for visualizers, recording, or analysis. Observers are durable — they re-attach to every conversation the client starts:
+
+```swift
+final class Visualizer: ConversationAudioObserver {
+    func didReceive(_ buffer: AVAudioPCMBuffer) {
+        // Called on the audio thread — copy what you need, then hop off.
+    }
+}
+
+client.addAgentAudioObserver(visualizer) // agent's voice
+client.addMicAudioObserver(visualizer)   // local microphone
+```
 
 ### Logging
 
@@ -237,38 +297,36 @@ Point the HTTP API base or either WebSocket endpoint at a proxy, regional host, 
 
 ```swift
 let config = ConversationConfig(
-    endpoints: Endpoints(apiBase: URL(string: "https://my-proxy.example.com")!)
-)
-```
-
-### Fine-Grained Callbacks
-
-Want to handle events without Combine? Use `ConversationCallbacks`:
-
-```swift
-let callbacks = ConversationCallbacks(
-    onAgentResponse: { text, _ in print("Agent said: \(text)") },
-    onUserTranscript: { text, _ in print("User said: \(text)") },
-    onVadScore: { score in print("Voice intensity: \(score)") }
+    endpoints: Endpoints(apiBase: URL(string: "https://your-proxy.example.com")!)
 )
 
-let conversation = try await ElevenLabs.startConversation(agentId: "id", callbacks: callbacks)
+_ = try await client.startVoiceConversation(.publicAgent(id: "your-agent-id"), config: config)
 ```
+
+`ConversationConfig` also covers agent/TTS overrides, dynamic variables, startup timeouts, microphone pipeline behavior, and WebRTC connection strategy.
 
 ---
 
 ## Architecture at a Glance
 
-The SDK handles all the heavy lifting of WebRTC coordination and protocol parsing, exposing a simple, thread-safe interface.
+The SDK handles all the heavy lifting of WebRTC coordination and protocol parsing, exposing a simple, thread-safe interface:
 
 ```mermaid
 graph TD
-    App[Your App] --> Conversation[Conversation Object]
-    Conversation --> WebRTCConnectionManager[WebRTC Connection Manager]
-    Conversation --> WebSocketConnectionManager[WebSocket Connection Manager]
-    WebRTCConnectionManager --> LiveKit[LiveKit SDK]
-    WebRTCConnectionManager --> TokenService[Token Service]
+    App[Your App] --> Widget[ChatWidget - optional drop-in UI]
+    App --> Client[ConversationClient]
+    Widget --> Client
+    Client --> Session[Conversation session]
+    Session --> WebRTC[WebRTC Connection Manager]
+    Session --> WebSocket[WebSocket Connection Manager]
+    WebRTC --> LiveKit[LiveKit SDK]
 ```
+
+---
+
+## Example App
+
+`Examples/DemoApp` is a minimal host app for `ChatWidget`: switch between all conversation modes, try public-agent and backend-credential auth, and drive the widget through `ChatWidgetController`.
 
 ---
 
