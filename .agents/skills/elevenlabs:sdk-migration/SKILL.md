@@ -19,7 +19,8 @@ Follow these steps in sequence — each builds on the previous one.
 3. **Move callbacks** — from `ConversationConfig` / start-call parameters to `ConversationCallbacks` passed at client creation.
 4. **Update state observation** — `messages` → `chatHistory`, `.active` → `.connected`, mute and tool-result API changes.
 5. **Build and fix residual errors** — use the [error mapping table](#compile-error-mapping) below.
-6. **Offer the drop-in widget** *(optional)* — if the app hand-rolls chat UI, `ChatWidget` may replace it.
+6. **Simplify v3 workarounds** *(optional)* — remove re-binding, reconnect, and guard code the reusable client makes unnecessary.
+7. **Offer the drop-in widget** *(optional)* — if the app hand-rolls chat UI, `ChatWidget` may replace it.
 
 ## Installation
 
@@ -263,6 +264,30 @@ After the mechanical changes, build and resolve leftovers with this table:
 | `cannot find type 'LocalAudioTrack' / 'RemoteAudioTrack' in scope` | Migrate to `ConversationAudioObserver`. |
 | `extra argument 'textOnly' in call` / `has no member 'textOnly'` | Use `startTextOnlyConversation(...)` instead of the flag. |
 | `result of call ... is unused` warning on a start method | Assign to `_` or use the returned `ConversationStartResult`. |
+
+## Simplify v3 workarounds (optional)
+
+Because every v3 conversation was a fresh object, apps accumulated plumbing that the reusable client makes unnecessary. After the migration compiles, scan for these patterns and **propose** removing them — list what you found and ask the user which to apply, since each deletes working code:
+
+- **Per-start re-binding.** v3 code re-creates Combine subscriptions, `onReceive` chains, or delegate wiring inside every start call because each `Conversation` was new. With one client, bind once — in `init`, `viewDidLoad`, or the SwiftUI body — and delete the re-wiring. Same for audio observers: they re-attach to every session automatically.
+
+  ```swift
+  // v3 pattern — delete the re-subscription
+  func startChat() async {
+      conversation = try? await ElevenLabs.startConversation(agentId: "your-agent-id")
+      conversation?.$messages.sink { ... }.store(in: &cancellables)  // re-wired every call
+  }
+
+  // v4 — subscribe once at setup; every conversation flows through it
+  init() {
+      client.$chatHistory.sink { ... }.store(in: &cancellables)
+  }
+  ```
+
+- **`if let conversation` UI branches.** The client always exists, so optionality branches collapse into a `switch client.state` — `.idle` covers what `nil` used to mean.
+- **Reconnect scaffolding.** Reconnecting is calling start again on the same client; view models or factories that rebuild the conversation object and re-attach observers after a drop can go.
+- **Double-start guards.** v3 threw `alreadyStarted` on reuse, so apps guard against it or end manually before restarting. In v4 the latest start wins and ends the previous session itself.
+- **Mute restoration.** Code that re-applies a saved mute state after each start is redundant — `isMicMuted` and `isAgentMuted` carry across conversations on the same client.
 
 ## Adopt the drop-in widget (optional)
 
