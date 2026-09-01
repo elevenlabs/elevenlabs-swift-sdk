@@ -2,4 +2,4 @@
 // Run Scripts/generate-version.sh to update
 import Foundation
 
-public let version = "3.2.2"
+public let version = "3.3.0"
