@@ -2,7 +2,7 @@
 import Foundation
 import LiveKit
 
-final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
+final class MockWebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProviding {
     enum Error: Swift.Error {
         case connectionFailed
         case publishFailed

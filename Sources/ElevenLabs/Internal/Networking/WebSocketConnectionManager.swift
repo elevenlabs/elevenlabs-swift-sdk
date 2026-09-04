@@ -58,7 +58,11 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             throw CancellationError()
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
+            throw ConversationStartupError(
+                stage: .preparing,
+                metrics: metrics,
+                underlyingError: error as? ConversationError ?? .authenticationFailed(error)
+            )
         }
         let url = resolved.url
 
@@ -69,16 +73,23 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         // The first send awaits the WebSocket handshake internally —
         // any connection failure surfaces here.
         onStartupStateChange(.sendingConversationInit)
+        let initStart = Date()
         do {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
+            metrics.conversationInit = Date().timeIntervalSince(initStart)
         } catch is CancellationError {
             tearDownTask(task)
             throw CancellationError()
         } catch {
             tearDownTask(task)
+            metrics.conversationInit = Date().timeIntervalSince(initStart)
             metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
+            throw ConversationStartupError(
+                stage: .sendingConversationInit,
+                metrics: metrics,
+                underlyingError: error as? ConversationError ?? .connectionFailed(error)
+            )
         }
 
         // Socket is up and the init message is sent. Start consuming responses.

@@ -359,11 +359,7 @@ final class ChatWidgetViewModel: ObservableObject {
             }
             // The host handler can outlive the conversation that asked for it.
             guard let self, generation == sessionGeneration else { return }
-            if call.expectsResponse {
-                try? await client.sendToolResult(result)
-            } else {
-                client.markToolCallCompleted(call.toolCallId)
-            }
+            try? await client.complete(call, with: result)
         }
     }
 }

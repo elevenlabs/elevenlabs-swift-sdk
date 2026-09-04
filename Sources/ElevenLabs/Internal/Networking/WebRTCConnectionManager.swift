@@ -25,7 +25,7 @@ enum WebRTCConnectionManagerError: Error {
 /// LiveKit room/track types stay internal to this manager; consumers observe
 /// audio via ``ConversationAudioObserver`` rather than LiveKit track APIs.
 @MainActor
-final class WebRTCConnectionManager: WebRTCConnectionManaging {
+final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProviding {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
     var onDisconnected: (() async -> Void)?
 
@@ -99,6 +99,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         // 1. Resolve the conversation token.
         onStartupStateChange(.resolvingToken)
         let token = try await runPhase(
+            stage: .resolvingToken,
             timing: \.tokenFetch, metrics: &metrics, startTime: startTime
         ) {
             try await tokenService.fetchToken(for: auth, environment: config.environment)
@@ -112,6 +113,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         onStartupStateChange(.connectingRoom)
         let throwOnMicFailure = !config.continueWithoutMicrophoneOnFailure
         try await runPhase(
+            stage: .connectingRoom,
             timing: \.roomConnect, metrics: &metrics, startTime: startTime
         ) {
             try await connectToRoom(
@@ -134,7 +136,11 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
             metrics.agentReady = elapsed
             metrics.total = Date().timeIntervalSince(startTime)
             logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
-            throw ConversationError.agentTimeout
+            throw ConversationStartupError(
+                stage: .waitingForAgent(timeout: agentTimeout),
+                metrics: metrics,
+                underlyingError: .agentTimeout
+            )
         case let .cancelled(elapsed):
             metrics.agentReady = elapsed
             metrics.total = Date().timeIntervalSince(startTime)
@@ -144,6 +150,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         // 5. Send conversation_initiation_client_data (sent once).
         onStartupStateChange(.sendingConversationInit)
         try await runPhase(
+            stage: .sendingConversationInit,
             timing: \.conversationInit, metrics: &metrics, startTime: startTime
         ) {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
@@ -345,6 +352,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// `ConversationError` (stamping `total`).
     @MainActor
     private func runPhase<T: Sendable>(
+        stage: ConversationStartupState,
         timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
         metrics: inout ConversationStartupMetrics,
         startTime: Date,
@@ -362,7 +370,11 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         } catch {
             metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
             metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
+            throw ConversationStartupError(
+                stage: stage,
+                metrics: metrics,
+                underlyingError: error as? ConversationError ?? .connectionFailed(error)
+            )
         }
     }
 

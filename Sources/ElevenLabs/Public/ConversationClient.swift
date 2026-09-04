@@ -53,10 +53,14 @@ public final class ConversationClient: ObservableObject {
         dependencyProvider = nil
     }
 
-    /// Test-only initializer that injects a dependency provider.
-    init(callbacks: ConversationCallbacks = .init(), dependencyProvider: any ConversationDependencyProvider) {
+    /// Creates a client with injectable transports for deterministic host tests.
+    public init(
+        callbacks: ConversationCallbacks = .init(),
+        dependencyProvider: any ConversationDependencyProvider,
+        logLevel: LogLevel = .warning
+    ) {
         self.callbacks = callbacks
-        logLevel = .warning
+        self.logLevel = logLevel
         self.dependencyProvider = dependencyProvider
     }
 
@@ -88,13 +92,15 @@ public final class ConversationClient: ObservableObject {
         config: ConversationConfig,
         start: (Conversation) async throws -> ConversationStartResult
     ) async throws -> ConversationStartResult {
+        try Task.checkCancellation()
         let previousConversation = session
         let conversation = Conversation(
             dependencyProvider: dependencyProvider ?? Dependencies(logLevel: logLevel, endpoints: config.endpoints),
             config: config,
             callbacks: callbacks,
             initialMicMuted: isMicMuted,
-            initialAgentMuted: isAgentMuted
+            initialAgentMuted: isAgentMuted,
+            logLevel: logLevel
         )
         bind(conversation)
 
@@ -231,6 +237,20 @@ public final class ConversationClient: ObservableObject {
     /// Send the result of a client tool call back to the agent.
     public func sendToolResult(_ result: ClientToolResultEvent) async throws {
         try await requireSession().sendToolResult(result)
+    }
+
+    /// Complete a client tool call if it still belongs to the current conversation.
+    public func complete(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async throws {
+        guard state.isConnected,
+              let conversationId = call.conversationId,
+              conversationId == conversationMetadata?.conversationId
+        else { return }
+
+        if call.expectsResponse {
+            try await sendToolResult(result)
+        } else {
+            markToolCallCompleted(call.toolCallId)
+        }
     }
 
     /// Mark a tool call as completed without sending a result. A best-effort

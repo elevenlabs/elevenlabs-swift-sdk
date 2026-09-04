@@ -5,7 +5,6 @@
 /// without touching the network or LiveKit.
 @MainActor
 final class TestDependencyProvider: ConversationDependencyProvider {
-    let logger: any Logging
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
@@ -15,6 +14,5 @@ final class TestDependencyProvider: ConversationDependencyProvider {
     ) {
         self.webRTCConnectionManager = webRTCConnectionManager ?? MockWebRTCConnectionManager()
         self.webSocketConnectionManager = webSocketConnectionManager ?? MockWebSocketConnectionManager()
-        logger = SDKLogger(logLevel: .error)
     }
 }

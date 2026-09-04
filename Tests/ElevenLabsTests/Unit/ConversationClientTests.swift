@@ -162,7 +162,10 @@ final class ConversationClientTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
+            XCTAssertEqual(
+                (error as? ConversationStartupError)?.underlyingError,
+                .authenticationFailed("Mock authentication failed")
+            )
         }
 
         guard case let .error(error) = client.state else {
@@ -182,6 +185,22 @@ final class ConversationClientTests: XCTestCase {
         assertConnected(agentId: "recovered-agent")
     }
 
+    func testPreCancelledStartDoesNotReplaceLiveSession() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "live-agent"))
+        let start = Task { @MainActor in
+            try await client.startTextOnlyConversation(.publicAgent(id: "cancelled-agent"))
+        }
+        start.cancel()
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await start.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        assertConnected(agentId: "live-agent")
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
+    }
+
     func testCommandThrowsNotConnectedWithNoSession() async throws {
         do {
             try await client.sendMessage("hello")
@@ -189,6 +208,56 @@ final class ConversationClientTests: XCTestCase {
         } catch let error as ConversationError {
             XCTAssertEqual(error, .notConnected)
         }
+    }
+
+    func testCompleteRoutesToolResultsAndIgnoresStaleCalls() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "test-conversation-id" }
+        var firstCall: ClientToolCallEvent?
+
+        for expectsResponse in [true, false] {
+            let event = ClientToolCallEvent(
+                toolName: "tool",
+                toolCallId: "\(expectsResponse)",
+                parametersData: Data("{}".utf8),
+                eventId: 1,
+                expectsResponse: expectsResponse
+            )
+            mockWebRTCConnectionManager.deliver(.clientToolCall(event))
+            await waitForPublished(client.$pendingToolCalls) { $0.contains { $0.toolCallId == event.toolCallId } }
+            let call = try XCTUnwrap(client.pendingToolCalls.last)
+            firstCall = firstCall ?? call
+            let payloadCount = mockWebRTCConnectionManager.publishedPayloads.count
+
+            try await client.complete(call, with: .init(toolCallId: call.toolCallId, result: "done"))
+
+            XCTAssertEqual(
+                mockWebRTCConnectionManager.publishedPayloads.count,
+                payloadCount + (expectsResponse ? 1 : 0)
+            )
+        }
+
+        mockWebRTCConnectionManager.initiationMetadataConversationId = "second-conversation"
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
+        await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "second-conversation" }
+        let payloadCount = mockWebRTCConnectionManager.publishedPayloads.count
+        let staleCall = try XCTUnwrap(firstCall)
+
+        try await client.complete(staleCall, with: .init(toolCallId: staleCall.toolCallId, result: "late"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount)
+
+        let endedCall = ClientToolCallEvent(
+            toolName: "tool",
+            toolCallId: "ended",
+            parametersData: Data(),
+            eventId: 2,
+            expectsResponse: true,
+            conversationId: "second-conversation"
+        )
+        await client.endConversation()
+        try await client.complete(endedCall, with: .init(toolCallId: endedCall.toolCallId, result: "late"))
+        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount)
     }
 
     func testSetMicMutedUpdatesStateWithNoSession() async throws {
