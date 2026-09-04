@@ -420,7 +420,9 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(startupError?.stage, .resolvingToken)
+            XCTAssertEqual(startupError?.underlyingError, .authenticationFailed("Mock authentication failed"))
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -439,7 +441,9 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(startupError?.stage, .connectingRoom)
+            XCTAssertEqual(startupError?.underlyingError, .connectionFailed("Mock connection failed"))
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -469,7 +473,12 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .agentTimeout)
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(
+                startupError?.stage,
+                .waitingForAgent(timeout: startupConfig.agentReadyTimeout)
+            )
+            XCTAssertEqual(startupError?.underlyingError, .agentTimeout)
         }
 
         guard case .error(.agentTimeout) = conversation.state else {
@@ -579,7 +588,14 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .initiationMetadataTimeout)
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(
+                startupError?.stage,
+                .waitingForInitiationMetadata(timeout: startupConfig.initiationMetadataTimeout)
+            )
+            XCTAssertEqual(startupError?.underlyingError, .initiationMetadataTimeout)
+            XCTAssertNotNil(startupError?.metrics.initiationMetadata)
+            XCTAssertNotNil(startupError?.metrics.total)
         }
 
         guard case .error(.initiationMetadataTimeout) = conversation.state else {
@@ -597,7 +613,9 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(startupError?.stage, .sendingConversationInit)
+            XCTAssertEqual(startupError?.underlyingError, .connectionFailed("Publish failed"))
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -756,6 +774,44 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationError.microphoneToggleFailed("test"), ConversationError.microphoneToggleFailed("test"))
 
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
+    }
+
+    func testConversationErrorPreservesUnderlyingNetworkError() {
+        let networkError = URLError(.notConnectedToInternet)
+
+        guard case let .connectionFailed(details) = ConversationError.connectionFailed(networkError) else {
+            return XCTFail("Expected connection failure")
+        }
+
+        XCTAssertEqual((details.underlyingError as? URLError)?.code, .notConnectedToInternet)
+        XCTAssertEqual(details.message, networkError.localizedDescription)
+
+        guard case let .authenticationFailed(authenticationDetails) =
+            ConversationError.authenticationFailed(networkError)
+        else {
+            return XCTFail("Expected authentication failure")
+        }
+        XCTAssertEqual(
+            (authenticationDetails.underlyingError as? URLError)?.code,
+            .notConnectedToInternet
+        )
+    }
+
+    func testMessageEqualityIncludesMutableDisplayState() {
+        let timestamp = Date()
+        let message = Message(
+            role: .agent,
+            content: "Hello",
+            timestamp: timestamp,
+            isFinal: false,
+            eventId: 1,
+            responseId: "response"
+        )
+        var updated = message
+        updated.content = "Hello there"
+
+        XCTAssertEqual(message, message)
+        XCTAssertNotEqual(message, updated)
     }
 
     func testConversationStateEnum() {

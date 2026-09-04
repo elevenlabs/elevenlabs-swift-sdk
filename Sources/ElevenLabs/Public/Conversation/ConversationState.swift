@@ -36,6 +36,11 @@ public enum ConversationState: Equatable, Sendable {
 public struct CallInfo: Equatable, Sendable {
     public let agentId: String
     public let conversationId: String
+
+    public init(agentId: String, conversationId: String) {
+        self.agentId = agentId
+        self.conversationId = conversationId
+    }
 }
 
 public enum EndReason: Equatable, Sendable {

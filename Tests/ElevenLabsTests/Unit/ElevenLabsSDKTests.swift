@@ -17,7 +17,7 @@ final class ElevenLabsSDKTests: XCTestCase {
             // In a proper test environment with mocks, we'd verify connection
         } catch {
             // Expected to fail without proper API setup
-            XCTAssertTrue(error is ConversationError)
+            XCTAssertTrue(error is ConversationStartupError)
         }
     }
 

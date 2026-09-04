@@ -35,6 +35,8 @@ final class Conversation: ObservableObject {
     private let config: ConversationConfig
     private let dependencyProvider: any ConversationDependencyProvider
     private var isTearingDown = false
+    private var teardownInProgress = false
+    private var teardownWaiters: [CheckedContinuation<Void, Never>] = []
     private nonisolated let logger: any Logging
 
     // Voice-related state
@@ -59,11 +61,11 @@ final class Conversation: ObservableObject {
 
     /// Internal LiveKit tracks used to attach ``ConversationAudioObserver``s.
     private var inputTrack: (any AudioTrackProtocol)? {
-        activeWebRTCConnectionManager?.inputTrack
+        (activeWebRTCConnectionManager as? any AudioTrackProviding)?.inputTrack
     }
 
     private var agentAudioTrack: (any AudioTrackProtocol)? {
-        activeWebRTCConnectionManager?.agentAudioTrack
+        (activeWebRTCConnectionManager as? any AudioTrackProviding)?.agentAudioTrack
     }
 
     private var speakingTimer: Task<Void, Never>?
@@ -75,14 +77,15 @@ final class Conversation: ObservableObject {
         config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init(),
         initialMicMuted: Bool = false,
-        initialAgentMuted: Bool = false
+        initialAgentMuted: Bool = false,
+        logLevel: LogLevel = .warning
     ) {
         self.dependencyProvider = dependencyProvider
         self.config = config
         self.callbacks = callbacks
         pendingMuteState = initialMicMuted
         isAgentMuted = initialAgentMuted
-        logger = dependencyProvider.logger
+        logger = SDKLogger(logLevel: logLevel)
     }
 
     // MARK: - API
@@ -91,7 +94,6 @@ final class Conversation: ObservableObject {
         let manager = dependencyProvider.webRTCConnectionManager
         return try await start(agentId: auth.agentId, isTextOnly: false, using: manager) { config in
             let audioManager = ConversationAudioManager(logger: logger)
-            self.audioManager = audioManager
 
             manager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
                 Task { @MainActor in
@@ -105,9 +107,10 @@ final class Conversation: ObservableObject {
             }
             await audioManager.configure(with: config, callbacks: callbacks)
             guard state.isConnecting else {
-                audioManager.cleanup()
+                await audioManager.cleanup()
                 throw CancellationError()
             }
+            self.audioManager = audioManager
             if let pendingMuteState {
                 audioManager.softwareMuteProcessor?.setMuted(pendingMuteState)
             }
@@ -182,9 +185,16 @@ final class Conversation: ObservableObject {
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
     func endConversation(reason: EndReason = .userEnded) async {
+        if teardownInProgress {
+            await withCheckedContinuation { teardownWaiters.append($0) }
+            return
+        }
+
         if state == .idle {
             state = .ended(reason: reason)
-            tearDownActiveSession()
+            teardownInProgress = true
+            await tearDownActiveSession()
+            finishTeardown()
             return
         }
 
@@ -192,9 +202,11 @@ final class Conversation: ObservableObject {
               let connectionManager = activeConnectionManager
         else { return }
         state = .ended(reason: reason)
+        teardownInProgress = true
 
-        tearDownActiveSession()
+        await tearDownActiveSession()
         await connectionManager.disconnect()
+        finishTeardown()
 
         callbacks.onDisconnect?(reason)
     }
@@ -331,19 +343,41 @@ final class Conversation: ObservableObject {
         do {
             let result = try await connect(startConfig)
             return try setConnected(result)
-        } catch let error as ConversationError {
-            await handleStartupFailure(error, disconnecting: manager)
+        } catch let error as ConversationStartupError {
+            if Task.isCancelled {
+                await handleStartupCancellation(disconnecting: manager)
+                throw CancellationError()
+            }
+            guard state.isConnecting else { throw CancellationError() }
+            await handleStartupFailure(error.underlyingError, disconnecting: manager)
             throw error
+        } catch let error as ConversationError {
+            guard state.isConnecting else { throw CancellationError() }
+            let startupError = ConversationStartupError(
+                stage: currentStartupStage,
+                metrics: .init(),
+                underlyingError: error
+            )
+            await handleStartupFailure(error, disconnecting: manager)
+            throw startupError
         } catch is CancellationError {
             await handleStartupCancellation(disconnecting: manager)
             throw CancellationError()
         } catch {
             if Task.isCancelled {
                 await handleStartupCancellation(disconnecting: manager)
+                throw CancellationError()
             } else {
-                await handleStartupFailure(.connectionFailed(error), disconnecting: manager)
+                guard state.isConnecting else { throw CancellationError() }
+                let conversationError = ConversationError.connectionFailed(error)
+                let startupError = ConversationStartupError(
+                    stage: currentStartupStage,
+                    metrics: .init(),
+                    underlyingError: conversationError
+                )
+                await handleStartupFailure(conversationError, disconnecting: manager)
+                throw startupError
             }
-            throw error
         }
     }
 
@@ -357,6 +391,11 @@ final class Conversation: ObservableObject {
     private func updateStartupStage(_ stage: ConversationStartupState) {
         guard state.isConnecting, state != .connecting(stage) else { return }
         state = .connecting(stage)
+    }
+
+    private var currentStartupStage: ConversationStartupState {
+        if case let .connecting(stage) = state { return stage }
+        return .preparing
     }
 
     private func setupAgentStateManager() {
@@ -403,7 +442,9 @@ final class Conversation: ObservableObject {
         _ error: ConversationError,
         disconnecting connectionManager: any ConnectionManaging
     ) async {
-        cleanupTransientResources()
+        guard state.isConnecting else { return }
+        await cleanupTransientResources()
+        guard state.isConnecting else { return }
         await connectionManager.disconnect()
 
         // End/supersede may have already moved us out of connecting; don't
@@ -414,23 +455,31 @@ final class Conversation: ObservableObject {
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
-        if state.isConnecting {
-            state = .ended(reason: .userEnded)
-            tearDownActiveSession()
-        }
+        guard state.isConnecting else { return }
+        state = .ended(reason: .userEnded)
+        teardownInProgress = true
+        await tearDownActiveSession()
         await connectionManager.disconnect()
+        finishTeardown()
     }
 
     /// Tear down operational state when an active session ends.
     /// Preserves user-visible display state (history, MCP activity, conversation
     /// metadata) so `ConversationClient` can keep the completed transcript visible.
-    private func tearDownActiveSession() {
-        cleanupTransientResources()
+    private func tearDownActiveSession() async {
+        await cleanupTransientResources()
 
         pendingToolCalls.removeAll()
     }
 
-    private func cleanupTransientResources() {
+    private func finishTeardown() {
+        teardownInProgress = false
+        let waiters = teardownWaiters
+        teardownWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+
+    private func cleanupTransientResources() async {
         isTearingDown = true
         speakingTimer?.cancel()
         speakingTimer = nil
@@ -440,7 +489,8 @@ final class Conversation: ObservableObject {
         agentObserverRegistry.reset()
         micObserverRegistry.reset()
 
-        audioManager?.cleanup()
+        await audioManager?.cleanup()
+        audioManager = nil
         agentStateManager = nil
     }
 
@@ -514,7 +564,8 @@ final class Conversation: ObservableObject {
             let pong = OutgoingEvent.pong(PongEvent(eventId: p.eventId))
             try? await publish(pong)
 
-        case let .clientToolCall(toolCall):
+        case let .clientToolCall(event):
+            let toolCall = event.scoped(to: conversationMetadata?.conversationId ?? event.conversationId)
             callbacks.onClientToolCall?(toolCall)
             pendingToolCalls.append(toolCall)
 

@@ -43,7 +43,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             lastConnectedURL = resolved.url
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
+            throw error as? ConversationError ?? .authenticationFailed(error)
         }
 
         if let connectError {

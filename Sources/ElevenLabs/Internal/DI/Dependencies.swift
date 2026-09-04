@@ -1,8 +1,7 @@
 import Foundation
 
 @MainActor
-protocol ConversationDependencyProvider: AnyObject {
-    var logger: any Logging { get }
+public protocol ConversationDependencyProvider: AnyObject {
     var webRTCConnectionManager: any WebRTCConnectionManaging { get }
     var webSocketConnectionManager: any WebSocketConnectionManaging { get }
 }
@@ -10,13 +9,11 @@ protocol ConversationDependencyProvider: AnyObject {
 /// A minimalistic dependency container for internal SDK use.
 @MainActor
 final class Dependencies: ConversationDependencyProvider {
-    let logger: any Logging
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
     init(logLevel: LogLevel = .warning, endpoints: Endpoints = .production) {
         let logger = SDKLogger(logLevel: logLevel)
-        self.logger = logger
         webRTCConnectionManager = WebRTCConnectionManager(
             logger: logger,
             tokenService: TokenService(endpoints: endpoints),

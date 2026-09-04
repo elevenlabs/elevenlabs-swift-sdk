@@ -61,7 +61,7 @@ struct TokenService: Sendable {
         } catch let error as ConversationError {
             throw error
         } catch let error as TokenError {
-            throw ConversationError.authenticationFailed(error.localizedDescription)
+            throw ConversationError.authenticationFailed(error)
         } catch {
             throw ConversationError.connectionFailed(error)
         }

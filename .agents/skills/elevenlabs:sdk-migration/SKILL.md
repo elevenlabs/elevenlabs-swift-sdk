@@ -71,6 +71,7 @@ When migrating:
 
 - Replace optional `Conversation?` storage with a non-optional `ConversationClient` created up front. Calls like `sendMessage` throw `ConversationError.notConnected` instead of needing nil-checks.
 - The start methods return a `ConversationStartResult` (call info + startup timing metrics). Discard it with `_ =` unless the app used v3's `startupMetrics`.
+- Startup failures throw `ConversationStartupError`, which carries the failed `stage`, partial `metrics`, and underlying `ConversationError`.
 - Starting while a previous conversation is live ends it first — the latest start wins. Remove any manual "end before restart" logic.
 - Credentials stay backend-minted: conversation tokens (voice) and signed WebSocket URLs (text-only) must come from the user's backend. Never embed an ElevenLabs API key in the app.
 - v3's `ConversationConfig` still exists in v4 for overrides (agent/TTS/dynamic variables/timeouts) and is passed to the start call: `startVoiceConversation(auth, config: config)`.
@@ -185,6 +186,12 @@ client.setAgentMuted(true)      // new: silence the agent without ending the cal
 
 > **Behavioral note:** v3's `isMuted` reported `true` until connected; v4's `isMicMuted` starts `false`. UI that showed a "muted" indicator based on the initial value will render differently — verify the intended default with the user if it matters.
 
+For hosts that manage their own `AVAudioSession`, `AudioPipelineConfiguration.recordingAlwaysPrepared` defaults to `true` while a voice conversation is active and is disabled when the conversation ends. Set it to `false` if the host does not want the SDK to keep the recording engine warm during the conversation:
+
+```swift
+config.audioConfiguration = AudioPipelineConfiguration(recordingAlwaysPrepared: false)
+```
+
 `sendToolResult` takes a `ClientToolResultEvent` instead of loose parameters:
 
 **Before:**
@@ -197,13 +204,28 @@ try await conversation.sendToolResult(for: call.toolCallId, result: ["error": ms
 **After:**
 
 ```swift
-try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: result))
-try await client.sendToolResult(
-    .init(toolCallId: call.toolCallId, result: "Something went wrong", isError: true)
+let event = ClientToolResultEvent(toolCallId: call.toolCallId, result: result)
+try await client.complete(call, with: event)
+
+let failure = ClientToolResultEvent(
+    toolCallId: call.toolCallId,
+    result: "Something went wrong",
+    isError: true
 )
+try await client.complete(call, with: failure)
 ```
 
-`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
+`complete(_:with:)` ignores results from an earlier conversation, sends the result when `call.expectsResponse` is `true`, and otherwise removes the call locally with `markToolCallCompleted`. Hosts using the lower-level APIs must make the same distinction:
+
+```swift
+if call.expectsResponse {
+    try await client.sendToolResult(event)
+} else {
+    client.markToolCallCompleted(call.toolCallId)
+}
+```
+
+`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, and `sendMCPToolApproval` are unchanged apart from living on the client.
 
 ## Replace LiveKit track access with audio observers
 
@@ -288,7 +310,7 @@ Because every v3 conversation was a fresh object, apps accumulated plumbing that
 - **Reconnect scaffolding.** Reconnecting is calling start again on the same client; view models or factories that rebuild the conversation object and re-attach observers after a drop can go.
 - **Double-start guards.** v3 threw `alreadyStarted` on reuse, so apps guard against it or end manually before restarting. In v4 the latest start wins and ends the previous session itself.
 - **Mute restoration.** Code that re-applies a saved mute state after each start is redundant — `isMicMuted` and `isAgentMuted` carry across conversations on the same client.
-- **Leave-during-connect workarounds.** v4 tears startup down cleanly at any stage: cancel the `Task` running the start, or call `endConversation()` while connecting. Delete flags or deferred-teardown code that waited for the connection to finish before ending it.
+- **Leave-during-connect workarounds.** v4 tears startup down cleanly at any stage: cancel the `Task` running the start, or call `endConversation()` while connecting. A start checks cancellation before binding its session, so an already-cancelled task cannot displace a live conversation. Delete flags or deferred-teardown code that waited for the connection to finish before ending it.
 - **Custom transcript reconciliation.** If the app merges, dedupes, or filters streaming agent messages before display, delete that — `chatHistory` updates messages in place (keyed by response ID) and marks completion with `isFinal`.
 
 ## Adopt the drop-in widget (optional)

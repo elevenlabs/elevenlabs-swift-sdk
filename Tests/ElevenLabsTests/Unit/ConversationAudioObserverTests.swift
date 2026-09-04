@@ -101,7 +101,8 @@ final class ConversationAudioObserverTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .agentTimeout)
+            let startupError = error as? ConversationStartupError
+            XCTAssertEqual(startupError?.underlyingError, .agentTimeout)
         }
 
         XCTAssertEqual(lateObserver.receivedBufferCount, 0)

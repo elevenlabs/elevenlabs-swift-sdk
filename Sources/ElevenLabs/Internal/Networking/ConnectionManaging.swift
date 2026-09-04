@@ -6,17 +6,16 @@ enum ConnectionManagerError: Error {
 }
 
 @MainActor
-protocol ConnectionManaging: AnyObject {
+public protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
     var onDisconnected: (() async -> Void)? { get set }
-    var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
     func disconnect() async
     func send(data: Data) async throws
 }
 
 @MainActor
-protocol WebSocketConnectionManaging: ConnectionManaging {
+public protocol WebSocketConnectionManaging: ConnectionManaging {
     func connect(
         auth: ConversationAuth.TextOnly,
         config: ConversationConfig,
@@ -25,7 +24,7 @@ protocol WebSocketConnectionManaging: ConnectionManaging {
 }
 
 @MainActor
-protocol WebRTCConnectionManaging: ConnectionManaging {
+public protocol WebRTCConnectionManaging: ConnectionManaging {
     func connect(
         auth: ConversationAuth.Voice,
         config: ConversationConfig,
@@ -35,13 +34,16 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     /// Fired when an audio track is published/subscribed/unpublished/unsubscribed.
     var onTracksChanged: (@Sendable () -> Void)? { get set }
-    var inputTrack: (any AudioTrackProtocol)? { get }
-    var agentAudioTrack: (any AudioTrackProtocol)? { get }
-    var isMicrophoneMuted: Bool { get }
 
     func setMicrophoneMuted(_ muted: Bool) async throws
 
     func setAgentMuted(_ muted: Bool)
+}
+
+@MainActor
+protocol AudioTrackProviding {
+    var inputTrack: (any AudioTrackProtocol)? { get }
+    var agentAudioTrack: (any AudioTrackProtocol)? { get }
 }
 
 extension ConnectionManaging {
@@ -90,9 +92,21 @@ extension ConnectionManaging {
         onStartupStateChange(.waitingForInitiationMetadata(timeout: timeout))
 
         let waitStart = Date()
-        let metadata = try await metadataWaiter.wait()
-        metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
-        metrics.total = Date().timeIntervalSince(startTime)
-        return metadata
+        do {
+            let metadata = try await metadataWaiter.wait()
+            metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            return metadata
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
+            metrics.total = Date().timeIntervalSince(startTime)
+            throw ConversationStartupError(
+                stage: .waitingForInitiationMetadata(timeout: timeout),
+                metrics: metrics,
+                underlyingError: error as? ConversationError ?? .connectionFailed(error)
+            )
+        }
     }
 }

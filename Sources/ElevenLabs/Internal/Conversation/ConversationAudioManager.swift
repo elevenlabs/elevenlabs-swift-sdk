@@ -4,6 +4,73 @@ import Foundation
 import LiveKit
 #endif
 
+@MainActor
+final class RecordingPreparationCoordinator {
+    static let shared = RecordingPreparationCoordinator()
+
+    private var warmSessionCount = 0
+    private var appliedMode: Bool?
+    private var isApplying = false
+    private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func configure(
+        _ prepared: Bool,
+        apply: @MainActor (Bool) async throws -> Void
+    ) async throws {
+        if prepared {
+            warmSessionCount += 1
+            do {
+                try await reconcile(apply: apply)
+            } catch {
+                warmSessionCount -= 1
+                throw error
+            }
+        } else {
+            try await reconcile(apply: apply)
+        }
+    }
+
+    func cleanup(
+        _ prepared: Bool?,
+        apply: @MainActor (Bool) async throws -> Void
+    ) async throws {
+        guard prepared == true, warmSessionCount > 0 else { return }
+        warmSessionCount -= 1
+        try await reconcile(apply: apply)
+    }
+
+    private func reconcile(
+        apply: @MainActor (Bool) async throws -> Void
+    ) async throws {
+        while true {
+            if isApplying {
+                await withCheckedContinuation { transitionWaiters.append($0) }
+                continue
+            }
+
+            let desiredMode = warmSessionCount > 0
+            guard appliedMode != desiredMode else { return }
+
+            isApplying = true
+            do {
+                try await apply(desiredMode)
+                appliedMode = desiredMode
+                finishTransition()
+            } catch {
+                finishTransition()
+                throw error
+            }
+        }
+    }
+
+    private func finishTransition() {
+        isApplying = false
+        let waiters = transitionWaiters
+        transitionWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+}
+
 /// Manages audio device configuration and speech activity handling for conversations.
 /// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
 @MainActor
@@ -13,10 +80,20 @@ final class ConversationAudioManager {
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
+    private let setRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void
+    private let recordingPreparationCoordinator: RecordingPreparationCoordinator
+    private var recordingAlwaysPrepared: Bool?
 
-    init(logger: any Logging) {
+    init(
+        logger: any Logging,
+        recordingPreparationCoordinator: RecordingPreparationCoordinator = .shared,
+        setRecordingAlwaysPreparedMode: @escaping @MainActor (Bool) async throws -> Void = {
+            try await AudioManager.shared.setRecordingAlwaysPreparedMode($0)
+        }
+    ) {
         self.logger = logger
-        setupInitialConfiguration()
+        self.recordingPreparationCoordinator = recordingPreparationCoordinator
+        self.setRecordingAlwaysPreparedMode = setRecordingAlwaysPreparedMode
     }
 
     deinit {
@@ -29,8 +106,8 @@ final class ConversationAudioManager {
 
     /// Apply audio pipeline configuration from conversation config.
     func configure(with config: ConversationConfig, callbacks: ConversationCallbacks) async {
-        let audioConfig = config.audioConfiguration
-        let muteMode = audioConfig?.microphoneMuteMode ?? .inputMixer
+        let audioConfig = config.audioConfiguration ?? .default
+        let muteMode = audioConfig.microphoneMuteMode ?? .inputMixer
 
         do {
             try AudioManager.shared.set(microphoneMuteMode: muteMode.toLiveKit())
@@ -38,17 +115,21 @@ final class ConversationAudioManager {
             logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
         }
 
-        if let bypass = audioConfig?.voiceProcessingBypassed {
+        if let bypass = audioConfig.voiceProcessingBypassed {
             AudioManager.shared.isVoiceProcessingBypassed = bypass
         }
 
-        if let agc = audioConfig?.voiceProcessingAGCEnabled {
+        if let agc = audioConfig.voiceProcessingAGCEnabled {
             AudioManager.shared.isVoiceProcessingAGCEnabled = agc
         }
 
-        if let prepared = audioConfig?.recordingAlwaysPrepared {
+        if let prepared = audioConfig.recordingAlwaysPrepared {
             do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(prepared)
+                try await recordingPreparationCoordinator.configure(
+                    prepared,
+                    apply: setRecordingAlwaysPreparedMode
+                )
+                recordingAlwaysPrepared = prepared
             } catch {
                 logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
             }
@@ -59,31 +140,22 @@ final class ConversationAudioManager {
     }
 
     /// Cleanup audio state when conversation ends.
-    func cleanup() {
+    func cleanup() async {
         cleanupSpeechHandler()
         cleanupSoftwareMuteProcessor()
+        let recordingAlwaysPrepared = recordingAlwaysPrepared
+        self.recordingAlwaysPrepared = nil
+        do {
+            try await recordingPreparationCoordinator.cleanup(
+                recordingAlwaysPrepared,
+                apply: setRecordingAlwaysPreparedMode
+            )
+        } catch {
+            logger.warning("Failed to disable recording always prepared mode", context: ["error": "\(error)"])
+        }
     }
 
     // MARK: - Private
-
-    private func setupInitialConfiguration() {
-        // Set initial microphone mute mode
-        do {
-            try AudioManager.shared.set(microphoneMuteMode: LiveKit.MicrophoneMuteMode.inputMixer)
-        } catch {
-            logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
-        }
-
-        // Set recording always prepared mode asynchronously
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-    }
 
     private func configureSpeechHandler(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
         if muteMode == .voiceProcessing, let onSpeechDetectedWhileMuted = callbacks.onSpeechDetectedWhileMuted {

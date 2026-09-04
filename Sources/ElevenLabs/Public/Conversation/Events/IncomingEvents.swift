@@ -93,6 +93,16 @@ public struct ConversationMetadataEvent: Sendable {
     public let conversationId: String
     public let agentOutputAudioFormat: String
     public let userInputAudioFormat: String
+
+    public init(
+        conversationId: String,
+        agentOutputAudioFormat: String,
+        userInputAudioFormat: String
+    ) {
+        self.conversationId = conversationId
+        self.agentOutputAudioFormat = agentOutputAudioFormat
+        self.userInputAudioFormat = userInputAudioFormat
+    }
 }
 
 /// VAD score
@@ -113,24 +123,38 @@ public struct ClientToolCallEvent: Sendable {
     public let parametersData: Data // Store as JSON data to be Sendable
     public let eventId: Int
     public let expectsResponse: Bool
+    public let conversationId: String?
 
     public init(
         toolName: String,
         toolCallId: String,
         parametersData: Data,
         eventId: Int,
-        expectsResponse: Bool
+        expectsResponse: Bool,
+        conversationId: String? = nil
     ) {
         self.toolName = toolName
         self.toolCallId = toolCallId
         self.parametersData = parametersData
         self.eventId = eventId
         self.expectsResponse = expectsResponse
+        self.conversationId = conversationId
     }
 
     /// Get parameters as dictionary (not Sendable, use carefully)
     public func getParameters() throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: parametersData) as? [String: Any] ?? [:]
+    }
+
+    func scoped(to conversationId: String?) -> Self {
+        Self(
+            toolName: toolName,
+            toolCallId: toolCallId,
+            parametersData: parametersData,
+            eventId: eventId,
+            expectsResponse: expectsResponse,
+            conversationId: conversationId
+        )
     }
 }
 

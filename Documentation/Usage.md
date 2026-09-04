@@ -301,13 +301,15 @@ final class ConversationViewModel: ObservableObject {
                 result = "Unknown tool: \(toolCall.toolName)"
             }
 
-            try await client.sendToolResult(
-                .init(toolCallId: toolCall.toolCallId, result: result)
+            try await client.complete(
+                toolCall,
+                with: .init(toolCallId: toolCall.toolCallId, result: result)
             )
         } catch {
             print("Tool execution failed: \(error)")
-            try? await client.sendToolResult(
-                .init(
+            try? await client.complete(
+                toolCall,
+                with: .init(
                     toolCallId: toolCall.toolCallId,
                     result: "Error: \(error.localizedDescription)",
                     isError: true
