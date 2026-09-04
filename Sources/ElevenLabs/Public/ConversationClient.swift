@@ -40,7 +40,6 @@ public final class ConversationClient: ObservableObject {
 
     /// The current single-use session. Internal plumbing — never exposed.
     private var session: Conversation?
-    private var startGeneration = 0
     /// Subscriptions mirroring the active session's state; reset on each start.
     private var cancellables = Set<AnyCancellable>()
 
@@ -94,13 +93,7 @@ public final class ConversationClient: ObservableObject {
         start: (Conversation) async throws -> ConversationStartResult
     ) async throws -> ConversationStartResult {
         try Task.checkCancellation()
-        startGeneration += 1
-        let generation = startGeneration
         let previousConversation = session
-        await previousConversation?.endConversation()
-        guard generation == startGeneration else { throw CancellationError() }
-        try Task.checkCancellation()
-
         let conversation = Conversation(
             dependencyProvider: dependencyProvider ?? Dependencies(logLevel: logLevel, endpoints: config.endpoints),
             config: config,
@@ -111,20 +104,19 @@ public final class ConversationClient: ObservableObject {
         )
         bind(conversation)
 
+        await previousConversation?.endConversation()
         return try await start(conversation)
     }
 
     /// End the current conversation, if any. Mirrored state (history, etc.) is kept
     /// so the UI can still show the last session until `reset()` or a new start.
     public func endConversation() async {
-        startGeneration += 1
         await session?.endConversation()
     }
 
     /// End any live session and clear all mirrored state back to idle defaults.
     /// Use this when dismissing a screen or starting over with a blank client.
     public func reset() async {
-        startGeneration += 1
         await session?.endConversation()
         cancellables.removeAll()
         session = nil
@@ -249,21 +241,13 @@ public final class ConversationClient: ObservableObject {
 
     /// Complete a client tool call if it still belongs to the current conversation.
     public func complete(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async throws {
-        guard case let .connected(callInfo) = state,
+        guard state.isConnected,
               let conversationId = call.conversationId,
-              conversationId == callInfo.conversationId,
-              pendingToolCalls.contains(where: {
-                  $0.toolCallId == call.toolCallId && $0.conversationId == conversationId
-              })
+              conversationId == conversationMetadata?.conversationId
         else { return }
 
         if call.expectsResponse {
-            try await sendToolResult(.init(
-                toolCallId: call.toolCallId,
-                result: result.result,
-                isError: result.isError,
-                errorType: result.errorType
-            ))
+            try await sendToolResult(result)
         } else {
             markToolCallCompleted(call.toolCallId)
         }

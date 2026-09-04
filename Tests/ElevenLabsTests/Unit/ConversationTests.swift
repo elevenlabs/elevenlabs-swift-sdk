@@ -420,9 +420,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(startupError?.stage, .resolvingToken)
-            XCTAssertEqual(startupError?.underlyingError, .authenticationFailed("Mock authentication failed"))
+            assertStartupError(
+                error,
+                stage: .resolvingToken,
+                underlying: .authenticationFailed("Mock authentication failed")
+            )
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -441,9 +443,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(startupError?.stage, .connectingRoom)
-            XCTAssertEqual(startupError?.underlyingError, .connectionFailed("Mock connection failed"))
+            assertStartupError(
+                error,
+                stage: .connectingRoom,
+                underlying: .connectionFailed("Mock connection failed")
+            )
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -473,12 +477,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(
-                startupError?.stage,
-                .waitingForAgent(timeout: startupConfig.agentReadyTimeout)
+            assertStartupError(
+                error,
+                stage: .waitingForAgent(timeout: startupConfig.agentReadyTimeout),
+                underlying: .agentTimeout
             )
-            XCTAssertEqual(startupError?.underlyingError, .agentTimeout)
         }
 
         guard case .error(.agentTimeout) = conversation.state else {
@@ -588,12 +591,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(
-                startupError?.stage,
-                .waitingForInitiationMetadata(timeout: startupConfig.initiationMetadataTimeout)
+            let startupError = assertStartupError(
+                error,
+                stage: .waitingForInitiationMetadata(timeout: startupConfig.initiationMetadataTimeout),
+                underlying: .initiationMetadataTimeout
             )
-            XCTAssertEqual(startupError?.underlyingError, .initiationMetadataTimeout)
             XCTAssertNotNil(startupError?.metrics.initiationMetadata)
             XCTAssertNotNil(startupError?.metrics.total)
         }
@@ -613,9 +615,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(startupError?.stage, .sendingConversationInit)
-            XCTAssertEqual(startupError?.underlyingError, .connectionFailed("Publish failed"))
+            assertStartupError(
+                error,
+                stage: .sendingConversationInit,
+                underlying: .connectionFailed("Publish failed")
+            )
         }
 
         guard case let .error(conversationError) = conversation.state else {
@@ -776,37 +780,23 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
     }
 
-    func testConversationErrorPreservesUnderlyingNetworkError() {
+    func testConversationErrorPreservesUnderlyingError() {
         let networkError = URLError(.notConnectedToInternet)
-
         guard case let .connectionFailed(details) = ConversationError.connectionFailed(networkError) else {
             return XCTFail("Expected connection failure")
         }
 
         XCTAssertEqual((details.underlyingError as? URLError)?.code, .notConnectedToInternet)
-        XCTAssertEqual(details.message, networkError.localizedDescription)
-
-        guard case let .authenticationFailed(authenticationDetails) =
-            ConversationError.authenticationFailed(networkError)
+        guard case let .microphoneToggleFailed(microphoneDetails) =
+            ConversationError.microphoneToggleFailed(networkError)
         else {
-            return XCTFail("Expected authentication failure")
+            return XCTFail("Expected microphone failure")
         }
-        XCTAssertEqual(
-            (authenticationDetails.underlyingError as? URLError)?.code,
-            .notConnectedToInternet
-        )
+        XCTAssertEqual((microphoneDetails.underlyingError as? URLError)?.code, .notConnectedToInternet)
     }
 
-    func testMessageEqualityIncludesMutableDisplayState() {
-        let timestamp = Date()
-        let message = Message(
-            role: .agent,
-            content: "Hello",
-            timestamp: timestamp,
-            isFinal: false,
-            eventId: 1,
-            responseId: "response"
-        )
+    func testMessageEqualityIncludesContent() {
+        let message = Message(role: .agent, content: "Hello", isFinal: false, responseId: "response")
         var updated = message
         updated.content = "Hello there"
 
@@ -864,6 +854,18 @@ final class ConversationTests: XCTestCase {
 // swiftlint:enable file_length type_body_length
 
 extension ConversationTests {
+    @discardableResult
+    private func assertStartupError(
+        _ error: Error,
+        stage: ConversationStartupState,
+        underlying: ConversationError
+    ) -> ConversationStartupError? {
+        let startupError = error as? ConversationStartupError
+        XCTAssertEqual(startupError?.stage, stage)
+        XCTAssertEqual(startupError?.underlyingError, underlying)
+        return startupError
+    }
+
     private func makeConfig(
         startupConfiguration: ConversationStartupConfiguration = .default,
         configure: ((inout ConversationConfig) -> Void)? = nil

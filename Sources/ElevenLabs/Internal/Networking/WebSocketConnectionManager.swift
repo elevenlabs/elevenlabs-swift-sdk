@@ -22,10 +22,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
-    private var startupGeneration = 0
-    private var activeStartupGeneration: Int?
-    private var connectionGeneration: Int?
-    private var startupDisconnectErrors: [Int: ConversationError] = [:]
 
     init(logger: any Logging, endpoints: Endpoints = .production) {
         self.logger = logger
@@ -43,16 +39,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
-        startupGeneration += 1
-        let generation = startupGeneration
-        activeStartupGeneration = generation
-        connectionGeneration = generation
-        defer {
-            if activeStartupGeneration == generation {
-                activeStartupGeneration = nil
-            }
-            startupDisconnectErrors[generation] = nil
-        }
         await initiationMetadataWaiter?.cancel()
         let waiter = ConversationInitiationMetadataWaiter(
             timeout: config.startupConfiguration.initiationMetadataTimeout
@@ -78,7 +64,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 underlyingError: error as? ConversationError ?? .authenticationFailed(error)
             )
         }
-        guard activeStartupGeneration == generation else { throw CancellationError() }
         let url = resolved.url
 
         let task = urlSession.webSocketTask(with: url)
@@ -106,10 +91,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 underlyingError: error as? ConversationError ?? .connectionFailed(error)
             )
         }
-        guard self.task === task, connectionGeneration == generation else {
-            tearDownTask(task)
-            throw CancellationError()
-        }
 
         // Socket is up and the init message is sent. Start consuming responses.
         let logger = logger
@@ -120,10 +101,10 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 metadataWaiter: waiter,
                 logger: logger,
                 onEvent: { [weak self] event in
-                    self?.deliver(event, from: task, generation: generation)
+                    self?.deliver(event)
                 },
                 onFailure: { [weak self] error in
-                    await self?.handleReceiveFailure(error, from: task, generation: generation)
+                    await self?.handleReceiveFailure(error)
                 }
             )
         }
@@ -135,15 +116,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             metadataWaiter: waiter,
             onStartupStateChange: onStartupStateChange
         )
-        if let startupDisconnectError = startupDisconnectErrors[generation] {
-            throw ConversationStartupError(
-                stage: .waitingForInitiationMetadata(
-                    timeout: config.startupConfiguration.initiationMetadataTimeout
-                ),
-                metrics: metrics,
-                underlyingError: startupDisconnectError
-            )
-        }
         return ConversationStartResult(
             callInfo: CallInfo(agentId: resolved.agentId, conversationId: metadata.conversationId),
             metrics: metrics
@@ -158,8 +130,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     }
 
     func disconnect() async {
-        activeStartupGeneration = nil
-        connectionGeneration = nil
         onEventReceived = nil
         onDisconnected = nil
         errorHandler = nil
@@ -176,7 +146,6 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         task.cancel(with: .normalClosure, reason: nil)
         if self.task === task {
             self.task = nil
-            connectionGeneration = nil
         }
     }
 
@@ -211,30 +180,13 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    private func deliver(
-        _ event: IncomingEvent,
-        from task: URLSessionWebSocketTask,
-        generation: Int
-    ) {
-        guard self.task === task, connectionGeneration == generation else { return }
+    private func deliver(_ event: IncomingEvent) {
         onEventReceived?(event)
     }
 
-    private func handleReceiveFailure(
-        _ error: Error,
-        from task: URLSessionWebSocketTask,
-        generation: Int
-    ) async {
-        guard self.task === task, connectionGeneration == generation else { return }
-        self.task = nil
-        connectionGeneration = nil
+    private func handleReceiveFailure(_ error: Error) async {
+        task = nil
         errorHandler?(error)
-        if activeStartupGeneration == generation {
-            let startupError = ConversationError.connectionFailed(error)
-            startupDisconnectErrors[generation] = startupError
-            await initiationMetadataWaiter?.fail(startupError)
-            return
-        }
         await onDisconnected?()
     }
 

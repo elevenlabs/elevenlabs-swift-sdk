@@ -64,10 +64,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
     private var readinessDelegate: LiveKitReadinessDelegate?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
     private var dataTask: Task<Void, Never>?
-    private var startupGeneration = 0
-    private var activeStartupGeneration: Int?
-    private var startupDisconnectErrors: [Int: ConversationError] = [:]
-    private var connectionGeneration: Int?
 
     private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
@@ -91,16 +87,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
     ) async throws -> ConversationStartResult {
-        startupGeneration += 1
-        let generation = startupGeneration
-        activeStartupGeneration = generation
-        connectionGeneration = generation
-        defer {
-            if activeStartupGeneration == generation {
-                activeStartupGeneration = nil
-            }
-            startupDisconnectErrors[generation] = nil
-        }
         await initiationMetadataWaiter?.cancel()
         let waiter = ConversationInitiationMetadataWaiter(
             timeout: config.startupConfiguration.initiationMetadataTimeout
@@ -118,12 +104,10 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         ) {
             try await tokenService.fetchToken(for: auth, environment: config.environment)
         }
-        guard activeStartupGeneration == generation else { throw CancellationError() }
 
         // 2. Request microphone permission (denial doesn't block startup).
         let permissionGranted = await requestMicrophonePermission()
         try Task.checkCancellation()
-        guard activeStartupGeneration == generation else { throw CancellationError() }
 
         // 3. Connect the LiveKit room.
         onStartupStateChange(.connectingRoom)
@@ -137,8 +121,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
                 enableMic: permissionGranted,
                 throwOnMicrophoneFailure: throwOnMicFailure,
                 networkConfiguration: config.networkConfiguration,
-                metadataWaiter: waiter,
-                generation: generation
+                metadataWaiter: waiter
             )
         }
 
@@ -161,16 +144,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         case let .cancelled(elapsed):
             metrics.agentReady = elapsed
             metrics.total = Date().timeIntervalSince(startTime)
-            if let startupDisconnectError = startupDisconnectErrors[generation] {
-                throw ConversationStartupError(
-                    stage: .waitingForAgent(timeout: agentTimeout),
-                    metrics: metrics,
-                    underlyingError: startupDisconnectError
-                )
-            }
             throw CancellationError()
         }
-        guard activeStartupGeneration == generation else { throw CancellationError() }
 
         // 5. Send conversation_initiation_client_data (sent once).
         onStartupStateChange(.sendingConversationInit)
@@ -180,7 +155,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         ) {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
-        guard activeStartupGeneration == generation else { throw CancellationError() }
 
         let metadata = try await waitForInitiationMetadata(
             config: config,
@@ -189,15 +163,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
             metadataWaiter: waiter,
             onStartupStateChange: onStartupStateChange
         )
-        if let startupDisconnectError = startupDisconnectErrors[generation] {
-            throw ConversationStartupError(
-                stage: .waitingForInitiationMetadata(
-                    timeout: config.startupConfiguration.initiationMetadataTimeout
-                ),
-                metrics: metrics,
-                underlyingError: startupDisconnectError
-            )
-        }
         return ConversationStartResult(
             callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
             metrics: metrics
@@ -224,12 +189,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
                 }
             }
             group.addTask {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                    return .timedOut(elapsed: Date().timeIntervalSince(start))
-                } catch {
-                    return .cancelled(elapsed: Date().timeIntervalSince(start))
-                }
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return .timedOut(elapsed: Date().timeIntervalSince(start))
             }
             let first = await group.next()!
             if case .timedOut = first {
@@ -281,10 +242,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool,
         networkConfiguration: WebRTCConfiguration,
-        metadataWaiter: ConversationInitiationMetadataWaiter,
-        generation: Int
+        metadataWaiter: ConversationInitiationMetadataWaiter
     ) async throws {
-        guard connectionGeneration == generation else { throw CancellationError() }
         dataTask?.cancel()
         readinessDelegate?.release()
 
@@ -297,18 +256,14 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
             onData: { dataContinuation.yield($0) },
             onRemoteSpeaking: { [weak self] isSpeaking in
                 Task { @MainActor [weak self] in
-                    guard self?.connectionGeneration == generation else { return }
                     self?.onRemoteSpeakingChanged?(isSpeaking)
                 }
             },
             onRemoteDisconnect: { [weak self] in
-                await self?.handleRemoteDisconnect(generation: generation)
+                await self?.handleRemoteDisconnect()
             },
             onTracksChanged: { [weak self] in
-                Task { @MainActor in
-                    guard self?.connectionGeneration == generation else { return }
-                    self?.onTracksChanged?()
-                }
+                Task { @MainActor in self?.onTracksChanged?() }
             }
         )
         self.eventDelegate = eventDelegate
@@ -320,7 +275,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
                     metadataWaiter: metadataWaiter,
                     logger: logger,
                     onEvent: { [weak self] event in
-                        guard self?.connectionGeneration == generation else { return }
                         self?.onEventReceived?(event)
                     }
                 )
@@ -345,16 +299,11 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
             )
             logger.info("LiveKit room.connect completed", context: ["duration": "\(Date().timeIntervalSince(connectStart))"])
         } catch {
-            guard connectionGeneration == generation else { throw CancellationError() }
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
             errorHandler?(error)
             throw error
         }
 
-        guard connectionGeneration == generation else {
-            await room.disconnect()
-            throw CancellationError()
-        }
         if enableMic {
             do {
                 try await room.localParticipant.setMicrophone(enabled: true)
@@ -374,8 +323,6 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
 
     /// Disconnect and tear down.
     func disconnect() async {
-        activeStartupGeneration = nil
-        connectionGeneration = nil
         onEventReceived = nil
         onDisconnected = nil
         errorHandler = nil
@@ -394,22 +341,15 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging, AudioTrackProvidi
         eventDelegate = nil
     }
 
-    private func handleRemoteDisconnect(generation: Int) async {
-        guard connectionGeneration == generation, let onDisconnected else { return }
-        if activeStartupGeneration == generation {
-            let error = ConversationError.connectionFailed("Remote disconnected during startup.")
-            startupDisconnectErrors[generation] = error
-            readinessDelegate?.release()
-            await initiationMetadataWaiter?.fail(error)
-            return
-        }
-        await onDisconnected()
+    private func handleRemoteDisconnect() async {
+        await onDisconnected?()
     }
 
     // MARK: – Private helpers
 
     /// Run one timed startup phase: record its duration into `metrics[keyPath:]`,
-    /// let cancellation propagate, and attach phase context to other errors.
+    /// let `CancellationError` propagate unwrapped, and wrap any other error as
+    /// `ConversationError` (stamping `total`).
     @MainActor
     private func runPhase<T: Sendable>(
         stage: ConversationStartupState,

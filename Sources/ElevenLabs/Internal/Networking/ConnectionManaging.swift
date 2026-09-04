@@ -9,6 +9,7 @@ enum ConnectionManagerError: Error {
 public protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
     var onDisconnected: (() async -> Void)? { get set }
+    var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
     func disconnect() async
     func send(data: Data) async throws
@@ -34,6 +35,7 @@ public protocol WebRTCConnectionManaging: ConnectionManaging {
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)? { get set }
     /// Fired when an audio track is published/subscribed/unpublished/unsubscribed.
     var onTracksChanged: (@Sendable () -> Void)? { get set }
+    var isMicrophoneMuted: Bool { get }
 
     func setMicrophoneMuted(_ muted: Bool) async throws
 

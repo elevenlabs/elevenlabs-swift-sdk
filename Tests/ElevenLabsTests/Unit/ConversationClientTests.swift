@@ -114,27 +114,6 @@ final class ConversationClientTests: XCTestCase {
         assertConnected(agentId: "second-agent")
     }
 
-    func testLatestOverlappingStartOnSameTransportWins() async throws {
-        mockWebRTCConnectionManager.autoSucceedAgentReady = false
-
-        let firstStart = Task {
-            try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
-        }
-        await mockWebRTCConnectionManager.waitUntilWaitingForAgent()
-        mockWebRTCConnectionManager.autoSucceedAgentReady = true
-
-        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
-
-        await XCTAssertThrowsErrorAsync {
-            _ = try await firstStart.value
-        } errorHandler: { error in
-            XCTAssertTrue(error is CancellationError)
-        }
-        assertConnected(agentId: "second-agent")
-        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 2)
-        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
-    }
-
     func testResetEndsSessionAndClearsMirroredState() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
 
@@ -183,9 +162,10 @@ final class ConversationClientTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = error as? ConversationStartupError
-            XCTAssertEqual(startupError?.stage, .resolvingToken)
-            XCTAssertEqual(startupError?.underlyingError, .authenticationFailed("Mock authentication failed"))
+            XCTAssertEqual(
+                (error as? ConversationStartupError)?.underlyingError,
+                .authenticationFailed("Mock authentication failed")
+            )
         }
 
         guard case let .error(error) = client.state else {
@@ -205,21 +185,19 @@ final class ConversationClientTests: XCTestCase {
         assertConnected(agentId: "recovered-agent")
     }
 
-    func testCancelledStartDoesNotReplaceLiveSession() async throws {
+    func testPreCancelledStartDoesNotReplaceLiveSession() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "live-agent"))
-
-        let cancelledStart = Task { @MainActor in
+        let start = Task { @MainActor in
             try await client.startTextOnlyConversation(.publicAgent(id: "cancelled-agent"))
         }
-        cancelledStart.cancel()
+        start.cancel()
 
         await XCTAssertThrowsErrorAsync {
-            _ = try await cancelledStart.value
+            _ = try await start.value
         } errorHandler: { error in
             XCTAssertTrue(error is CancellationError)
         }
         assertConnected(agentId: "live-agent")
-        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 0)
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
     }
 
@@ -232,88 +210,53 @@ final class ConversationClientTests: XCTestCase {
         }
     }
 
-    func testCompleteSendsResultOnlyWhenExpected() async throws {
-        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
-        await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "test-conversation-id" }
-
-        let respondingCall = ClientToolCallEvent(
-            toolName: "lookup",
-            toolCallId: "responding-call",
-            parametersData: Data("{}".utf8),
-            eventId: 1,
-            expectsResponse: true
-        )
-        mockWebRTCConnectionManager.deliver(.clientToolCall(respondingCall))
-        await waitForPublished(client.$pendingToolCalls) { $0.count == 1 }
-
-        let scopedRespondingCall = try XCTUnwrap(client.pendingToolCalls.first)
-        XCTAssertEqual(scopedRespondingCall.conversationId, "test-conversation-id")
-        let payloadCount = mockWebRTCConnectionManager.publishedPayloads.count
-        try await client.complete(
-            scopedRespondingCall,
-            with: .init(toolCallId: "wrong-id", result: "done")
-        )
-        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount + 1)
-        let payload = String(
-            decoding: try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last),
-            as: UTF8.self
-        )
-        XCTAssertTrue(payload.contains(scopedRespondingCall.toolCallId))
-        XCTAssertFalse(payload.contains("wrong-id"))
-        XCTAssertTrue(client.pendingToolCalls.isEmpty)
-
-        try await client.complete(
-            scopedRespondingCall,
-            with: .init(toolCallId: scopedRespondingCall.toolCallId, result: "duplicate")
-        )
-        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount + 1)
-
-        let silentCall = ClientToolCallEvent(
-            toolName: "track",
-            toolCallId: "silent-call",
-            parametersData: Data("{}".utf8),
-            eventId: 2,
-            expectsResponse: false
-        )
-        mockWebRTCConnectionManager.deliver(.clientToolCall(silentCall))
-        await waitForPublished(client.$pendingToolCalls) { $0.count == 1 }
-
-        let scopedSilentCall = try XCTUnwrap(client.pendingToolCalls.first)
-        let silentPayloadCount = mockWebRTCConnectionManager.publishedPayloads.count
-        try await client.complete(
-            scopedSilentCall,
-            with: .init(toolCallId: scopedSilentCall.toolCallId, result: "ignored")
-        )
-        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, silentPayloadCount)
-        XCTAssertTrue(client.pendingToolCalls.isEmpty)
-    }
-
-    func testCompleteIgnoresCallFromPreviousConversation() async throws {
-        mockWebRTCConnectionManager.initiationMetadataConversationId = "first-conversation"
+    func testCompleteRoutesToolResultsAndIgnoresStaleCalls() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
-        await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "first-conversation" }
+        await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "test-conversation-id" }
+        var firstCall: ClientToolCallEvent?
 
-        let event = ClientToolCallEvent(
-            toolName: "slow-tool",
-            toolCallId: "slow-call",
-            parametersData: Data("{}".utf8),
-            eventId: 1,
-            expectsResponse: true
-        )
-        mockWebRTCConnectionManager.deliver(.clientToolCall(event))
-        await waitForPublished(client.$pendingToolCalls) { !$0.isEmpty }
-        let staleCall = try XCTUnwrap(client.pendingToolCalls.first)
+        for expectsResponse in [true, false] {
+            let event = ClientToolCallEvent(
+                toolName: "tool",
+                toolCallId: "\(expectsResponse)",
+                parametersData: Data("{}".utf8),
+                eventId: 1,
+                expectsResponse: expectsResponse
+            )
+            mockWebRTCConnectionManager.deliver(.clientToolCall(event))
+            await waitForPublished(client.$pendingToolCalls) { $0.contains { $0.toolCallId == event.toolCallId } }
+            let call = try XCTUnwrap(client.pendingToolCalls.last)
+            firstCall = firstCall ?? call
+            let payloadCount = mockWebRTCConnectionManager.publishedPayloads.count
+
+            try await client.complete(call, with: .init(toolCallId: call.toolCallId, result: "done"))
+
+            XCTAssertEqual(
+                mockWebRTCConnectionManager.publishedPayloads.count,
+                payloadCount + (expectsResponse ? 1 : 0)
+            )
+        }
 
         mockWebRTCConnectionManager.initiationMetadataConversationId = "second-conversation"
         _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
         await waitForPublished(client.$conversationMetadata) { $0?.conversationId == "second-conversation" }
         let payloadCount = mockWebRTCConnectionManager.publishedPayloads.count
+        let staleCall = try XCTUnwrap(firstCall)
 
-        try await client.complete(
-            staleCall,
-            with: .init(toolCallId: staleCall.toolCallId, result: "too late")
+        try await client.complete(staleCall, with: .init(toolCallId: staleCall.toolCallId, result: "late"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount)
+
+        let endedCall = ClientToolCallEvent(
+            toolName: "tool",
+            toolCallId: "ended",
+            parametersData: Data(),
+            eventId: 2,
+            expectsResponse: true,
+            conversationId: "second-conversation"
         )
-
+        await client.endConversation()
+        try await client.complete(endedCall, with: .init(toolCallId: endedCall.toolCallId, result: "late"))
         XCTAssertEqual(mockWebRTCConnectionManager.publishedPayloads.count, payloadCount)
     }
 

@@ -216,10 +216,9 @@ Task {
             // 2. Perform your local logic
             let result = await myAppAction(params)
 
-            // 3. Complete the call, sending a result only when expected
-            try? await client.complete(
-                call,
-                with: .init(toolCallId: call.toolCallId, result: result)
+            // 3. Send the result back to the agent
+            try? await client.sendToolResult(
+                .init(toolCallId: call.toolCallId, result: result)
             )
         }
     }

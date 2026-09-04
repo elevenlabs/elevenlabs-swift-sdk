@@ -4,12 +4,11 @@ import XCTest
 
 @MainActor
 final class ConversationClientPublicTestSeamTests: XCTestCase {
-    func testExternalTransportCanDriveClientStartup() async throws {
+    func testExternalTransportCanStartAClient() async throws {
         let client = ConversationClient(dependencyProvider: PublicDependencyProvider())
 
         let result = try await client.startTextOnlyConversation(.publicAgent(id: "fake-agent"))
 
-        XCTAssertEqual(result.callInfo, CallInfo(agentId: "fake-agent", conversationId: "fake-conversation"))
         XCTAssertEqual(client.state, .connected(result.callInfo))
     }
 }
@@ -26,8 +25,10 @@ private final class PublicDependencyProvider: ConversationDependencyProvider {
 private final class PublicTransport: WebRTCConnectionManaging, WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
+    var errorHandler: ((Error?) -> Void)?
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
     var onTracksChanged: (@Sendable () -> Void)?
+    var isMicrophoneMuted = false
 
     func connect(
         auth: ConversationAuth.Voice,

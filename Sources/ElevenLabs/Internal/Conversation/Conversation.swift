@@ -35,8 +35,6 @@ final class Conversation: ObservableObject {
     private let config: ConversationConfig
     private let dependencyProvider: any ConversationDependencyProvider
     private var isTearingDown = false
-    private var teardownInProgress = false
-    private var teardownWaiters: [CheckedContinuation<Void, Never>] = []
     private nonisolated let logger: any Logging
 
     // Voice-related state
@@ -185,16 +183,9 @@ final class Conversation: ObservableObject {
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
     func endConversation(reason: EndReason = .userEnded) async {
-        if teardownInProgress {
-            await withCheckedContinuation { teardownWaiters.append($0) }
-            return
-        }
-
         if state == .idle {
             state = .ended(reason: reason)
-            teardownInProgress = true
             await tearDownActiveSession()
-            finishTeardown()
             return
         }
 
@@ -202,11 +193,9 @@ final class Conversation: ObservableObject {
               let connectionManager = activeConnectionManager
         else { return }
         state = .ended(reason: reason)
-        teardownInProgress = true
 
         await tearDownActiveSession()
         await connectionManager.disconnect()
-        finishTeardown()
 
         callbacks.onDisconnect?(reason)
     }
@@ -344,15 +333,9 @@ final class Conversation: ObservableObject {
             let result = try await connect(startConfig)
             return try setConnected(result)
         } catch let error as ConversationStartupError {
-            if Task.isCancelled {
-                await handleStartupCancellation(disconnecting: manager)
-                throw CancellationError()
-            }
-            guard state.isConnecting else { throw CancellationError() }
             await handleStartupFailure(error.underlyingError, disconnecting: manager)
             throw error
         } catch let error as ConversationError {
-            guard state.isConnecting else { throw CancellationError() }
             let startupError = ConversationStartupError(
                 stage: currentStartupStage,
                 metrics: .init(),
@@ -368,7 +351,6 @@ final class Conversation: ObservableObject {
                 await handleStartupCancellation(disconnecting: manager)
                 throw CancellationError()
             } else {
-                guard state.isConnecting else { throw CancellationError() }
                 let conversationError = ConversationError.connectionFailed(error)
                 let startupError = ConversationStartupError(
                     stage: currentStartupStage,
@@ -442,9 +424,7 @@ final class Conversation: ObservableObject {
         _ error: ConversationError,
         disconnecting connectionManager: any ConnectionManaging
     ) async {
-        guard state.isConnecting else { return }
         await cleanupTransientResources()
-        guard state.isConnecting else { return }
         await connectionManager.disconnect()
 
         // End/supersede may have already moved us out of connecting; don't
@@ -455,12 +435,11 @@ final class Conversation: ObservableObject {
     }
 
     private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
-        guard state.isConnecting else { return }
-        state = .ended(reason: .userEnded)
-        teardownInProgress = true
-        await tearDownActiveSession()
+        if state.isConnecting {
+            state = .ended(reason: .userEnded)
+            await tearDownActiveSession()
+        }
         await connectionManager.disconnect()
-        finishTeardown()
     }
 
     /// Tear down operational state when an active session ends.
@@ -470,13 +449,6 @@ final class Conversation: ObservableObject {
         await cleanupTransientResources()
 
         pendingToolCalls.removeAll()
-    }
-
-    private func finishTeardown() {
-        teardownInProgress = false
-        let waiters = teardownWaiters
-        teardownWaiters.removeAll()
-        waiters.forEach { $0.resume() }
     }
 
     private func cleanupTransientResources() async {

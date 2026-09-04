@@ -4,73 +4,6 @@ import Foundation
 import LiveKit
 #endif
 
-@MainActor
-final class RecordingPreparationCoordinator {
-    static let shared = RecordingPreparationCoordinator()
-
-    private var warmSessionCount = 0
-    private var appliedMode: Bool?
-    private var isApplying = false
-    private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
-
-    func configure(
-        _ prepared: Bool,
-        apply: @MainActor (Bool) async throws -> Void
-    ) async throws {
-        if prepared {
-            warmSessionCount += 1
-            do {
-                try await reconcile(apply: apply)
-            } catch {
-                warmSessionCount -= 1
-                throw error
-            }
-        } else {
-            try await reconcile(apply: apply)
-        }
-    }
-
-    func cleanup(
-        _ prepared: Bool?,
-        apply: @MainActor (Bool) async throws -> Void
-    ) async throws {
-        guard prepared == true, warmSessionCount > 0 else { return }
-        warmSessionCount -= 1
-        try await reconcile(apply: apply)
-    }
-
-    private func reconcile(
-        apply: @MainActor (Bool) async throws -> Void
-    ) async throws {
-        while true {
-            if isApplying {
-                await withCheckedContinuation { transitionWaiters.append($0) }
-                continue
-            }
-
-            let desiredMode = warmSessionCount > 0
-            guard appliedMode != desiredMode else { return }
-
-            isApplying = true
-            do {
-                try await apply(desiredMode)
-                appliedMode = desiredMode
-                finishTransition()
-            } catch {
-                finishTransition()
-                throw error
-            }
-        }
-    }
-
-    private func finishTransition() {
-        isApplying = false
-        let waiters = transitionWaiters
-        transitionWaiters.removeAll()
-        waiters.forEach { $0.resume() }
-    }
-}
-
 /// Manages audio device configuration and speech activity handling for conversations.
 /// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
 @MainActor
@@ -81,18 +14,15 @@ final class ConversationAudioManager {
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
     private let setRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void
-    private let recordingPreparationCoordinator: RecordingPreparationCoordinator
-    private var recordingAlwaysPrepared: Bool?
+    private var shouldDisableRecordingPreparation = false
 
     init(
         logger: any Logging,
-        recordingPreparationCoordinator: RecordingPreparationCoordinator = .shared,
         setRecordingAlwaysPreparedMode: @escaping @MainActor (Bool) async throws -> Void = {
             try await AudioManager.shared.setRecordingAlwaysPreparedMode($0)
         }
     ) {
         self.logger = logger
-        self.recordingPreparationCoordinator = recordingPreparationCoordinator
         self.setRecordingAlwaysPreparedMode = setRecordingAlwaysPreparedMode
     }
 
@@ -125,11 +55,8 @@ final class ConversationAudioManager {
 
         if let prepared = audioConfig.recordingAlwaysPrepared {
             do {
-                try await recordingPreparationCoordinator.configure(
-                    prepared,
-                    apply: setRecordingAlwaysPreparedMode
-                )
-                recordingAlwaysPrepared = prepared
+                try await setRecordingAlwaysPreparedMode(prepared)
+                shouldDisableRecordingPreparation = prepared
             } catch {
                 logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
             }
@@ -143,13 +70,10 @@ final class ConversationAudioManager {
     func cleanup() async {
         cleanupSpeechHandler()
         cleanupSoftwareMuteProcessor()
-        let recordingAlwaysPrepared = recordingAlwaysPrepared
-        self.recordingAlwaysPrepared = nil
+        guard shouldDisableRecordingPreparation else { return }
+        shouldDisableRecordingPreparation = false
         do {
-            try await recordingPreparationCoordinator.cleanup(
-                recordingAlwaysPrepared,
-                apply: setRecordingAlwaysPreparedMode
-            )
+            try await setRecordingAlwaysPreparedMode(false)
         } catch {
             logger.warning("Failed to disable recording always prepared mode", context: ["error": "\(error)"])
         }
