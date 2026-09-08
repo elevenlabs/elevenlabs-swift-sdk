@@ -164,7 +164,11 @@ final class ConversationTests: XCTestCase {
 
         await conversation.endConversation()
 
-        staleHandler(.agentResponse(AgentResponseEvent(response: "This should be ignored", eventId: 101)))
+        staleHandler(.agentResponse(AgentResponseEvent(
+            response: "This should be ignored",
+            eventId: 101,
+            responseId: "response-1"
+        )))
         try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertTrue(conversation.messages.isEmpty)
@@ -221,7 +225,8 @@ final class ConversationTests: XCTestCase {
             "type": "agent_response",
             "agent_response_event": [
                 "agent_response": "Hello over WebSocket",
-                "event_id": 101
+                "event_id": 101,
+                "response_id": "response-1"
             ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
@@ -539,7 +544,7 @@ final class ConversationTests: XCTestCase {
         conversation._testing_setState(ConversationState.active(.init(agentId: "test")))
 
         await conversation._testing_handleIncomingEvent(
-            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42))
+            IncomingEvent.agentResponse(AgentResponseEvent(response: "Hello", eventId: 42, responseId: "response-1"))
         )
 
         // Allow async callbacks to complete

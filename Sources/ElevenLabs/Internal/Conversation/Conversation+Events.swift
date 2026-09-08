@@ -16,7 +16,7 @@ extension Conversation {
             agentStateManager?.processSignal(.agentResponse)
 
         case let .agentResponse(e):
-            upsertAgentMessage(content: e.response, eventId: e.eventId)
+            upsertAgentMessage(content: e.response, eventId: e.eventId, responseId: e.responseId)
             lastAgentEventId = e.eventId
             agentStateManager?.processSignal(.agentResponse)
             options.onAgentResponse?(e.response, e.eventId)
@@ -25,7 +25,11 @@ extension Conversation {
             }
 
         case let .agentResponseCorrection(correction):
-            upsertAgentMessage(content: correction.correctedAgentResponse, eventId: correction.eventId)
+            upsertAgentMessage(
+                content: correction.correctedAgentResponse,
+                eventId: correction.eventId,
+                responseId: correction.responseId
+            )
             options.onAgentResponseCorrection?(
                 correction.originalAgentResponse,
                 correction.correctedAgentResponse,
@@ -39,8 +43,7 @@ extension Conversation {
             )
 
         case let .agentChatResponsePart(e):
-            let existing = messages.last(where: { $0.role == .agent && $0.eventId == e.eventId })?.content ?? ""
-            upsertAgentMessage(content: existing + e.text, eventId: e.eventId)
+            appendAgentResponsePart(e)
 
         case let .audio(audioEvent):
             latestAudioEvent = audioEvent
@@ -120,7 +123,9 @@ extension Conversation {
             role: .user,
             content: content,
             timestamp: Date(),
-            eventId: eventId
+            eventId: eventId,
+            responseId: nil,
+            isFinal: true
         )
         if let agentIdx = messages.firstIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
             messages.insert(message, at: agentIdx)
@@ -129,18 +134,29 @@ extension Conversation {
         }
     }
 
-    private func upsertAgentMessage(content: String, eventId: Int) {
-        if let idx = messages.lastIndex(where: { $0.role == .agent && $0.eventId == eventId }) {
-            let existing = messages[idx]
-            messages[idx] = Message(
-                id: existing.id,
-                role: .agent,
-                content: content,
-                timestamp: existing.timestamp,
-                eventId: eventId
-            )
-        } else {
-            appendMessage(role: .agent, content: content, eventId: eventId)
+    private func upsertAgentMessage(content: String, eventId: Int, responseId: String) {
+        guard let idx = messages.lastIndex(where: { $0.responseId == responseId }) else {
+            appendMessage(role: .agent, content: content, eventId: eventId, responseId: responseId)
+            return
         }
+        messages[idx] = messages[idx].updating(content: content, isFinal: true)
+    }
+
+    private func appendAgentResponsePart(_ event: AgentChatResponsePartEvent) {
+        let isFinal = event.type == .stop
+        guard let idx = messages.lastIndex(where: { $0.responseId == event.responseId }) else {
+            appendMessage(
+                role: .agent,
+                content: event.text,
+                eventId: event.eventId,
+                responseId: event.responseId,
+                isFinal: isFinal
+            )
+            return
+        }
+        // A part arriving after `agent_response` delivered the final text is stale.
+        let existing = messages[idx]
+        guard !existing.isFinal else { return }
+        messages[idx] = existing.updating(content: existing.content + event.text, isFinal: isFinal)
     }
 }

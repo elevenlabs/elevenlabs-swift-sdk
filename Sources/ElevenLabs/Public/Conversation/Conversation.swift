@@ -588,14 +588,22 @@ public final class Conversation: ObservableObject {
 
     // MARK: - Message Helpers
 
-    func appendMessage(role: Message.Role, content: String, eventId: Int? = nil) {
+    func appendMessage(
+        role: Message.Role,
+        content: String,
+        eventId: Int? = nil,
+        responseId: String? = nil,
+        isFinal: Bool = true
+    ) {
         messages.append(
             Message(
                 id: UUID().uuidString,
                 role: role,
                 content: content,
                 timestamp: Date(),
-                eventId: eventId
+                eventId: eventId,
+                responseId: responseId,
+                isFinal: isFinal
             )
         )
     }

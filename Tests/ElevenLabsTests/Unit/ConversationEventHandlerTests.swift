@@ -70,7 +70,8 @@ final class ConversationEventHandlerTests: XCTestCase {
 
         let event = IncomingEvent.agentResponse(AgentResponseEvent(
             response: "I am an AI",
-            eventId: 456
+            eventId: 456,
+            responseId: "response-1"
         ))
 
         await conversation.handleIncomingEvent(event)
@@ -84,10 +85,11 @@ final class ConversationEventHandlerTests: XCTestCase {
 
     func testAgentResponseFinalizesStreamedMessageInsteadOfDuplicating() async {
         await conversation.handleIncomingEvent(.agentChatResponsePart(
-            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 42)
+            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 42, responseId: "response-1")
         ))
+        let id = conversation.messages[0].id
         await conversation.handleIncomingEvent(.agentChatResponsePart(
-            AgentChatResponsePartEvent(text: " World", type: .stop, eventId: 42)
+            AgentChatResponsePartEvent(text: " World", type: .stop, eventId: 42, responseId: "response-1")
         ))
         XCTAssertEqual(conversation.messages.count, 1)
         XCTAssertEqual(
@@ -97,7 +99,7 @@ final class ConversationEventHandlerTests: XCTestCase {
         )
 
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "Hello World", eventId: 42)
+            AgentResponseEvent(response: "Hello World", eventId: 42, responseId: "response-1")
         ))
 
         XCTAssertEqual(
@@ -107,14 +109,15 @@ final class ConversationEventHandlerTests: XCTestCase {
         )
         XCTAssertEqual(conversation.messages.last?.content, "Hello World")
         XCTAssertEqual(conversation.messages.last?.eventId, 42)
+        XCTAssertEqual(conversation.messages[0].id, id, "Message identity must stay stable for SwiftUI diffing")
     }
 
     func testAgentResponseAppendsWhenNoStreamedMessagePending() async {
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "First", eventId: 1)
+            AgentResponseEvent(response: "First", eventId: 1, responseId: "response-1")
         ))
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "Second", eventId: 2)
+            AgentResponseEvent(response: "Second", eventId: 2, responseId: "response-2")
         ))
 
         XCTAssertEqual(conversation.messages.count, 2)
@@ -122,11 +125,59 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.messages[1].eventId, 2)
     }
 
+    // MARK: - Response ID Reconciliation
+
+    func testResponsesSharingEventIdStayDistinct() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "Before the tool", eventId: 42, responseId: "response-1")
+        ))
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "After the tool", eventId: 42, responseId: "response-2")
+        ))
+
+        XCTAssertEqual(
+            conversation.messages.count,
+            2,
+            "Responses on either side of a tool call share an eventId but are distinct messages"
+        )
+        XCTAssertEqual(conversation.messages[0].content, "Before the tool")
+        XCTAssertEqual(conversation.messages[1].content, "After the tool")
+    }
+
+    func testStreamsSharingEventIdReconcileSeparately() async {
+        for part in [
+            AgentChatResponsePartEvent(text: "", type: .start, eventId: 42, responseId: "response-1"),
+            AgentChatResponsePartEvent(text: "Before the tool", type: .delta, eventId: 42, responseId: "response-1"),
+            AgentChatResponsePartEvent(text: "", type: .stop, eventId: 42, responseId: "response-1"),
+            AgentChatResponsePartEvent(text: "", type: .start, eventId: 42, responseId: "response-2"),
+            AgentChatResponsePartEvent(text: "After the tool", type: .delta, eventId: 42, responseId: "response-2"),
+            AgentChatResponsePartEvent(text: "", type: .stop, eventId: 42, responseId: "response-2")
+        ] {
+            await conversation.handleIncomingEvent(.agentChatResponsePart(part))
+        }
+
+        XCTAssertEqual(conversation.messages.count, 2)
+        XCTAssertEqual(conversation.messages[0].content, "Before the tool")
+        XCTAssertEqual(conversation.messages[1].content, "After the tool")
+    }
+
+    func testLatePartDoesNotMutateFinalizedResponse() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "final answer", eventId: 1, responseId: "response-1")
+        ))
+        await conversation.handleIncomingEvent(.agentChatResponsePart(
+            AgentChatResponsePartEvent(text: " late", type: .delta, eventId: 1, responseId: "response-1")
+        ))
+
+        XCTAssertEqual(conversation.messages.count, 1)
+        XCTAssertEqual(conversation.messages[0].content, "final answer")
+    }
+
     // MARK: - Agent Response Correction Tests
 
     func testAgentResponseCorrectionUpdatesStoredMessage() async {
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "the answr is 41", eventId: 7)
+            AgentResponseEvent(response: "the answr is 41", eventId: 7, responseId: "response-1")
         ))
         XCTAssertEqual(conversation.messages.last?.content, "the answr is 41")
 
@@ -134,7 +185,8 @@ final class ConversationEventHandlerTests: XCTestCase {
             AgentResponseCorrectionEvent(
                 originalAgentResponse: "the answr is 41",
                 correctedAgentResponse: "the answer is 42",
-                eventId: 7
+                eventId: 7,
+                responseId: "response-1"
             )
         ))
 
@@ -147,16 +199,39 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.messages.last?.eventId, 7)
     }
 
-    func testAgentResponseCorrectionWithUnknownEventIdAppends() async {
+    func testAgentResponseCorrectionTargetsItsOwnResponse() async {
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "kept as-is", eventId: 100)
+            AgentResponseEvent(response: "First", eventId: 9, responseId: "response-1")
+        ))
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "Second", eventId: 9, responseId: "response-2")
+        ))
+
+        await conversation.handleIncomingEvent(.agentResponseCorrection(
+            AgentResponseCorrectionEvent(
+                originalAgentResponse: "First",
+                correctedAgentResponse: "Corrected",
+                eventId: 9,
+                responseId: "response-1"
+            )
+        ))
+
+        XCTAssertEqual(conversation.messages.count, 2)
+        XCTAssertEqual(conversation.messages[0].content, "Corrected")
+        XCTAssertEqual(conversation.messages[1].content, "Second")
+    }
+
+    func testAgentResponseCorrectionWithUnknownResponseIdAppends() async {
+        await conversation.handleIncomingEvent(.agentResponse(
+            AgentResponseEvent(response: "kept as-is", eventId: 100, responseId: "response-1")
         ))
 
         await conversation.handleIncomingEvent(.agentResponseCorrection(
             AgentResponseCorrectionEvent(
                 originalAgentResponse: "x",
                 correctedAgentResponse: "y",
-                eventId: 999
+                eventId: 999,
+                responseId: "response-2"
             )
         ))
 
@@ -179,7 +254,7 @@ final class ConversationEventHandlerTests: XCTestCase {
 
     func testUserTranscriptInsertedBeforeAgentMessageWithSameEventId() async {
         await conversation.handleIncomingEvent(.agentResponse(
-            AgentResponseEvent(response: "agent reply", eventId: 5)
+            AgentResponseEvent(response: "agent reply", eventId: 5, responseId: "response-1")
         ))
         await conversation.handleIncomingEvent(.userTranscript(
             UserTranscriptEvent(transcript: "user said this", eventId: 5)
@@ -220,7 +295,7 @@ final class ConversationEventHandlerTests: XCTestCase {
     func testHandleAgentChatResponseStream() async {
         // 1. Start
         await conversation.handleIncomingEvent(.agentChatResponsePart(
-            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 13)
+            AgentChatResponsePartEvent(text: "Hello", type: .start, eventId: 13, responseId: "response-1")
         ))
         XCTAssertEqual(conversation.messages.count, 1)
         XCTAssertEqual(conversation.messages.last?.content, "Hello")
@@ -228,14 +303,14 @@ final class ConversationEventHandlerTests: XCTestCase {
 
         // 2. Delta
         await conversation.handleIncomingEvent(.agentChatResponsePart(
-            AgentChatResponsePartEvent(text: " World", type: .delta, eventId: 13)
+            AgentChatResponsePartEvent(text: " World", type: .delta, eventId: 13, responseId: "response-1")
         ))
         XCTAssertEqual(conversation.messages.count, 1, "Should update existing message")
         XCTAssertEqual(conversation.messages.last?.content, "Hello World")
 
         // 3. Stop
         await conversation.handleIncomingEvent(.agentChatResponsePart(
-            AgentChatResponsePartEvent(text: "!", type: .stop, eventId: 13)
+            AgentChatResponsePartEvent(text: "!", type: .stop, eventId: 13, responseId: "response-1")
         ))
         XCTAssertEqual(conversation.messages.last?.content, "Hello World!")
         XCTAssertEqual(conversation.messages.last?.eventId, 13)
