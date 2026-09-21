@@ -50,4 +50,9 @@ public struct ConversationStartupError: LocalizedError, Sendable, Equatable {
 public struct ConversationStartResult: Equatable, Sendable {
     public let callInfo: CallInfo
     public let metrics: ConversationStartupMetrics
+
+    @_spi(Testing) public init(callInfo: CallInfo, metrics: ConversationStartupMetrics) {
+        self.callInfo = callInfo
+        self.metrics = metrics
+    }
 }

@@ -1,7 +1,7 @@
 import Combine
 
 // swiftlint:disable file_length type_body_length
-@testable import ElevenLabs
+@_spi(Testing) @testable import ElevenLabs
 import Foundation
 import LiveKit
 import XCTest
@@ -776,6 +776,15 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationError.microphoneToggleFailed("test"), ConversationError.microphoneToggleFailed("test"))
 
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
+    }
+
+    func testMessageEqualityIncludesContent() {
+        let message = Message(role: .agent, content: "Hello", isFinal: false, responseId: "response")
+        var updated = message
+        updated.content = "Hello there"
+
+        XCTAssertEqual(message, message)
+        XCTAssertNotEqual(message, updated)
     }
 
     func testConversationStateEnum() {

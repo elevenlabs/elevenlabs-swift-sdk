@@ -1,23 +1,25 @@
 import Foundation
 
-@MainActor
-protocol ConversationDependencyProvider: AnyObject {
-    var logger: any Logging { get }
+@_spi(Testing) @MainActor
+public protocol ConversationDependencyProvider: AnyObject {
     var webRTCConnectionManager: any WebRTCConnectionManaging { get }
     var webSocketConnectionManager: any WebSocketConnectionManaging { get }
     func setRecordingAlwaysPreparedMode(_ enabled: Bool) async throws
 }
 
+/// Fake providers default to leaving the real audio pipeline alone.
+extension ConversationDependencyProvider {
+    @_spi(Testing) public func setRecordingAlwaysPreparedMode(_: Bool) async throws {}
+}
+
 /// A minimalistic dependency container for internal SDK use.
 @MainActor
 final class Dependencies: ConversationDependencyProvider {
-    let logger: any Logging
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
     init(logLevel: LogLevel = .warning, endpoints: Endpoints = .production) {
         let logger = SDKLogger(logLevel: logLevel)
-        self.logger = logger
         webRTCConnectionManager = WebRTCConnectionManager(
             logger: logger,
             tokenService: TokenService(endpoints: endpoints),

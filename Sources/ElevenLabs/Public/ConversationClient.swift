@@ -60,10 +60,14 @@ public final class ConversationClient: ObservableObject {
         observePreparedRecording()
     }
 
-    /// Test-only initializer that injects a dependency provider.
-    init(callbacks: ConversationCallbacks = .init(), dependencyProvider: any ConversationDependencyProvider) {
+    /// Creates a client with injectable transports for deterministic host tests.
+    @_spi(Testing) public init(
+        callbacks: ConversationCallbacks = .init(),
+        dependencyProvider: any ConversationDependencyProvider,
+        logLevel: LogLevel = .warning
+    ) {
         self.callbacks = callbacks
-        logLevel = .warning
+        self.logLevel = logLevel
         self.dependencyProvider = dependencyProvider
         observePreparedRecording()
     }
@@ -104,7 +108,8 @@ public final class ConversationClient: ObservableObject {
             config: config,
             callbacks: callbacks,
             initialMicMuted: isMicMuted,
-            initialAgentMuted: isAgentMuted
+            initialAgentMuted: isAgentMuted,
+            logLevel: logLevel
         )
         bind(conversation)
 

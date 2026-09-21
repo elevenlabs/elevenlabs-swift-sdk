@@ -1,4 +1,4 @@
-@testable import ElevenLabs
+@_spi(Testing) @testable import ElevenLabs
 import Foundation
 
 final class MockWebSocketConnectionManager: WebSocketConnectionManaging {

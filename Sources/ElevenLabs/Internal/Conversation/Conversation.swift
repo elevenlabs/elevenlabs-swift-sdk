@@ -75,14 +75,15 @@ final class Conversation: ObservableObject {
         config: ConversationConfig = .init(),
         callbacks: ConversationCallbacks = .init(),
         initialMicMuted: Bool = false,
-        initialAgentMuted: Bool = false
+        initialAgentMuted: Bool = false,
+        logLevel: LogLevel = .warning
     ) {
         self.dependencyProvider = dependencyProvider
         self.config = config
         self.callbacks = callbacks
         pendingMuteState = initialMicMuted
         isAgentMuted = initialAgentMuted
-        logger = dependencyProvider.logger
+        logger = SDKLogger(logLevel: logLevel)
     }
 
     // MARK: - API

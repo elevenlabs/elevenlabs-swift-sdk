@@ -1,6 +1,6 @@
 // swiftlint:disable file_length type_body_length function_body_length
 import Combine
-@testable import ElevenLabs
+@_spi(Testing) @testable import ElevenLabs
 import XCTest
 
 /// Integration tests for error handling scenarios with real ElevenLabs API

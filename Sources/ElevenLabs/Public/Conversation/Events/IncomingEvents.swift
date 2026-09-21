@@ -93,6 +93,16 @@ public struct ConversationMetadataEvent: Sendable {
     public let conversationId: String
     public let agentOutputAudioFormat: String
     public let userInputAudioFormat: String
+
+    @_spi(Testing) public init(
+        conversationId: String,
+        agentOutputAudioFormat: String,
+        userInputAudioFormat: String
+    ) {
+        self.conversationId = conversationId
+        self.agentOutputAudioFormat = agentOutputAudioFormat
+        self.userInputAudioFormat = userInputAudioFormat
+    }
 }
 
 /// VAD score

@@ -5,8 +5,8 @@ enum ConnectionManagerError: Error {
     case notConnected
 }
 
-@MainActor
-protocol ConnectionManaging: AnyObject {
+@_spi(Testing) @MainActor
+public protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
     var onDisconnected: (() async -> Void)? { get set }
     var errorHandler: ((Swift.Error?) -> Void)? { get set }
@@ -15,8 +15,8 @@ protocol ConnectionManaging: AnyObject {
     func send(data: Data) async throws
 }
 
-@MainActor
-protocol WebSocketConnectionManaging: ConnectionManaging {
+@_spi(Testing) @MainActor
+public protocol WebSocketConnectionManaging: ConnectionManaging {
     func connect(
         auth: ConversationAuth.TextOnly,
         config: ConversationConfig,
@@ -24,8 +24,8 @@ protocol WebSocketConnectionManaging: ConnectionManaging {
     ) async throws -> ConversationStartResult
 }
 
-@MainActor
-protocol WebRTCConnectionManaging: ConnectionManaging {
+@_spi(Testing) @MainActor
+public protocol WebRTCConnectionManaging: ConnectionManaging {
     func connect(
         auth: ConversationAuth.Voice,
         config: ConversationConfig,
@@ -42,6 +42,17 @@ protocol WebRTCConnectionManaging: ConnectionManaging {
     func setMicrophoneMuted(_ muted: Bool) async throws
 
     func setAgentMuted(_ muted: Bool)
+}
+
+/// Fakes that don't drive LiveKit tracks get no audio observers.
+extension WebRTCConnectionManaging {
+    public var inputTrack: (any AudioTrackProtocol)? {
+        nil
+    }
+
+    public var agentAudioTrack: (any AudioTrackProtocol)? {
+        nil
+    }
 }
 
 extension ConnectionManaging {
