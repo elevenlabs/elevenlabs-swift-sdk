@@ -331,19 +331,18 @@ final class Conversation: ObservableObject {
         do {
             let result = try await connect(startConfig)
             return try setConnected(result)
-        } catch let error as ConversationError {
-            await handleStartupFailure(error, disconnecting: manager)
-            throw error
-        } catch is CancellationError {
-            await handleStartupCancellation(disconnecting: manager)
-            throw CancellationError()
         } catch {
-            if Task.isCancelled {
+            if error is CancellationError || Task.isCancelled {
                 await handleStartupCancellation(disconnecting: manager)
-            } else {
-                await handleStartupFailure(.connectionFailed(error), disconnecting: manager)
+                throw CancellationError()
             }
-            throw error
+            let startupError = error as? ConversationStartupError ?? ConversationStartupError(
+                stage: currentStartupStage,
+                metrics: .init(),
+                underlyingError: error as? ConversationError ?? .connectionFailed(error)
+            )
+            await handleStartupFailure(startupError.underlyingError, disconnecting: manager)
+            throw startupError
         }
     }
 
@@ -357,6 +356,11 @@ final class Conversation: ObservableObject {
     private func updateStartupStage(_ stage: ConversationStartupState) {
         guard state.isConnecting, state != .connecting(stage) else { return }
         state = .connecting(stage)
+    }
+
+    private var currentStartupStage: ConversationStartupState {
+        if case let .connecting(stage) = state { return stage }
+        return .preparing
     }
 
     private func setupAgentStateManager() {
