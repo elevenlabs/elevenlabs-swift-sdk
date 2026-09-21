@@ -23,6 +23,8 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      SWIFT_5_FLAGS: "-Xswiftc -swift-version -Xswiftc 5"
 
     steps:
       - name: Checkout
@@ -43,23 +45,21 @@ jobs:
         run: swift package resolve
 
       - name: Build (debug)
-        run: swift build
+        run: swift build $SWIFT_5_FLAGS
 
       - name: Test (debug)
-        run: swift test
+        run: swift test $SWIFT_5_FLAGS
 
       - name: Build (release)
-        run: swift build --configuration release
+        run: swift build --configuration release $SWIFT_5_FLAGS
 
       - name: Test (release)
-        run: swift test --configuration release
+        run: swift test --configuration release $SWIFT_5_FLAGS
 
   swift6-strict:
     runs-on: macos-15
     timeout-minutes: 30
     needs: build
-    env:
-      SWIFT_STRICT_FLAGS: "-Xswiftc -swift-version -Xswiftc 6"
 
     steps:
       - name: Checkout
@@ -80,7 +80,7 @@ jobs:
         run: swift package resolve
 
       - name: Build (Swift 6 strict)
-        run: swift build $SWIFT_STRICT_FLAGS
+        run: swift build
 
       - name: Test (Swift 6 strict)
-        run: swift test $SWIFT_STRICT_FLAGS
+        run: swift test
