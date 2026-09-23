@@ -185,6 +185,8 @@ client.setAgentMuted(true)      // new: silence the agent without ending the cal
 
 > **Behavioral note:** v3's `isMuted` reported `true` until connected; v4's `isMicMuted` starts `false`. UI that showed a "muted" indicator based on the initial value will render differently — verify the intended default with the user if it matters.
 
+Hosts managing their own `AVAudioSession` can set `AudioPipelineConfiguration.recordingAlwaysPrepared` to `false`. It defaults to `true`: the mic pipeline is prepared while a voice conversation is starting or live and released when it ends.
+
 `sendToolResult` takes a `ClientToolResultEvent` instead of loose parameters:
 
 **Before:**

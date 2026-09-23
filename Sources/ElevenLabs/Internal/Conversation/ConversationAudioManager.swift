@@ -16,7 +16,6 @@ final class ConversationAudioManager {
 
     init(logger: any Logging) {
         self.logger = logger
-        setupInitialConfiguration()
     }
 
     deinit {
@@ -46,14 +45,6 @@ final class ConversationAudioManager {
             AudioManager.shared.isVoiceProcessingAGCEnabled = agc
         }
 
-        if let prepared = audioConfig?.recordingAlwaysPrepared {
-            do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(prepared)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-
         configureSpeechHandler(muteMode: muteMode, callbacks: callbacks)
         configureSoftwareMuteProcessor(muteMode: muteMode, callbacks: callbacks)
     }
@@ -65,25 +56,6 @@ final class ConversationAudioManager {
     }
 
     // MARK: - Private
-
-    private func setupInitialConfiguration() {
-        // Set initial microphone mute mode
-        do {
-            try AudioManager.shared.set(microphoneMuteMode: LiveKit.MicrophoneMuteMode.inputMixer)
-        } catch {
-            logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
-        }
-
-        // Set recording always prepared mode asynchronously
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-    }
 
     private func configureSpeechHandler(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
         if muteMode == .voiceProcessing, let onSpeechDetectedWhileMuted = callbacks.onSpeechDetectedWhileMuted {
