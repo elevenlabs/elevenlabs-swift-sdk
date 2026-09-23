@@ -52,14 +52,16 @@ public final class ConversationClient: ObservableObject {
     private let setRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void
     /// Whether the current session is voice and its config allows prepared recording.
     private var sessionPrefersPreparedRecording = false
-    private var appliedPreparedRecording = false
-    private var preparedRecordingTask: Task<Void, Never>?
+    /// Last queued change; each change waits for the previous one.
+    private var preparedRecording: Task<Void, Never>?
+    private var preparedRecordingSubscription: AnyCancellable?
 
     public init(callbacks: ConversationCallbacks = .init(), logLevel: LogLevel = .warning) {
         self.callbacks = callbacks
         self.logLevel = logLevel
         dependencyProvider = nil
         setRecordingAlwaysPreparedMode = Self.liveKitSetRecordingAlwaysPreparedMode
+        observePreparedRecording()
     }
 
     /// Test-only initializer that injects a dependency provider.
@@ -72,6 +74,7 @@ public final class ConversationClient: ObservableObject {
         logLevel = .warning
         self.dependencyProvider = dependencyProvider
         self.setRecordingAlwaysPreparedMode = setRecordingAlwaysPreparedMode
+        observePreparedRecording()
     }
 
     private static let liveKitSetRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void = {
@@ -126,7 +129,7 @@ public final class ConversationClient: ObservableObject {
     /// so the UI can still show the last session until `reset()` or a new start.
     public func endConversation() async {
         await session?.endConversation()
-        await preparedRecordingTask?.value
+        await preparedRecording?.value
     }
 
     /// End any live session and clear all mirrored state back to idle defaults.
@@ -146,8 +149,7 @@ public final class ConversationClient: ObservableObject {
         conversationMetadata = nil
         mcpToolCalls = []
         mcpConnectionStatus = nil
-        updatePreparedRecording()
-        await preparedRecordingTask?.value
+        await preparedRecording?.value
     }
 
     /// Mirror the new session's `@Published` state onto this object.
@@ -155,10 +157,7 @@ public final class ConversationClient: ObservableObject {
         cancellables.removeAll()
         self.session = session
 
-        session.$state.sink { [weak self] in
-            self?.state = $0
-            self?.updatePreparedRecording()
-        }.store(in: &cancellables)
+        session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
         session.$chatHistory.sink { [weak self] in self?.chatHistory = $0 }.store(in: &cancellables)
         session.$agentState.sink { [weak self] in self?.agentState = $0 }.store(in: &cancellables)
         session.$pendingToolCalls.sink { [weak self] in self?.pendingToolCalls = $0 }.store(in: &cancellables)
@@ -173,33 +172,24 @@ public final class ConversationClient: ObservableObject {
 
     // MARK: - Prepared recording
 
-    /// Warm while a voice session is starting or live. A new session's initial
+    /// On while a voice session is starting or live. A new session's initial
     /// `.idle` counts, so a restart never passes through "off".
-    private var wantsPreparedRecording: Bool {
-        guard sessionPrefersPreparedRecording else { return false }
-        return state == .idle || state.isConnecting || state.isConnected
-    }
-
-    private func updatePreparedRecording() {
-        guard preparedRecordingTask == nil, wantsPreparedRecording != appliedPreparedRecording else { return }
-        preparedRecordingTask = Task { await self.applyPreparedRecording() }
-    }
-
-    /// Applies the latest wanted value, one set at a time; each set blocks a thread.
-    private func applyPreparedRecording() async {
-        while wantsPreparedRecording != appliedPreparedRecording {
-            let wanted = wantsPreparedRecording
-            do {
-                try await setRecordingAlwaysPreparedMode(wanted)
-            } catch {
-                SDKLogger(logLevel: logLevel).warning(
-                    "Failed to set recording always prepared mode",
-                    context: ["error": "\(error)"]
-                )
+    private func observePreparedRecording() {
+        preparedRecordingSubscription = $state
+            .map { [weak self] state in
+                guard let self, sessionPrefersPreparedRecording else { return false }
+                return state == .idle || state.isConnecting || state.isConnected
             }
-            appliedPreparedRecording = wanted
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] in self?.setPreparedRecording($0) }
+    }
+
+    private func setPreparedRecording(_ on: Bool) {
+        preparedRecording = Task { [previous = preparedRecording, set = setRecordingAlwaysPreparedMode] in
+            await previous?.value
+            try? await set(on)
         }
-        preparedRecordingTask = nil
     }
 
     private func requireSession() throws -> Conversation {
