@@ -24,7 +24,15 @@ final class ConversationClientPreparedRecordingTests: XCTestCase {
         _ = try await client.startVoiceConversation(.publicAgent(id: "agent"))
         await client.endConversation()
 
-        let values = await waitForValues(modes, count: 2)
+        let values = await modes.values()
+        XCTAssertEqual(values, [true, false])
+    }
+
+    func testResetReleasesBeforeReturning() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "agent"))
+        await client.reset()
+
+        let values = await modes.values()
         XCTAssertEqual(values, [true, false])
     }
 

@@ -126,6 +126,7 @@ public final class ConversationClient: ObservableObject {
     /// so the UI can still show the last session until `reset()` or a new start.
     public func endConversation() async {
         await session?.endConversation()
+        await preparedRecordingTask?.value
     }
 
     /// End any live session and clear all mirrored state back to idle defaults.
@@ -146,6 +147,7 @@ public final class ConversationClient: ObservableObject {
         mcpToolCalls = []
         mcpConnectionStatus = nil
         updatePreparedRecording()
+        await preparedRecordingTask?.value
     }
 
     /// Mirror the new session's `@Published` state onto this object.
@@ -180,7 +182,7 @@ public final class ConversationClient: ObservableObject {
 
     private func updatePreparedRecording() {
         guard preparedRecordingTask == nil, wantsPreparedRecording != appliedPreparedRecording else { return }
-        preparedRecordingTask = Task { [weak self] in await self?.applyPreparedRecording() }
+        preparedRecordingTask = Task { await self.applyPreparedRecording() }
     }
 
     /// Applies the latest wanted value, one set at a time; each set blocks a thread.
