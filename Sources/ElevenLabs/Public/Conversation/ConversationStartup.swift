@@ -42,11 +42,6 @@ public struct ConversationStartupError: LocalizedError, Sendable, Equatable {
     public let stage: ConversationStartupState
     public let underlyingError: ConversationError
 
-    public init(stage: ConversationStartupState, underlyingError: ConversationError) {
-        self.stage = stage
-        self.underlyingError = underlyingError
-    }
-
     public var errorDescription: String? {
         "Conversation startup failed during \(stage): \(underlyingError.localizedDescription)"
     }
