@@ -336,13 +336,10 @@ final class Conversation: ObservableObject {
                 await handleStartupCancellation(disconnecting: manager)
                 throw CancellationError()
             }
-            let startupError = error as? ConversationStartupError ?? ConversationStartupError(
-                stage: currentStartupStage,
-                metrics: .init(),
-                underlyingError: error as? ConversationError ?? .connectionFailed(error)
-            )
-            await handleStartupFailure(startupError.underlyingError, disconnecting: manager)
-            throw startupError
+            let stage = currentStartupStage
+            let conversationError = error as? ConversationError ?? .connectionFailed(error)
+            await handleStartupFailure(conversationError, disconnecting: manager)
+            throw ConversationStartupError(stage: stage, underlyingError: conversationError)
         }
     }
 

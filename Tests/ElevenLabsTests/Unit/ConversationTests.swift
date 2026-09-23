@@ -591,13 +591,11 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            let startupError = assertStartupError(
+            assertStartupError(
                 error,
                 stage: .waitingForInitiationMetadata(timeout: startupConfig.initiationMetadataTimeout),
                 underlying: .initiationMetadataTimeout
             )
-            XCTAssertNotNil(startupError?.metrics.initiationMetadata)
-            XCTAssertNotNil(startupError?.metrics.total)
         }
 
         guard case .error(.initiationMetadataTimeout) = conversation.state else {
@@ -830,16 +828,14 @@ final class ConversationTests: XCTestCase {
 // swiftlint:enable file_length type_body_length
 
 extension ConversationTests {
-    @discardableResult
     private func assertStartupError(
         _ error: Error,
         stage: ConversationStartupState,
         underlying: ConversationError
-    ) -> ConversationStartupError? {
+    ) {
         let startupError = error as? ConversationStartupError
         XCTAssertEqual(startupError?.stage, stage)
         XCTAssertEqual(startupError?.underlyingError, underlying)
-        return startupError
     }
 
     private func makeConfig(

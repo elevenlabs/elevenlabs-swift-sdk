@@ -40,16 +40,10 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
 
 public struct ConversationStartupError: LocalizedError, Sendable, Equatable {
     public let stage: ConversationStartupState
-    public let metrics: ConversationStartupMetrics
     public let underlyingError: ConversationError
 
-    public init(
-        stage: ConversationStartupState,
-        metrics: ConversationStartupMetrics,
-        underlyingError: ConversationError
-    ) {
+    public init(stage: ConversationStartupState, underlyingError: ConversationError) {
         self.stage = stage
-        self.metrics = metrics
         self.underlyingError = underlyingError
     }
 

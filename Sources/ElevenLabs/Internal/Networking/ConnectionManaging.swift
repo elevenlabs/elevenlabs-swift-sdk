@@ -90,21 +90,9 @@ extension ConnectionManaging {
         onStartupStateChange(.waitingForInitiationMetadata(timeout: timeout))
 
         let waitStart = Date()
-        do {
-            let metadata = try await metadataWaiter.wait()
-            metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
-            metrics.total = Date().timeIntervalSince(startTime)
-            return metadata
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw ConversationStartupError(
-                stage: .waitingForInitiationMetadata(timeout: timeout),
-                metrics: metrics,
-                underlyingError: error as? ConversationError ?? .connectionFailed(error)
-            )
-        }
+        let metadata = try await metadataWaiter.wait()
+        metrics.initiationMetadata = Date().timeIntervalSince(waitStart)
+        metrics.total = Date().timeIntervalSince(startTime)
+        return metadata
     }
 }
