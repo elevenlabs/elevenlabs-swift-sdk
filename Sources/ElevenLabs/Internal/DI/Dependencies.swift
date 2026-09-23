@@ -5,6 +5,7 @@ protocol ConversationDependencyProvider: AnyObject {
     var logger: any Logging { get }
     var webRTCConnectionManager: any WebRTCConnectionManaging { get }
     var webSocketConnectionManager: any WebSocketConnectionManaging { get }
+    func setRecordingAlwaysPreparedMode(_ enabled: Bool) async throws
 }
 
 /// A minimalistic dependency container for internal SDK use.
@@ -23,5 +24,9 @@ final class Dependencies: ConversationDependencyProvider {
             endpoints: endpoints
         )
         webSocketConnectionManager = WebSocketConnectionManager(logger: logger, endpoints: endpoints)
+    }
+
+    func setRecordingAlwaysPreparedMode(_ enabled: Bool) async throws {
+        try await ConversationAudioManager.setRecordingAlwaysPreparedMode(enabled)
     }
 }

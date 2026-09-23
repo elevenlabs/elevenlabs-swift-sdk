@@ -47,8 +47,6 @@ public final class ConversationClient: ObservableObject {
     private var agentAudioObservers: [any ConversationAudioObserver] = []
     private var micAudioObservers: [any ConversationAudioObserver] = []
 
-    /// LiveKit's prepared-recording mode is process-global; only the client toggles it.
-    private let setRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void
     /// Whether the current session is voice and its config allows prepared recording.
     private var sessionPrefersPreparedRecording = false
     /// Last queued change; each change waits for the previous one.
@@ -59,20 +57,14 @@ public final class ConversationClient: ObservableObject {
         self.callbacks = callbacks
         self.logLevel = logLevel
         dependencyProvider = nil
-        setRecordingAlwaysPreparedMode = ConversationAudioManager.setRecordingAlwaysPreparedMode
         observePreparedRecording()
     }
 
     /// Test-only initializer that injects a dependency provider.
-    init(
-        callbacks: ConversationCallbacks = .init(),
-        dependencyProvider: any ConversationDependencyProvider,
-        setRecordingAlwaysPreparedMode: @escaping @MainActor (Bool) async throws -> Void = { _ in }
-    ) {
+    init(callbacks: ConversationCallbacks = .init(), dependencyProvider: any ConversationDependencyProvider) {
         self.callbacks = callbacks
         logLevel = .warning
         self.dependencyProvider = dependencyProvider
-        self.setRecordingAlwaysPreparedMode = setRecordingAlwaysPreparedMode
         observePreparedRecording()
     }
 
@@ -180,8 +172,11 @@ public final class ConversationClient: ObservableObject {
             .sink { [weak self] in self?.setPreparedRecording($0) }
     }
 
+    /// LiveKit's prepared-recording mode is process-global; only the client toggles it.
     private func setPreparedRecording(_ on: Bool) {
-        preparedRecording = Task { [previous = preparedRecording, set = setRecordingAlwaysPreparedMode] in
+        let set = dependencyProvider?.setRecordingAlwaysPreparedMode
+            ?? ConversationAudioManager.setRecordingAlwaysPreparedMode
+        preparedRecording = Task { [previous = preparedRecording] in
             await previous?.value
             try? await set(on)
         }

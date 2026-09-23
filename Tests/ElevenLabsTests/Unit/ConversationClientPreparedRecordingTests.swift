@@ -3,37 +3,31 @@ import XCTest
 
 @MainActor
 final class ConversationClientPreparedRecordingTests: XCTestCase {
-    private var modes: ValueRecorder<Bool>!
+    private var provider: TestDependencyProvider!
     private var client: ConversationClient!
 
     override func setUp() async throws {
-        let modes = ValueRecorder<Bool>()
-        self.modes = modes
-        client = ConversationClient(
-            dependencyProvider: TestDependencyProvider(),
-            setRecordingAlwaysPreparedMode: { await modes.append($0) }
-        )
+        provider = TestDependencyProvider()
+        client = ConversationClient(dependencyProvider: provider)
     }
 
     override func tearDown() async throws {
         client = nil
-        modes = nil
+        provider = nil
     }
 
     func testVoiceConversationPreparesThenReleasesOnEnd() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "agent"))
         await client.endConversation()
 
-        let values = await modes.values()
-        XCTAssertEqual(values, [true, false])
+        XCTAssertEqual(provider.recordingAlwaysPreparedModes, [true, false])
     }
 
     func testResetReleasesBeforeReturning() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "agent"))
         await client.reset()
 
-        let values = await modes.values()
-        XCTAssertEqual(values, [true, false])
+        XCTAssertEqual(provider.recordingAlwaysPreparedModes, [true, false])
     }
 
     func testRestartStaysPrepared() async throws {
@@ -41,8 +35,7 @@ final class ConversationClientPreparedRecordingTests: XCTestCase {
         _ = try await client.startVoiceConversation(.publicAgent(id: "second"))
         await settle()
 
-        let values = await modes.values()
-        XCTAssertEqual(values, [true])
+        XCTAssertEqual(provider.recordingAlwaysPreparedModes, [true])
     }
 
     func testExplicitFalseNeverPrepares() async throws {
@@ -53,8 +46,7 @@ final class ConversationClientPreparedRecordingTests: XCTestCase {
         await client.endConversation()
         await settle()
 
-        let values = await modes.values()
-        XCTAssertEqual(values, [])
+        XCTAssertEqual(provider.recordingAlwaysPreparedModes, [])
     }
 
     func testTextOnlyNeverPrepares() async throws {
@@ -62,8 +54,7 @@ final class ConversationClientPreparedRecordingTests: XCTestCase {
         await client.endConversation()
         await settle()
 
-        let values = await modes.values()
-        XCTAssertEqual(values, [])
+        XCTAssertEqual(provider.recordingAlwaysPreparedModes, [])
     }
 
     private func settle() async {
