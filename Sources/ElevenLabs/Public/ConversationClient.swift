@@ -60,7 +60,7 @@ public final class ConversationClient: ObservableObject {
         self.callbacks = callbacks
         self.logLevel = logLevel
         dependencyProvider = nil
-        setRecordingAlwaysPreparedMode = Self.liveKitSetRecordingAlwaysPreparedMode
+        setRecordingAlwaysPreparedMode = { try await AudioManager.shared.setRecordingAlwaysPreparedMode($0) }
         observePreparedRecording()
     }
 
@@ -77,10 +77,6 @@ public final class ConversationClient: ObservableObject {
         observePreparedRecording()
     }
 
-    private static let liveKitSetRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void = {
-        try await AudioManager.shared.setRecordingAlwaysPreparedMode($0)
-    }
-
     // MARK: - Lifecycle
 
     /// Start a voice conversation. Any previously-started session still running
@@ -89,7 +85,8 @@ public final class ConversationClient: ObservableObject {
         _ auth: ConversationAuth.Voice,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
-        try await startConversation(config: config, isVoice: true) { conversation in
+        sessionPrefersPreparedRecording = config.audioConfiguration?.recordingAlwaysPrepared != false
+        return try await startConversation(config: config) { conversation in
             try await conversation.startVoiceConversation(auth)
         }
     }
@@ -100,14 +97,14 @@ public final class ConversationClient: ObservableObject {
         _ auth: ConversationAuth.TextOnly,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
-        try await startConversation(config: config, isVoice: false) { conversation in
+        sessionPrefersPreparedRecording = false
+        return try await startConversation(config: config) { conversation in
             try await conversation.startTextOnlyConversation(auth)
         }
     }
 
     private func startConversation(
         config: ConversationConfig,
-        isVoice: Bool,
         start: (Conversation) async throws -> ConversationStartResult
     ) async throws -> ConversationStartResult {
         let previousConversation = session
@@ -118,7 +115,6 @@ public final class ConversationClient: ObservableObject {
             initialMicMuted: isMicMuted,
             initialAgentMuted: isAgentMuted
         )
-        sessionPrefersPreparedRecording = isVoice && config.audioConfiguration?.recordingAlwaysPrepared != false
         bind(conversation)
 
         await previousConversation?.endConversation()

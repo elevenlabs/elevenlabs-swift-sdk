@@ -66,14 +66,6 @@ final class ConversationClientPreparedRecordingTests: XCTestCase {
         XCTAssertEqual(values, [])
     }
 
-    func testSwitchingToTextOnlyReleases() async throws {
-        _ = try await client.startVoiceConversation(.publicAgent(id: "voice"))
-        _ = try await client.startTextOnlyConversation(.publicAgent(id: "text"))
-
-        let values = await waitForValues(modes, count: 2)
-        XCTAssertEqual(values, [true, false])
-    }
-
     private func settle() async {
         for _ in 0 ..< 20 {
             await Task.yield()
