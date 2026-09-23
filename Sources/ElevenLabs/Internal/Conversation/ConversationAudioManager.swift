@@ -18,6 +18,10 @@ final class ConversationAudioManager {
         self.logger = logger
     }
 
+    static func setRecordingAlwaysPreparedMode(_ enabled: Bool) async throws {
+        try await AudioManager.shared.setRecordingAlwaysPreparedMode(enabled)
+    }
+
     deinit {
         if audioSpeechHandlerInstalled {
             AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler

@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import LiveKit
 
 /// The central entry point for the ElevenLabs Conversational AI SDK.
 ///
@@ -60,7 +59,7 @@ public final class ConversationClient: ObservableObject {
         self.callbacks = callbacks
         self.logLevel = logLevel
         dependencyProvider = nil
-        setRecordingAlwaysPreparedMode = { try await AudioManager.shared.setRecordingAlwaysPreparedMode($0) }
+        setRecordingAlwaysPreparedMode = ConversationAudioManager.setRecordingAlwaysPreparedMode
         observePreparedRecording()
     }
 
