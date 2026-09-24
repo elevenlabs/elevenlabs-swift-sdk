@@ -537,8 +537,8 @@ let audioConfig = AudioPipelineConfiguration(
     // .software(speechThreshold:notificationThrottle:) - silent mute with callbacks
     microphoneMuteMode: .inputMixer,
 
-    // Set to true to minimize latency of the first word
-    recordingAlwaysPrepared: true,
+    // Prepare the mic while connecting so speech starts sooner (default).
+    preparesMicrophone: true,
 
     // Bypass system Echo Cancellation / Noise Suppression (Advanced)
     voiceProcessingBypassed: false
