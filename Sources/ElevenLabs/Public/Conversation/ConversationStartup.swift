@@ -38,6 +38,16 @@ public struct ConversationStartupMetrics: Sendable, Equatable {
     }
 }
 
+/// Thrown when a start fails: `stage` is where startup stopped, `underlyingError` is why.
+public struct ConversationStartupError: LocalizedError, Sendable, Equatable {
+    public let stage: ConversationStartupState
+    public let underlyingError: ConversationError
+
+    public var errorDescription: String? {
+        underlyingError.errorDescription
+    }
+}
+
 public struct ConversationStartResult: Equatable, Sendable {
     public let callInfo: CallInfo
     public let metrics: ConversationStartupMetrics

@@ -71,6 +71,7 @@ When migrating:
 
 - Replace optional `Conversation?` storage with a non-optional `ConversationClient` created up front. Calls like `sendMessage` throw `ConversationError.notConnected` instead of needing nil-checks.
 - The start methods return a `ConversationStartResult` (call info + startup timing metrics). Discard it with `_ =` unless the app used v3's `startupMetrics`.
+- Startup failures throw `ConversationStartupError`, which carries the failed stage and the underlying `ConversationError`. Existing `catch let error as ConversationError` or `as? ConversationError` around a start still compiles but never matches: catch `ConversationStartupError` and read `.underlyingError`.
 - Starting while a previous conversation is live ends it first — the latest start wins. Remove any manual "end before restart" logic.
 - Credentials stay backend-minted: conversation tokens (voice) and signed WebSocket URLs (text-only) must come from the user's backend. Never embed an ElevenLabs API key in the app.
 - v3's `ConversationConfig` still exists in v4 for overrides (agent/TTS/dynamic variables/timeouts) and is passed to the start call: `startVoiceConversation(auth, config: config)`.

@@ -162,7 +162,10 @@ final class ConversationClientTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
+            XCTAssertEqual(
+                (error as? ConversationStartupError)?.underlyingError,
+                .authenticationFailed("Mock authentication failed")
+            )
         }
 
         guard case let .error(error) = client.state else {
