@@ -84,6 +84,7 @@ public final class ConversationClient: ObservableObject {
         _ auth: ConversationAuth.Voice,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
+        try Task.checkCancellation()
         sessionPrefersPreparedRecording = config.audioConfiguration?.preparesMicrophone ?? true
         return try await startConversation(config: config) { conversation in
             try await conversation.startVoiceConversation(auth)
@@ -96,6 +97,7 @@ public final class ConversationClient: ObservableObject {
         _ auth: ConversationAuth.TextOnly,
         config: ConversationConfig = .init()
     ) async throws -> ConversationStartResult {
+        try Task.checkCancellation()
         sessionPrefersPreparedRecording = false
         return try await startConversation(config: config) { conversation in
             try await conversation.startTextOnlyConversation(auth)
