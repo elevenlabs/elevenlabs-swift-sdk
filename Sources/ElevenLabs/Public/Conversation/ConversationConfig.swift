@@ -211,23 +211,23 @@ public struct AudioPipelineConfiguration: Sendable {
     /// Override the microphone mute strategy. Defaults to `.inputMixer` to match previous SDK behaviour.
     public var microphoneMuteMode: MicrophoneMuteMode?
 
-    /// Keep the recording engine warm to avoid first-spoken-word latency. Defaults to `true`.
-    public var recordingAlwaysPrepared: Bool?
+    /// Prepare the mic while a voice conversation is starting or live so it publishes faster; released when it ends. Defaults to `true`.
+    public var preparesMicrophone: Bool
 
-    /// Bypass WebRTC voice processing (AEC/NS/VAD). Leave `nil` to preserve system defaults.
+    /// Bypass WebRTC voice processing (AEC/NS/VAD). Process-wide; `nil` leaves the current value, which an earlier call may have set.
     public var voiceProcessingBypassed: Bool?
 
-    /// Toggle Auto Gain Control. Leave `nil` to preserve system defaults.
+    /// Toggle Auto Gain Control. Process-wide; `nil` leaves the current value, which an earlier call may have set.
     public var voiceProcessingAGCEnabled: Bool?
 
     public init(
         microphoneMuteMode: MicrophoneMuteMode? = .inputMixer,
-        recordingAlwaysPrepared: Bool? = true,
+        preparesMicrophone: Bool = true,
         voiceProcessingBypassed: Bool? = nil,
         voiceProcessingAGCEnabled: Bool? = nil
     ) {
         self.microphoneMuteMode = microphoneMuteMode
-        self.recordingAlwaysPrepared = recordingAlwaysPrepared
+        self.preparesMicrophone = preparesMicrophone
         self.voiceProcessingBypassed = voiceProcessingBypassed
         self.voiceProcessingAGCEnabled = voiceProcessingAGCEnabled
     }
