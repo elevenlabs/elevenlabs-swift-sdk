@@ -7,7 +7,6 @@ final class ConversationConfigTests: XCTestCase {
 
         XCTAssertNil(config.agentOverrides)
         XCTAssertNil(config.ttsOverrides)
-        XCTAssertNil(config.conversationOverrides.clientEvents)
     }
 
     func testConfigurationWithOverrides() {
@@ -23,13 +22,8 @@ final class ConversationConfigTests: XCTestCase {
             voiceId: "voice123"
         )
 
-        config.conversationOverrides = ConversationOverrides(
-            clientEvents: ["audio"]
-        )
-
         XCTAssertNotNil(config.agentOverrides)
         XCTAssertNotNil(config.ttsOverrides)
-        XCTAssertEqual(config.conversationOverrides.clientEvents, ["audio"])
     }
 
     func testAgentOverrides() {
@@ -50,14 +44,6 @@ final class ConversationConfigTests: XCTestCase {
         )
 
         XCTAssertEqual(overrides.voiceId, "voice123")
-    }
-
-    func testConversationOverrides() {
-        let overrides = ConversationOverrides(
-            clientEvents: ["audio"]
-        )
-
-        XCTAssertEqual(overrides.clientEvents, ["audio"])
     }
 
     func testLanguageAcceptsCodesWithoutNamedConstants() throws {

@@ -106,11 +106,8 @@ public struct TTSOverrides: Sendable {
 public struct ConversationOverrides: Sendable {
     /// Set when starting a text conversation. Sent as `text_only` on conversation init.
     var textOnly = false
-    public var clientEvents: [String]?
 
-    public init(clientEvents: [String]? = nil) {
-        self.clientEvents = clientEvents
-    }
+    public init() {}
 }
 
 /// The network endpoints the SDK talks to. Defaults to ``production``.
