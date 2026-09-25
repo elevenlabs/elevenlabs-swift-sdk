@@ -165,7 +165,7 @@ public struct MCPToolCallEvent: Sendable {
     public let toolName: String
     public let toolDescription: String?
     public let parametersData: Data
-    public let timestamp: String
+    public let timestamp: String?
     public let state: State
 
     public let approvalTimeoutSecs: Int?
@@ -187,7 +187,7 @@ public struct MCPConnectionStatusEvent: Sendable {
         public let integrationId: String
         public let integrationType: String
         public let isConnected: Bool
-        public let toolCount: Int
+        public let toolCount: Int?
     }
 
     public let integrations: [Integration]
