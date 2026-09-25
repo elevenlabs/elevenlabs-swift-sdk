@@ -132,7 +132,9 @@ public final class ConversationClient: ObservableObject {
     /// End any live session and clear all mirrored state back to idle defaults.
     /// Use this when dismissing a screen or starting over with a blank client.
     public func reset() async {
-        await session?.endConversation()
+        let endingSession = session
+        await endConversation()
+        guard session === endingSession else { return } // a start issued meanwhile takes over
         cancellables.removeAll()
         session = nil
         sessionPrefersPreparedRecording = false
@@ -146,7 +148,6 @@ public final class ConversationClient: ObservableObject {
         conversationMetadata = nil
         mcpToolCalls = []
         mcpConnectionStatus = nil
-        await preparedRecording?.value
     }
 
     /// Mirror the new session's `@Published` state onto this object.
