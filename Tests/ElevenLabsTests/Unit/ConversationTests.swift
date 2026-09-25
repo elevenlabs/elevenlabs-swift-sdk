@@ -778,6 +778,15 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
     }
 
+    func testConversationErrorDetails() {
+        let error = ConversationError.connectionFailed("socket closed")
+
+        guard case let .connectionFailed(details) = error else { return XCTFail("Expected connectionFailed") }
+        XCTAssertEqual(details.message, "socket closed")
+        XCTAssertEqual(error, .connectionFailed(ConversationError.Details("socket closed")))
+        XCTAssertEqual(error.localizedDescription, "Connection failed: socket closed")
+    }
+
     func testMessageEqualityIncludesContent() {
         let message = Message(role: .agent, content: "Hello", isFinal: false, responseId: "response")
         var updated = message

@@ -77,6 +77,7 @@ When migrating:
 - v3's `ConversationConfig` still exists in v4 for overrides (agent/TTS/dynamic variables/timeouts) and is passed to the start call: `startVoiceConversation(auth, config: config)`.
 - `dynamicVariables` and `customLlmExtraBody` are typed: literals like `["user_id": 12345, "is_premium": true]` send native JSON numbers and booleans. A `[String: String]` variable needs `.mapValues(DynamicVariableValue.string)`; suggest real types where the app stringified numbers or flags.
 - `ConversationOverrides.clientEvents` is removed: the server never accepted it as an override, so it had no effect. Delete it. `MCPToolCallEvent.timestamp` and `MCPConnectionStatusEvent.Integration.toolCount` are optional.
+- `ConversationError.connectionFailed`, `.authenticationFailed` and `.microphoneToggleFailed` carry `ConversationError.Details` instead of a `String`: `case let .connectionFailed(details)` then `details.message`. Constructing them with a string and `localizedDescription` are unchanged.
 - `Language` is a struct: `.english` etc. are unchanged, any code works as a literal (`"pt-br"`), and `Language(rawValue:)` is no longer optional. Remove `if let`/`guard let` around it and add `default:` to any `switch` over it.
 
 If the codebase creates **multiple `Conversation` objects** (e.g. different screens each start their own), ask the user whether they want:
