@@ -201,6 +201,24 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
     }
 
+    func testStartDuringResetIsNotOrphaned() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        var startedDuringReset = false
+        // Runs while reset() awaits the first session's disconnect.
+        mockWebRTCConnectionManager.onDisconnectStarted = { [client] in
+            guard !startedDuringReset else { return }
+            startedDuringReset = true
+            _ = try? await client?.startVoiceConversation(.publicAgent(id: "second-agent"))
+        }
+
+        await client.reset()
+
+        XCTAssertTrue(startedDuringReset)
+        XCTAssertEqual(client.state.connectedAgentId, "second-agent")
+        await client.endConversation()
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
     func testCommandThrowsNotConnectedWithNoSession() async throws {
         do {
             try await client.sendMessage("hello")
