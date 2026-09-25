@@ -17,7 +17,13 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         static let buffersBelowToClear = 3
     }
 
-    private var lock = os_unfair_lock_s()
+    /// Heap-allocated: `&` on a stored property doesn't guarantee a stable address for the lock.
+    private let lock: UnsafeMutablePointer<os_unfair_lock> = {
+        let lock = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
+        lock.initialize(to: os_unfair_lock())
+        return lock
+    }()
+
     private var isMuted: Bool = false
     private var lastNotificationTime: Date = .distantPast
 
@@ -39,21 +45,26 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         self.mutedSpeechThrottleInSeconds = mutedSpeechThrottleInSeconds
     }
 
+    deinit {
+        lock.deinitialize(count: 1)
+        lock.deallocate()
+    }
+
     func setMuted(_ muted: Bool) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         if isMuted != muted {
             consecutiveAboveCount = 0
             consecutiveBelowCount = 0
             hangoverLatched = false
         }
         isMuted = muted
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
     }
 
     func audioProcessingProcess(audioBuffer: LKAudioBuffer) {
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         let currentlyMuted = isMuted
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
 
         guard currentlyMuted else { return }
 
@@ -74,7 +85,7 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         let levelActive = db > mutedSpeechThresholdInDb
 
         var shouldFire = false
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         if levelActive {
             consecutiveBelowCount = 0
             consecutiveAboveCount += 1
@@ -97,7 +108,7 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
                 shouldFire = true
             }
         }
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
 
         if shouldFire {
             DispatchQueue.main.async {
