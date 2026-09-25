@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Outgoing Events (to ElevenLabs)
 
 /// Events that can be sent to the ElevenLabs agent
-public enum OutgoingEvent {
+enum OutgoingEvent {
     case pong(PongEvent)
     case userAudio(UserAudioEvent)
     case conversationInit(ConversationInitEvent)
@@ -16,28 +16,20 @@ public enum OutgoingEvent {
 }
 
 /// Pong response to ping
-public struct PongEvent: Sendable {
-    public let eventId: Int
-
-    public init(eventId: Int) {
-        self.eventId = eventId
-    }
+struct PongEvent: Sendable {
+    let eventId: Int
 }
 
 /// User audio chunk
-public struct UserAudioEvent: Sendable {
-    public let audioChunk: String // base64 encoded
-
-    public init(audioChunk: String) {
-        self.audioChunk = audioChunk
-    }
+struct UserAudioEvent: Sendable {
+    let audioChunk: String // base64 encoded
 }
 
 /// Conversation initialization
-public struct ConversationInitEvent: Sendable {
-    public let config: ConversationConfig?
+struct ConversationInitEvent: Sendable {
+    let config: ConversationConfig?
 
-    public init(config: ConversationConfig? = nil) {
+    init(config: ConversationConfig? = nil) {
         self.config = config
     }
 }
@@ -106,30 +98,17 @@ public struct ClientToolResultEvent: Sendable {
 }
 
 /// Contextual update to the conversation
-public struct ContextualUpdateEvent: Sendable {
-    public let text: String
-
-    public init(text: String) {
-        self.text = text
-    }
+struct ContextualUpdateEvent: Sendable {
+    let text: String
 }
 
 /// User text message
-public struct UserMessageEvent: Sendable {
-    public let text: String?
-
-    public init(text: String?) {
-        self.text = text
-    }
+struct UserMessageEvent: Sendable {
+    let text: String?
 }
 
 /// MCP tool approval result
-public struct MCPToolApprovalResultEvent: Sendable {
-    public let toolCallId: String
-    public let isApproved: Bool
-
-    public init(toolCallId: String, isApproved: Bool) {
-        self.toolCallId = toolCallId
-        self.isApproved = isApproved
-    }
+struct MCPToolApprovalResultEvent: Sendable {
+    let toolCallId: String
+    let isApproved: Bool
 }

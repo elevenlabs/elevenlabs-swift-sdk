@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Incoming Events (from ElevenLabs)
 
 /// Events that can be received from the ElevenLabs agent
-public enum IncomingEvent: Sendable {
+enum IncomingEvent: Sendable {
     case userTranscript(UserTranscriptEvent)
     case tentativeUserTranscript(TentativeUserTranscriptEvent)
     case agentResponse(AgentResponseEvent)
@@ -23,50 +23,50 @@ public enum IncomingEvent: Sendable {
     case error(ErrorEvent)
 }
 
-public enum AgentChatResponsePartType: String, Sendable {
+enum AgentChatResponsePartType: String, Sendable {
     case start
     case delta
     case stop
 }
 
 /// User's speech transcription
-public struct UserTranscriptEvent: Sendable {
-    public let transcript: String
-    public let eventId: Int
+struct UserTranscriptEvent: Sendable {
+    let transcript: String
+    let eventId: Int
 }
 
 /// Tentative user's speech transcription (in-progress)
-public struct TentativeUserTranscriptEvent: Sendable {
-    public let transcript: String
-    public let eventId: Int
+struct TentativeUserTranscriptEvent: Sendable {
+    let transcript: String
+    let eventId: Int
 }
 
 /// Agent's text response
-public struct AgentResponseEvent: Sendable {
-    public let response: String
-    public let eventId: Int
-    public let responseId: String
+struct AgentResponseEvent: Sendable {
+    let response: String
+    let eventId: Int
+    let responseId: String
 }
 
 /// Agent's response correction
-public struct AgentResponseCorrectionEvent: Sendable {
-    public let originalAgentResponse: String
-    public let correctedAgentResponse: String
-    public let eventId: Int
-    public let responseId: String
+struct AgentResponseCorrectionEvent: Sendable {
+    let originalAgentResponse: String
+    let correctedAgentResponse: String
+    let eventId: Int
+    let responseId: String
 }
 
 /// Agent response metadata
-public struct AgentResponseMetadataEvent: Sendable {
-    public let eventId: Int
-    public let metadataData: Data
+struct AgentResponseMetadataEvent: Sendable {
+    let eventId: Int
+    let metadataData: Data
 }
 
-public struct AgentChatResponsePartEvent: Sendable {
-    public let text: String
-    public let type: AgentChatResponsePartType
-    public let eventId: Int
-    public let responseId: String
+struct AgentChatResponsePartEvent: Sendable {
+    let text: String
+    let type: AgentChatResponsePartType
+    let eventId: Int
+    let responseId: String
 }
 
 /// Audio alignment data showing character-level timing information
@@ -77,15 +77,15 @@ public struct AudioAlignment: Sendable {
 }
 
 /// Audio data from the agent
-public struct AudioEvent: Sendable {
-    public let audioBase64: String
-    public let eventId: Int
-    public let alignment: AudioAlignment?
+struct AudioEvent: Sendable {
+    let audioBase64: String
+    let eventId: Int
+    let alignment: AudioAlignment?
 }
 
 /// Interruption detected
-public struct InterruptionEvent: Sendable {
-    public let eventId: Int
+struct InterruptionEvent: Sendable {
+    let eventId: Int
 }
 
 /// Conversation initialization metadata
@@ -96,14 +96,14 @@ public struct ConversationMetadataEvent: Sendable {
 }
 
 /// VAD score
-public struct VadScoreEvent: Sendable {
-    public let vadScore: Double
+struct VadScoreEvent: Sendable {
+    let vadScore: Double
 }
 
 /// Ping event for connection health
-public struct PingEvent: Sendable {
-    public let eventId: Int
-    public let pingMs: Int?
+struct PingEvent: Sendable {
+    let eventId: Int
+    let pingMs: Int?
 }
 
 /// Client tool call request
