@@ -13,12 +13,13 @@ This document provides in-depth examples and advanced configuration options for 
 5. [Event Callbacks](#event-callbacks)
 6. [Audio Pipeline Configuration](#audio-pipeline)
 7. [Startup Performance Tuning](#startup-tuning)
-8. [Feedback & Context](#feedback-context)
-9. [Reconnect & Recovery](#reconnect)
-10. [Voice Activity Detection (VAD)](#vad)
-11. [Advanced Authentication](#advanced-authentication)
-12. [Diagnostics & Troubleshooting](#diagnostics)
-13. [Best Practices](#best-practices)
+8. [Dynamic Variables](#dynamic-variables)
+9. [Feedback & Context](#feedback-context)
+10. [Reconnect & Recovery](#reconnect)
+11. [Voice Activity Detection (VAD)](#vad)
+12. [Advanced Authentication](#advanced-authentication)
+13. [Diagnostics & Troubleshooting](#diagnostics)
+14. [Best Practices](#best-practices)
 
 ---
 
@@ -595,6 +596,21 @@ let config = ConversationConfig(startupConfiguration: startupConfig)
 ```
 
 A timeout fails the start with `.connectionFailed(.agentDidNotJoin, _)` or `.connectionFailed(.initializationTimedOut, _)`.
+
+---
+
+## Dynamic Variables {#dynamic-variables}
+
+Dynamic variables keep their JSON types, so workflow conditions like `user_version > 3` work.
+
+```swift
+let config = ConversationConfig(
+    customLlmExtraBody: ["temperature": 0.7, "max_tokens": 150], // only for custom LLM agents
+    dynamicVariables: ["customer_name": "John Doe", "user_version": 5, "is_premium": true]
+)
+```
+
+Already holding a `[String: String]`? Pass `strings.mapValues(DynamicVariableValue.string)`. To send a null, use `.null`; `nil` removes the key instead.
 
 ---
 
