@@ -32,8 +32,10 @@ final class ConversationEventHandlerTests: XCTestCase {
             dependencyProvider: mockDependencyProvider,
             callbacks: ConversationCallbacks(
                 onUserTranscript: { transcript, eventId in
-                    Task { await receivedTranscripts.append((transcript, eventId)) }
-                    expectation.fulfill()
+                    Task {
+                        await receivedTranscripts.append((transcript, eventId))
+                        expectation.fulfill()
+                    }
                 }
             )
         )

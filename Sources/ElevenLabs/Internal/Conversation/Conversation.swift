@@ -67,6 +67,8 @@ final class Conversation: ObservableObject {
     }
 
     private var speakingTimer: Task<Void, Never>?
+    /// The in-flight teardown; later `endConversation()` calls wait for it instead of returning early.
+    private var ending: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -182,6 +184,7 @@ final class Conversation: ObservableObject {
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
     func endConversation(reason: EndReason = .userEnded) async {
+        if let ending { return await ending.value }
         if state == .idle {
             state = .ended(reason: reason)
             tearDownActiveSession()
@@ -194,9 +197,12 @@ final class Conversation: ObservableObject {
         state = .ended(reason: reason)
 
         tearDownActiveSession()
-        await connectionManager.disconnect()
-
-        callbacks.onDisconnect?(reason)
+        let ending = Task {
+            await connectionManager.disconnect()
+            callbacks.onDisconnect?(reason)
+        }
+        self.ending = ending
+        await ending.value
     }
 
     /// Send a text message to the agent.

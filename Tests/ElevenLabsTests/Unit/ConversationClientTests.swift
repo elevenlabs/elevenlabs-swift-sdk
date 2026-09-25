@@ -198,6 +198,34 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
     }
 
+    func testStartDuringResetWaitsForTheOldSessionAndIsNotOrphaned() async throws {
+        let log = CallbackLog()
+        let client = ConversationClient(
+            callbacks: ConversationCallbacks(
+                onAgentReady: { log.append("ready") },
+                onDisconnect: { _ in log.append("disconnect") }
+            ),
+            dependencyProvider: dependencyProvider
+        )
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        var secondStart: Task<ConversationStartResult, Error>?
+        // Runs while reset() awaits the first session's disconnect; issued as its own task, like a host would.
+        mockWebRTCConnectionManager.onDisconnectStarted = { [unowned self] in
+            guard secondStart == nil else { return }
+            secondStart = Task { try await client.startVoiceConversation(.publicAgent(id: "second-agent")) }
+            // Hold the old disconnect open until the second start has bound its session.
+            await waitForPublished(client.$state) { $0 == .idle }
+        }
+
+        await client.reset()
+        _ = try await XCTUnwrap(secondStart).value
+
+        XCTAssertEqual(log.events, ["ready", "disconnect", "ready"])
+        XCTAssertEqual(client.state.connectedAgentId, "second-agent")
+        await client.endConversation()
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
     func testCommandThrowsNotConnectedWithNoSession() async throws {
         do {
             try await client.sendMessage("hello")
@@ -289,5 +317,23 @@ final class ConversationClientTests: XCTestCase {
         }
         XCTAssertEqual(info.agentId, agentId, file: file, line: line)
         XCTAssertEqual(info.conversationId, conversationId, file: file, line: line)
+    }
+}
+
+/// Records callbacks, which arrive as `@Sendable` closures, in order.
+private final class CallbackLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var events: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ event: String) {
+        lock.lock()
+        storage.append(event)
+        lock.unlock()
     }
 }
