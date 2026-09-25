@@ -115,7 +115,7 @@ enum EventSerializer {
         }
 
         if let dynamicVars = config.dynamicVariables {
-            json["dynamic_variables"] = dynamicVars
+            json["dynamic_variables"] = DynamicVariableValue.jsonObject(from: dynamicVars)
         }
 
         // Add source_info (equivalent to client in React Native)

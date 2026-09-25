@@ -14,7 +14,8 @@ public struct ConversationConfig: Sendable {
     public var ttsOverrides: TTSOverrides?
     public var conversationOverrides: ConversationOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
-    public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    /// Typed dynamic variables sent at conversation start as native JSON primitives.
+    public var dynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
@@ -91,7 +92,7 @@ public struct ConversationConfig: Sendable {
         ttsOverrides: TTSOverrides? = nil,
         conversationOverrides: ConversationOverrides? = nil,
         customLlmExtraBody: [String: String]? = nil,
-        dynamicVariables: [String: String]? = nil,
+        dynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
@@ -211,6 +212,81 @@ extension ConversationConfig {
             ttsOverrides: ttsOverrides,
             customLlmExtraBody: customLlmExtraBody,
             dynamicVariables: dynamicVariables,
+            userId: userId,
+            environment: environment,
+            onAgentReady: onAgentReady,
+            onDisconnect: onDisconnect,
+            onStartupStateChange: onStartupStateChange,
+            startupConfiguration: startupConfiguration,
+            audioConfiguration: audioConfiguration,
+            networkConfiguration: networkConfiguration,
+            onError: onError,
+            onSpeechActivity: onSpeechActivity,
+            onAgentResponse: onAgentResponse,
+            onAgentResponseCorrection: onAgentResponseCorrection,
+            onAgentResponseMetadata: onAgentResponseMetadata,
+            onUserTranscript: onUserTranscript,
+            onConversationMetadata: onConversationMetadata,
+            onAgentToolResponse: onAgentToolResponse,
+            onAgentToolRequest: onAgentToolRequest,
+            onInterruption: onInterruption,
+            onVadScore: onVadScore,
+            onAudioAlignment: onAudioAlignment,
+            onCanSendFeedbackChange: onCanSendFeedbackChange,
+            onUnhandledClientToolCall: onUnhandledClientToolCall,
+            agentStateConfiguration: agentStateConfiguration,
+            onAgentStateChange: onAgentStateChange
+        )
+    }
+
+    /// Maps each string value to ``DynamicVariableValue/string(_:)``.
+    public mutating func setDynamicVariables(_ variables: [String: String]) {
+        dynamicVariables = DynamicVariableValue.dictionary(from: variables)
+    }
+}
+
+extension ConversationConfig {
+    /// Accepts a typed `[String: String]` and stores each value as ``DynamicVariableValue/string(_:)``.
+    ///
+    /// Disfavored so dictionary literals resolve to the typed initializer.
+    @_disfavoredOverload
+    public init(
+        agentOverrides: AgentOverrides? = nil,
+        ttsOverrides: TTSOverrides? = nil,
+        conversationOverrides: ConversationOverrides? = nil,
+        customLlmExtraBody: [String: String]? = nil,
+        dynamicVariables: [String: String],
+        userId: String? = nil,
+        environment: String? = nil,
+        onAgentReady: (@Sendable () -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
+        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        startupConfiguration: ConversationStartupConfiguration = .default,
+        audioConfiguration: AudioPipelineConfiguration? = nil,
+        networkConfiguration: LiveKitNetworkConfiguration = .default,
+        onError: (@Sendable (ConversationError) -> Void)? = nil,
+        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
+        onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
+        onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
+        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
+        onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
+        onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
+        onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
+        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        agentStateConfiguration: AgentStateConfiguration? = nil,
+        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
+    ) {
+        self.init(
+            agentOverrides: agentOverrides,
+            ttsOverrides: ttsOverrides,
+            conversationOverrides: conversationOverrides,
+            customLlmExtraBody: customLlmExtraBody,
+            dynamicVariables: DynamicVariableValue.dictionary(from: dynamicVariables),
             userId: userId,
             environment: environment,
             onAgentReady: onAgentReady,

@@ -93,4 +93,81 @@ final class ConversationConfigTests: XCTestCase {
         XCTAssertEqual(Language.ukrainian.rawValue, "uk")
         XCTAssertEqual(Language.chinese.rawValue, "zh")
     }
+
+    func testDynamicVariablesAcceptsMixedTypedValues() {
+        let config = ConversationConfig(
+            dynamicVariables: [
+                "customer_name": .string("John Doe"),
+                "account_balance": .number(5000.50),
+                "user_id": .int(12345),
+                "is_premium": .boolean(true)
+            ]
+        )
+
+        XCTAssertEqual(config.dynamicVariables?["customer_name"], .string("John Doe"))
+        XCTAssertEqual(config.dynamicVariables?["account_balance"], .number(5000.50))
+        XCTAssertEqual(config.dynamicVariables?["user_id"], .int(12345))
+        XCTAssertEqual(config.dynamicVariables?["is_premium"], .boolean(true))
+    }
+
+    func testDynamicVariablesAcceptsDictionaryLiterals() {
+        let config = ConversationConfig(
+            dynamicVariables: [
+                "name": "John",
+                "id": 123,
+                "ok": true,
+                "score": 4.5
+            ]
+        )
+
+        XCTAssertEqual(config.dynamicVariables?["name"], .string("John"))
+        XCTAssertEqual(config.dynamicVariables?["id"], .int(123))
+        XCTAssertEqual(config.dynamicVariables?["ok"], .boolean(true))
+        XCTAssertEqual(config.dynamicVariables?["score"], .number(4.5))
+    }
+
+    func testDynamicVariablesAcceptsStringDictionary() {
+        let strings: [String: String] = [
+            "customer_name": "John Doe",
+            "account_id": "abc-123"
+        ]
+        let config = ConversationConfig(dynamicVariables: strings)
+
+        XCTAssertEqual(config.dynamicVariables?["customer_name"], .string("John Doe"))
+        XCTAssertEqual(config.dynamicVariables?["account_id"], .string("abc-123"))
+    }
+
+    func testSetDynamicVariablesFromStringDictionary() {
+        var config = ConversationConfig()
+        config.setDynamicVariables(["user_name": "Ada"])
+
+        XCTAssertEqual(config.dynamicVariables?["user_name"], .string("Ada"))
+    }
+
+    func testToConversationOptionsPreservesDynamicVariables() {
+        let config = ConversationConfig(
+            dynamicVariables: [
+                "user_id": .int(5),
+                "is_premium": .boolean(true)
+            ]
+        )
+        let options = config.toConversationOptions()
+
+        XCTAssertEqual(options.dynamicVariables?["user_id"], .int(5))
+        XCTAssertEqual(options.dynamicVariables?["is_premium"], .boolean(true))
+
+        let roundTrip = options.toConversationConfig()
+        XCTAssertEqual(roundTrip.dynamicVariables?["user_id"], .int(5))
+        XCTAssertEqual(roundTrip.dynamicVariables?["is_premium"], .boolean(true))
+    }
+
+    func testConversationOptionsAcceptsStringDictionary() {
+        let strings: [String: String] = ["customer_name": "John Doe"]
+        var options = ConversationOptions(dynamicVariables: strings)
+
+        XCTAssertEqual(options.dynamicVariables?["customer_name"], .string("John Doe"))
+
+        options.setDynamicVariables(["account_id": "abc-123"])
+        XCTAssertEqual(options.dynamicVariables?["account_id"], .string("abc-123"))
+    }
 }

@@ -14,7 +14,8 @@ public struct ConversationOptions: Sendable {
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
-    public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    /// Typed dynamic variables sent at conversation start as native JSON primitives.
+    public var dynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
@@ -94,7 +95,7 @@ public struct ConversationOptions: Sendable {
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
         customLlmExtraBody: [String: String]? = nil,
-        dynamicVariables: [String: String]? = nil,
+        dynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
         microphoneFailureHandling: MicrophoneFailureHandling = .throwError,
@@ -174,6 +175,83 @@ extension ConversationOptions {
             networkConfiguration: networkConfiguration,
             onError: onError,
             onSpeechActivity: onSpeechActivity
+        )
+    }
+
+    /// Maps each string value to ``DynamicVariableValue/string(_:)``.
+    public mutating func setDynamicVariables(_ variables: [String: String]) {
+        dynamicVariables = DynamicVariableValue.dictionary(from: variables)
+    }
+}
+
+extension ConversationOptions {
+    /// Accepts a typed `[String: String]` and stores each value as ``DynamicVariableValue/string(_:)``.
+    ///
+    /// Disfavored so dictionary literals resolve to the typed initializer.
+    @_disfavoredOverload
+    public init(
+        conversationOverrides: ConversationOverrides = .init(),
+        agentOverrides: AgentOverrides? = nil,
+        ttsOverrides: TTSOverrides? = nil,
+        customLlmExtraBody: [String: String]? = nil,
+        dynamicVariables: [String: String],
+        userId: String? = nil,
+        environment: String? = nil,
+        microphoneFailureHandling: MicrophoneFailureHandling = .throwError,
+        onAgentReady: (@Sendable () -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
+        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        startupConfiguration: ConversationStartupConfiguration = .default,
+        audioConfiguration: AudioPipelineConfiguration? = nil,
+        networkConfiguration: LiveKitNetworkConfiguration = .default,
+        onError: (@Sendable (ConversationError) -> Void)? = nil,
+        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
+        onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
+        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
+        onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
+        onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
+        onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
+        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
+        onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
+        onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
+        onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
+        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        agentStateConfiguration: AgentStateConfiguration? = nil,
+        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
+    ) {
+        self.init(
+            conversationOverrides: conversationOverrides,
+            agentOverrides: agentOverrides,
+            ttsOverrides: ttsOverrides,
+            customLlmExtraBody: customLlmExtraBody,
+            dynamicVariables: DynamicVariableValue.dictionary(from: dynamicVariables),
+            userId: userId,
+            environment: environment,
+            microphoneFailureHandling: microphoneFailureHandling,
+            onAgentReady: onAgentReady,
+            onDisconnect: onDisconnect,
+            onStartupStateChange: onStartupStateChange,
+            startupConfiguration: startupConfiguration,
+            audioConfiguration: audioConfiguration,
+            networkConfiguration: networkConfiguration,
+            onError: onError,
+            onSpeechActivity: onSpeechActivity,
+            onAgentResponse: onAgentResponse,
+            onAgentResponseCorrection: onAgentResponseCorrection,
+            onAgentResponseMetadata: onAgentResponseMetadata,
+            onUserTranscript: onUserTranscript,
+            onConversationMetadata: onConversationMetadata,
+            onAgentToolResponse: onAgentToolResponse,
+            onAgentToolRequest: onAgentToolRequest,
+            onInterruption: onInterruption,
+            onVadScore: onVadScore,
+            onAudioAlignment: onAudioAlignment,
+            onCanSendFeedbackChange: onCanSendFeedbackChange,
+            onUnhandledClientToolCall: onUnhandledClientToolCall,
+            agentStateConfiguration: agentStateConfiguration,
+            onAgentStateChange: onAgentStateChange
         )
     }
 }
