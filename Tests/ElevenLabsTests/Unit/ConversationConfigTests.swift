@@ -60,6 +60,14 @@ final class ConversationConfigTests: XCTestCase {
         XCTAssertEqual(overrides.clientEvents, ["audio"])
     }
 
+    func testLanguageAcceptsCodesWithoutNamedConstants() throws {
+        let language: Language = "pt-br"
+        XCTAssertEqual(language.rawValue, "pt-br")
+        XCTAssertEqual(Language(rawValue: "en"), .english)
+        XCTAssertEqual(try String(decoding: JSONEncoder().encode(language), as: UTF8.self), #""pt-br""#)
+        XCTAssertEqual(try JSONDecoder().decode([Language].self, from: Data(#"["en","pt-br"]"#.utf8)), [.english, "pt-br"])
+    }
+
     func testLanguageEnum() {
         XCTAssertEqual(Language.english.rawValue, "en")
         XCTAssertEqual(Language.spanish.rawValue, "es")
