@@ -98,9 +98,6 @@ enum EventSerializer {
         if conversationOverrides.textOnly {
             conversation["text_only"] = true
         }
-        if let clientEvents = conversationOverrides.clientEvents {
-            conversation["client_events"] = clientEvents
-        }
         if !conversation.isEmpty {
             configOverride["conversation"] = conversation
         }

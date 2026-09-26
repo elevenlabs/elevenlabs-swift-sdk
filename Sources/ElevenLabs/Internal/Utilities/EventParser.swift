@@ -198,13 +198,13 @@ enum EventParser {
                let toolCallId = event["tool_call_id"] as? String,
                let toolName = event["tool_name"] as? String,
                let parameters = event["parameters"] as? [String: Any],
-               let timestamp = event["timestamp"] as? String,
                let state = event["state"] as? String
             {
                 if let parametersData = try? JSONSerialization.data(withJSONObject: parameters),
                    let stateEnum = MCPToolCallEvent.State(rawValue: state)
                 {
                     let toolDescription = event["tool_description"] as? String
+                    let timestamp = event["timestamp"] as? String
                     let approvalTimeoutSecs = event["approval_timeout_secs"] as? Int
                     let errorMessage = event["error_message"] as? String
 
@@ -235,15 +235,14 @@ enum EventParser {
                 let integrations = integrationsArray.compactMap { intData -> MCPConnectionStatusEvent.Integration? in
                     guard let integrationId = intData["integration_id"] as? String,
                           let integrationType = intData["integration_type"] as? String,
-                          let isConnected = intData["is_connected"] as? Bool,
-                          let toolCount = intData["tool_count"] as? Int
+                          let isConnected = intData["is_connected"] as? Bool
                     else { return nil }
 
                     return MCPConnectionStatusEvent.Integration(
                         integrationId: integrationId,
                         integrationType: integrationType,
                         isConnected: isConnected,
-                        toolCount: toolCount
+                        toolCount: intData["tool_count"] as? Int
                     )
                 }
 

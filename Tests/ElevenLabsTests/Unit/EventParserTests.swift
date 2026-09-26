@@ -182,6 +182,21 @@ final class EventParserTests: XCTestCase {
         XCTAssertEqual(toolCall.toolName, "search_shop_catalog")
     }
 
+    func testParseMCPEventsWithoutOptionalFields() throws {
+        let toolCallJSON = #"{"type":"mcp_tool_call","mcp_tool_call":{"service_id":"s","tool_call_id":"t","tool_name":"n","parameters":{},"state":"loading"}}"#
+        guard case let .mcpToolCall(call) = try EventParser.parseIncomingEvent(from: Data(toolCallJSON.utf8)) else {
+            return XCTFail("Expected mcpToolCall event")
+        }
+        XCTAssertNil(call.timestamp)
+
+        let statusJSON = #"{"type":"mcp_connection_status","mcp_connection_status":{"integrations":[{"integration_id":"i","integration_type":"mcp_server","is_connected":true}]}}"#
+        guard case let .mcpConnectionStatus(status) = try EventParser.parseIncomingEvent(from: Data(statusJSON.utf8)) else {
+            return XCTFail("Expected mcpConnectionStatus event")
+        }
+        XCTAssertEqual(status.integrations.count, 1)
+        XCTAssertNil(status.integrations.first?.toolCount)
+    }
+
     func testParseAgentToolResponseEvent() throws {
         let json = """
         {
