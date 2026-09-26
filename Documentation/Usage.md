@@ -565,6 +565,8 @@ let startupConfig = ConversationStartupConfiguration(
 let config = ConversationConfig(startupConfiguration: startupConfig)
 ```
 
+When startup fails, the start method throws `ConversationStartupError`. Its `stage` says where it stopped (for example `.waitingForAgent`) and `underlyingError` says why (for example `.agentTimeout`).
+
 ---
 
 ## Feedback & Context {#feedback-context}
@@ -775,7 +777,7 @@ do {
 } catch is CancellationError {
     // connection cancelled
 } catch {
-    // startup error
+    // ConversationStartupError: error.stage and error.underlyingError say where and why
 }
 ```
 
