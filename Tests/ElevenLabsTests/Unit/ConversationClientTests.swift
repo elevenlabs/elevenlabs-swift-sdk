@@ -185,6 +185,22 @@ final class ConversationClientTests: XCTestCase {
         assertConnected(agentId: "recovered-agent")
     }
 
+    func testPreCancelledStartDoesNotReplaceLiveSession() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "live-agent"))
+        let start = Task { @MainActor in
+            try await client.startTextOnlyConversation(.publicAgent(id: "cancelled-agent"))
+        }
+        start.cancel()
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await start.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        assertConnected(agentId: "live-agent")
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
+    }
+
     func testCommandThrowsNotConnectedWithNoSession() async throws {
         do {
             try await client.sendMessage("hello")

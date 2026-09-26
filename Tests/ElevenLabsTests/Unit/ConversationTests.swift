@@ -778,6 +778,15 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
     }
 
+    func testMessageEqualityIncludesContent() {
+        let message = Message(role: .agent, content: "Hello", isFinal: false, responseId: "response")
+        var updated = message
+        updated.content = "Hello there"
+
+        XCTAssertEqual(message, message)
+        XCTAssertNotEqual(message, updated)
+    }
+
     func testConversationStateEnum() {
         let idleState: ConversationState = .idle
         let connectingState: ConversationState = .connecting(.preparing)

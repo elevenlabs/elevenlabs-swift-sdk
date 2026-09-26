@@ -291,7 +291,7 @@ Because every v3 conversation was a fresh object, apps accumulated plumbing that
 - **Reconnect scaffolding.** Reconnecting is calling start again on the same client; view models or factories that rebuild the conversation object and re-attach observers after a drop can go.
 - **Double-start guards.** v3 threw `alreadyStarted` on reuse, so apps guard against it or end manually before restarting. In v4 the latest start wins and ends the previous session itself.
 - **Mute restoration.** Code that re-applies a saved mute state after each start is redundant — `isMicMuted` and `isAgentMuted` carry across conversations on the same client.
-- **Leave-during-connect workarounds.** v4 tears startup down cleanly at any stage: cancel the `Task` running the start, or call `endConversation()` while connecting. Delete flags or deferred-teardown code that waited for the connection to finish before ending it.
+- **Leave-during-connect workarounds.** v4 tears startup down cleanly at any stage: cancel the `Task` running the start, or call `endConversation()` while connecting. Delete flags or deferred-teardown code that waited for the connection to finish before ending it. An already-cancelled start task is rejected before it can replace the live session.
 - **Custom transcript reconciliation.** If the app merges, dedupes, or filters streaming agent messages before display, delete that — `chatHistory` updates messages in place (keyed by response ID) and marks completion with `isFinal`.
 
 ## Adopt the drop-in widget (optional)

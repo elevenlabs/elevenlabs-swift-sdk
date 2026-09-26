@@ -12,7 +12,7 @@ extension ChatHistoryItem {
     }
 }
 
-public struct Message: ChatHistoryItem {
+public struct Message: ChatHistoryItem, Equatable {
     public enum Role: Sendable, Equatable {
         case user
         case agent
