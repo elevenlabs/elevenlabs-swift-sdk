@@ -110,11 +110,11 @@ enum EventSerializer {
         }
 
         if let customBody = config.customLlmExtraBody {
-            json["custom_llm_extra_body"] = customBody
+            json["custom_llm_extra_body"] = customBody.mapValues(\.jsonObject)
         }
 
         if let dynamicVars = config.dynamicVariables {
-            json["dynamic_variables"] = dynamicVars
+            json["dynamic_variables"] = dynamicVars.mapValues(\.jsonObject)
         }
 
         // Add source_info (equivalent to client in React Native)

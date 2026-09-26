@@ -5,8 +5,10 @@ public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
     public var conversationOverrides: ConversationOverrides
-    public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
-    public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    /// Extra fields passed to a custom LLM with each request.
+    public var customLlmExtraBody: [String: JSONValue]?
+    /// Values for the agent's dynamic variables, sent with their native JSON types.
+    public var dynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
     /// Workspace environment (`production` if nil). Applied to the public-agent
     /// token request, signed WebSocket URL, and conversation init.
@@ -36,8 +38,8 @@ public struct ConversationConfig: Sendable {
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
         conversationOverrides: ConversationOverrides = .init(),
-        customLlmExtraBody: [String: String]? = nil,
-        dynamicVariables: [String: String]? = nil,
+        customLlmExtraBody: [String: JSONValue]? = nil,
+        dynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
         continueWithoutMicrophoneOnFailure: Bool = false,

@@ -75,6 +75,7 @@ When migrating:
 - Starting while a previous conversation is live ends it first — the latest start wins. Remove any manual "end before restart" logic.
 - Credentials stay backend-minted: conversation tokens (voice) and signed WebSocket URLs (text-only) must come from the user's backend. Never embed an ElevenLabs API key in the app.
 - v3's `ConversationConfig` still exists in v4 for overrides (agent/TTS/dynamic variables/timeouts) and is passed to the start call: `startVoiceConversation(auth, config: config)`.
+- `dynamicVariables` and `customLlmExtraBody` are typed: literals like `["user_id": 12345, "is_premium": true]` send native JSON numbers and booleans. A `[String: String]` variable needs `.mapValues(DynamicVariableValue.string)`; suggest real types where the app stringified numbers or flags.
 
 If the codebase creates **multiple `Conversation` objects** (e.g. different screens each start their own), ask the user whether they want:
 
