@@ -28,7 +28,7 @@ While v4 is in prerelease, pin the exact version — SwiftPM's `from:` ranges do
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.1")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.2")
 ]
 ```
 

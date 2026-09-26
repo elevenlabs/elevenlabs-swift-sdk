@@ -25,7 +25,7 @@ Add the package via Swift Package Manager. While v4 is in alpha, pin the exact p
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.1")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.2")
 ]
 ```
 
