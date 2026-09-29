@@ -28,7 +28,10 @@ final class ConversationInitiationMetadataWaiterTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await waiter.wait()
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .initiationMetadataTimeout)
+            XCTAssertEqual(
+                error as? ConversationError,
+                .connectionFailed(.initializationTimedOut, "The server did not confirm the conversation in time.")
+            )
         }
     }
 
@@ -42,7 +45,10 @@ final class ConversationInitiationMetadataWaiterTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await waiter.wait()
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .initiationMetadataTimeout)
+            XCTAssertEqual(
+                error as? ConversationError,
+                .connectionFailed(.initializationTimedOut, "The server did not confirm the conversation in time.")
+            )
         }
     }
 

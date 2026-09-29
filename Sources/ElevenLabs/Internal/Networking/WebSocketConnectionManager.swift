@@ -54,10 +54,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 endpoints: endpoints,
                 environment: config.environment
             )
-        } catch is CancellationError {
-            throw CancellationError()
         } catch {
-            metrics.total = Date().timeIntervalSince(startTime)
             throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
         let url = resolved.url
@@ -72,13 +69,9 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         do {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
-        } catch is CancellationError {
-            tearDownTask(task)
-            throw CancellationError()
         } catch {
             tearDownTask(task)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
+            throw error
         }
 
         // Socket is up and the init message is sent. Start consuming responses.

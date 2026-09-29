@@ -238,7 +238,7 @@ final class Conversation: ObservableObject {
             } catch WebRTCConnectionManagerError.roomUnavailable {
                 throw ConversationError.notConnected
             } catch {
-                throw ConversationError.microphoneToggleFailed(error)
+                throw ConversationError.microphoneFailed(error.localizedDescription)
             }
         } else if state == .idle || state.isConnecting {
             pendingMuteState = muted
@@ -299,12 +299,8 @@ final class Conversation: ObservableObject {
         using manager: any ConnectionManaging,
         connect: (ConversationConfig) async throws -> ConversationStartResult
     ) async throws -> ConversationStartResult {
-        if state != .idle {
-            if state.isEnded, activeConnectionManager == nil {
-                throw CancellationError()
-            }
-            throw ConversationError.alreadyStarted
-        }
+        // Sessions are single-use; a non-idle one was ended or superseded before it started.
+        guard state == .idle else { throw CancellationError() }
 
         var startConfig = config
         startConfig.conversationOverrides.textOnly = isTextOnly
@@ -323,28 +319,43 @@ final class Conversation: ObservableObject {
                 await self?.handleIncomingEvent(event, from: connectionManagerID)
             }
         }
-        manager.onDisconnected = { [weak self] in
+        // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
+        var dropFailure: ConversationError?
+        manager.onDisconnected = { [weak self, weak manager] in
             guard let self else { return }
-            await endConversation(reason: .remoteDisconnected)
+            guard state.isConnecting else { return await endConversation(reason: .remoteDisconnected) }
+            dropFailure = startupError(from: ConversationError.notConnected)
+            await manager?.disconnect()
         }
 
         do {
             let result = try await connect(startConfig)
+            if let dropFailure { throw dropFailure } // it dropped just as `connect` finished
             return try setConnected(result)
-        } catch let error as ConversationError {
-            await handleStartupFailure(error, disconnecting: manager)
-            throw error
-        } catch is CancellationError {
-            await handleStartupCancellation(disconnecting: manager)
-            throw CancellationError()
         } catch {
-            if Task.isCancelled {
+            // Cancelled, ended or superseded meanwhile: whatever the transport threw is a side effect.
+            if Task.isCancelled || !state.isConnecting {
                 await handleStartupCancellation(disconnecting: manager)
-            } else {
-                await handleStartupFailure(.connectionFailed(error), disconnecting: manager)
+                throw CancellationError()
             }
-            throw error
+            let conversationError = dropFailure ?? startupError(from: error)
+            await handleStartupFailure(conversationError, disconnecting: manager)
+            throw conversationError
         }
+    }
+
+    /// Anything a transport didn't classify fails the stage it happened in.
+    /// `notConnected` during startup means the transport went away mid-start.
+    private func startupError(from error: Error) -> ConversationError {
+        if let error = error as? ConversationError, error != .notConnected { return error }
+        let failure: ConversationError.ConnectionFailure = switch state {
+        case .connecting(.connectingRoom): .roomConnectionFailed
+        case .connecting(.waitingForAgent): .agentDidNotJoin
+        case .connecting(.agentReady), .connecting(.sendingConversationInit),
+             .connecting(.waitingForInitiationMetadata): .initializationFailed
+        default: .tokenRequestFailed
+        }
+        return .connectionFailed(failure, error.localizedDescription)
     }
 
     private func setConnected(_ result: ConversationStartResult) throws -> ConversationStartResult {

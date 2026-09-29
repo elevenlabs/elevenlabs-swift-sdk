@@ -16,7 +16,6 @@ final class ConversationTests: XCTestCase {
 
     override func setUp() async throws {
         mockWebRTCConnectionManager = MockWebRTCConnectionManager()
-        mockWebRTCConnectionManager.connectionError = ConversationError.connectionFailed("Mock connection failed")
         mockWebSocketConnectionManager = MockWebSocketConnectionManager()
         dependencyProvider = TestDependencyProvider(
             webRTCConnectionManager: mockWebRTCConnectionManager,
@@ -123,7 +122,7 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "second-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .alreadyStarted)
+            XCTAssertTrue(error is CancellationError)
         }
 
         XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
@@ -439,19 +438,19 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .connectionFailed("Mock connection failed"))
+            XCTAssertEqual(error as? ConversationError, .connectionFailed(.roomConnectionFailed, "Mock connection failed"))
         }
 
         guard case let .error(conversationError) = conversation.state else {
             return XCTFail("Expected error state due to room connect failure")
         }
 
-        XCTAssertEqual(conversationError, .connectionFailed("Mock connection failed"))
+        XCTAssertEqual(conversationError, .connectionFailed(.roomConnectionFailed, "Mock connection failed"))
         mockWebRTCConnectionManager.deliverStartupState(.waitingForAgent(timeout: 1))
         XCTAssertEqual(conversation.state, .error(conversationError))
 
         let errorsAfterConnectionFailure = await waitForValues(capturedErrors, count: 1)
-        XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed("Mock connection failed")])
+        XCTAssertEqual(errorsAfterConnectionFailure, [.connectionFailed(.roomConnectionFailed, "Mock connection failed")])
     }
 
     func testStartConversationAgentTimeoutFailure() async {
@@ -469,10 +468,10 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .agentTimeout)
+            XCTAssertEqual(error as? ConversationError, .connectionFailed(.agentDidNotJoin, "The agent did not join in time."))
         }
 
-        guard case .error(.agentTimeout) = conversation.state else {
+        guard case .error(.connectionFailed(.agentDidNotJoin, _)) = conversation.state else {
             return XCTFail("Expected agent timeout error state")
         }
         XCTAssertFalse(mockWebRTCConnectionManager.isConnected)
@@ -481,7 +480,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
         XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterAgentTimeout = await waitForValues(capturedErrors, count: 1)
-        XCTAssertEqual(errorsAfterAgentTimeout, [.agentTimeout])
+        XCTAssertEqual(errorsAfterAgentTimeout, [.connectionFailed(.agentDidNotJoin, "The agent did not join in time.")])
     }
 
     func testCancelledStartupEndsConversation() async {
@@ -579,39 +578,122 @@ final class ConversationTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .initiationMetadataTimeout)
+            XCTAssertEqual(
+                error as? ConversationError,
+                .connectionFailed(.initializationTimedOut, "The server did not confirm the conversation in time.")
+            )
         }
 
-        guard case .error(.initiationMetadataTimeout) = conversation.state else {
+        guard case .error(.connectionFailed(.initializationTimedOut, _)) = conversation.state else {
             return XCTFail("Expected initiation metadata timeout error state")
         }
         let errorsAfterTimeout = await waitForValues(capturedErrors, count: 1)
-        XCTAssertEqual(errorsAfterTimeout, [.initiationMetadataTimeout])
+        XCTAssertEqual(
+            errorsAfterTimeout,
+            [.connectionFailed(.initializationTimedOut, "The server did not confirm the conversation in time.")]
+        )
     }
 
     func testStartConversationConversationInitFailure() async {
-        mockWebRTCConnectionManager.publishError = ConversationError.connectionFailed("Publish failed")
+        mockWebRTCConnectionManager.publishError = MockWebRTCConnectionManager.Error.publishFailed
 
         guard let conversation else { return }
 
         await XCTAssertThrowsErrorAsync {
             _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .connectionFailed("Publish failed"))
+            XCTAssertEqual(error as? ConversationError, .connectionFailed(.initializationFailed, "Publish failed"))
         }
 
         guard case let .error(conversationError) = conversation.state else {
             return XCTFail("Expected conversation init error state")
         }
 
-        XCTAssertEqual(conversationError, .connectionFailed("Publish failed"))
+        XCTAssertEqual(conversationError, .connectionFailed(.initializationFailed, "Publish failed"))
         XCTAssertFalse(mockWebRTCConnectionManager.isConnected)
         XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
         XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
         XCTAssertNil(mockWebRTCConnectionManager.onRemoteSpeakingChanged)
         XCTAssertNil(mockWebRTCConnectionManager.errorHandler)
         let errorsAfterInitFailure = await waitForValues(capturedErrors, count: 1)
-        XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed("Publish failed")])
+        XCTAssertEqual(errorsAfterInitFailure, [.connectionFailed(.initializationFailed, "Publish failed")])
+    }
+
+    func testTransportGoingAwayDuringStartupIsAConnectionFailure() async {
+        mockWebRTCConnectionManager.publishError = ConversationError.notConnected
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        } errorHandler: { error in
+            guard case .connectionFailed(.initializationFailed, _) = error as? ConversationError else {
+                return XCTFail("Expected connectionFailed(.initializationFailed), got \(error)")
+            }
+        }
+    }
+
+    func testEndingDuringStartupCancelsEvenIfTheTransportFails() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        let mock = try XCTUnwrap(mockWebRTCConnectionManager)
+        let startTask = Task { [conversation = conversation!] in
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        }
+        await mock.waitUntilWaitingForAgent()
+
+        // The transport throws its own error while being torn down.
+        mock.onDisconnectStarted = {
+            mock.onDisconnectStarted = nil
+            mock.timeoutAgentReady()
+        }
+        await conversation.endConversation()
+
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError, "Expected CancellationError, got \(error)")
+        }
+        XCTAssertEqual(conversation.state, .ended(reason: .userEnded))
+    }
+
+    func testDropDuringStartupFailsTheStartAtItsStage() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        let mock = try XCTUnwrap(mockWebRTCConnectionManager)
+        let startTask = Task { [conversation = conversation!] in
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        }
+        await mock.waitUntilWaitingForAgent()
+
+        await mock.onDisconnected?()
+
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
+            guard case .connectionFailed(.agentDidNotJoin, _) = error as? ConversationError else {
+                return XCTFail("Expected connectionFailed(.agentDidNotJoin), got \(error)")
+            }
+        }
+        guard case .error(.connectionFailed(.agentDidNotJoin, _)) = conversation.state else {
+            return XCTFail("Expected an agentDidNotJoin error state, got \(conversation.state)")
+        }
+        let errors = await waitForValues(capturedErrors, count: 1)
+        XCTAssertEqual(errors.count, 1)
+    }
+
+    func testDropRacingASuccessfulConnectStillFailsTheStart() async throws {
+        let mock = try XCTUnwrap(mockWebRTCConnectionManager)
+        mock.onConnectCompleted = {
+            await mock.onDisconnected?()
+        }
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent"))
+        } errorHandler: { error in
+            guard case .connectionFailed(.initializationFailed, _) = error as? ConversationError else {
+                return XCTFail("Expected connectionFailed(.initializationFailed), got \(error)")
+            }
+        }
+        guard case .error(.connectionFailed(.initializationFailed, _)) = conversation.state else {
+            return XCTFail("Expected an initializationFailed error state, got \(conversation.state)")
+        }
     }
 
     func testSendFeedbackWhileConnected() async throws {
@@ -748,14 +830,18 @@ final class ConversationTests: XCTestCase {
 
     func testConversationErrorEquality() {
         XCTAssertEqual(ConversationError.notConnected, ConversationError.notConnected)
-        XCTAssertEqual(ConversationError.alreadyStarted, ConversationError.alreadyStarted)
         XCTAssertEqual(ConversationError.authenticationFailed("test"), ConversationError.authenticationFailed("test"))
-        XCTAssertEqual(ConversationError.connectionFailed("test"), ConversationError.connectionFailed("test"))
-        XCTAssertEqual(ConversationError.agentTimeout, ConversationError.agentTimeout)
-        XCTAssertEqual(ConversationError.initiationMetadataTimeout, ConversationError.initiationMetadataTimeout)
-        XCTAssertEqual(ConversationError.microphoneToggleFailed("test"), ConversationError.microphoneToggleFailed("test"))
+        XCTAssertEqual(
+            ConversationError.connectionFailed(.roomConnectionFailed, "test"),
+            ConversationError.connectionFailed(.roomConnectionFailed, "test")
+        )
+        XCTAssertEqual(ConversationError.microphoneFailed("test"), ConversationError.microphoneFailed("test"))
 
-        XCTAssertNotEqual(ConversationError.notConnected, ConversationError.alreadyStarted)
+        XCTAssertNotEqual(
+            ConversationError.connectionFailed(.roomConnectionFailed, "test"),
+            ConversationError.connectionFailed(.agentDidNotJoin, "test")
+        )
+        XCTAssertNotEqual(ConversationError.authenticationFailed("test"), ConversationError.connectionFailed(.tokenRequestFailed, "test"))
     }
 
     func testConversationStateEnum() {

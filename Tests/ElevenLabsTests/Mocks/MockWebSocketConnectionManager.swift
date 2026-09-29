@@ -46,15 +46,15 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
 
+        // Like the real transport, a handshake failure surfaces while sending the init.
+        onStartupStateChange(.sendingConversationInit)
         if let connectError {
             errorHandler?(connectError)
             metrics.total = Date().timeIntervalSince(startTime)
-            throw connectError as? ConversationError ?? ConversationError.connectionFailed(connectError)
+            throw connectError
         }
 
         isConnected = true
-
-        onStartupStateChange(.sendingConversationInit)
         do {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
@@ -62,7 +62,7 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
             throw CancellationError()
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
+            throw error
         }
 
         if autoDeliverInitiationMetadata {
