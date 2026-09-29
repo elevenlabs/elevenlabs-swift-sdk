@@ -15,6 +15,8 @@ public struct ConversationConfig: Sendable {
     public var conversationOverrides: ConversationOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    /// Dynamic variables sent with their native JSON types, merged over `dynamicVariables`.
+    public var typedDynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
@@ -92,6 +94,7 @@ public struct ConversationConfig: Sendable {
         conversationOverrides: ConversationOverrides? = nil,
         customLlmExtraBody: [String: String]? = nil,
         dynamicVariables: [String: String]? = nil,
+        typedDynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
         onAgentReady: (@Sendable () -> Void)? = nil,
@@ -122,6 +125,7 @@ public struct ConversationConfig: Sendable {
         self.conversationOverrides = conversationOverrides
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
+        self.typedDynamicVariables = typedDynamicVariables
         self.userId = userId
         self.environment = environment
         self.onAgentReady = onAgentReady
@@ -211,6 +215,7 @@ extension ConversationConfig {
             ttsOverrides: ttsOverrides,
             customLlmExtraBody: customLlmExtraBody,
             dynamicVariables: dynamicVariables,
+            typedDynamicVariables: typedDynamicVariables,
             userId: userId,
             environment: environment,
             onAgentReady: onAgentReady,

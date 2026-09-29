@@ -15,6 +15,8 @@ public struct ConversationOptions: Sendable {
     public var ttsOverrides: TTSOverrides?
     public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
     public var dynamicVariables: [String: String]? // Simplified to be Sendable
+    /// Dynamic variables sent with their native JSON types, merged over `dynamicVariables`.
+    public var typedDynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
     /// Optional environment for the agent (defaults to production when nil)
     public var environment: String?
@@ -95,6 +97,7 @@ public struct ConversationOptions: Sendable {
         ttsOverrides: TTSOverrides? = nil,
         customLlmExtraBody: [String: String]? = nil,
         dynamicVariables: [String: String]? = nil,
+        typedDynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
         microphoneFailureHandling: MicrophoneFailureHandling = .throwError,
@@ -126,6 +129,7 @@ public struct ConversationOptions: Sendable {
         self.ttsOverrides = ttsOverrides
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
+        self.typedDynamicVariables = typedDynamicVariables
         self.userId = userId
         self.environment = environment
         self.microphoneFailureHandling = microphoneFailureHandling
@@ -164,6 +168,7 @@ extension ConversationOptions {
             conversationOverrides: conversationOverrides,
             customLlmExtraBody: customLlmExtraBody,
             dynamicVariables: dynamicVariables,
+            typedDynamicVariables: typedDynamicVariables,
             userId: userId,
             environment: environment,
             onAgentReady: onAgentReady,

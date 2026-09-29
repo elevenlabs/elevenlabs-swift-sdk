@@ -114,7 +114,10 @@ enum EventSerializer {
             json["custom_llm_extra_body"] = customBody
         }
 
-        if let dynamicVars = config.dynamicVariables {
+        if config.dynamicVariables != nil || config.typedDynamicVariables != nil {
+            var dynamicVars: [String: Any] = config.dynamicVariables ?? [:]
+            // Add typed values on top; on a key clash the typed value wins.
+            dynamicVars.merge(config.typedDynamicVariables?.mapValues(\.jsonObject) ?? [:]) { _, typed in typed }
             json["dynamic_variables"] = dynamicVars
         }
 
