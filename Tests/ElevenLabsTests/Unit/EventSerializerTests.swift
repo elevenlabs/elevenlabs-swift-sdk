@@ -83,6 +83,43 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "conversation_initiation_client_data")
     }
 
+    func testConversationInitSendsTypedDynamicVariables() throws {
+        let config = ConversationConfig(
+            dynamicVariables: ["name": "John", "plan": "free"],
+            typedDynamicVariables: [
+                "plan": "pro", "age": 42, "balance": 5000.5, "is_premium": true,
+                "tags": ["a", 1], "address": ["city": "Paris", "zip": 75001], "missing": .null
+            ]
+        )
+        // Round-trip through ConversationOptions, as the connection managers do.
+        let event = OutgoingEvent.conversationInit(
+            ConversationInitEvent(config: config.toConversationOptions().toConversationConfig())
+        )
+        let data = try EventSerializer.serializeOutgoingEvent(event)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        let variables = try XCTUnwrap(json["dynamic_variables"] as? [String: Any])
+        XCTAssertEqual(variables["name"] as? String, "John")
+        XCTAssertEqual(variables["plan"] as? String, "pro")
+        XCTAssertEqual(variables["age"] as? Int, 42)
+        XCTAssertEqual(variables["balance"] as? Double, 5000.5)
+        XCTAssertEqual(variables["is_premium"] as? Bool, true)
+        XCTAssertEqual(variables["tags"] as? [AnyHashable], ["a", 1])
+        let address = try XCTUnwrap(variables["address"] as? [String: Any])
+        XCTAssertEqual(address["city"] as? String, "Paris")
+        XCTAssertEqual(address["zip"] as? Int, 75001)
+        XCTAssertTrue(variables["missing"] is NSNull)
+    }
+
+    func testTypedDynamicVariableBooleanIsNotSentAsNumber() throws {
+        let config = ConversationConfig(typedDynamicVariables: ["flag": true, "count": 1])
+        let data = try EventSerializer.serializeOutgoingEvent(.conversationInit(ConversationInitEvent(config: config)))
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertTrue(text.contains(#""flag":true"#))
+        XCTAssertTrue(text.contains(#""count":1"#))
+    }
+
     func testSerializeContextualUpdate() throws {
         let event = OutgoingEvent.contextualUpdate(
             ContextualUpdateEvent(text: "Updated context")
