@@ -87,6 +87,35 @@ client.$state
     .store(in: &cancellables)
 ```
 
+### Handling Errors
+
+Every failure is a `ConversationError`. Each case needs a different response; a connection failure also says what broke:
+
+| `ConnectionFailure` | What broke |
+| --- | --- |
+| `.tokenRequestFailed` | Couldn't get a token: network error, timeout or malformed response |
+| `.tokenServiceUnavailable` | The token service is busy or failing (429, 5xx) |
+| `.roomConnectionFailed` | Couldn't connect the voice room |
+| `.agentDidNotJoin` | The agent didn't join in time |
+| `.initializationFailed` | Connected, but couldn't start the conversation; for text, the socket didn't open |
+| `.initializationTimedOut` | The server didn't confirm the conversation in time |
+
+```swift
+do {
+    _ = try await client.startVoiceConversation(auth)
+} catch ConversationError.authenticationFailed(_) {
+    // The credentials were refused: mint a new token or fix the agent configuration.
+} catch ConversationError.connectionFailed(let failure, _) {
+    // Offer a retry; `failure` says what broke.
+} catch is CancellationError {
+    // Cancelled, or ended or replaced before it connected: nothing to show.
+} catch {
+    // `.microphoneFailed`: the microphone couldn't be enabled.
+}
+```
+
+A failed start also sets `state` to `.error(…)` and calls `onError`. Commands like `sendMessage` throw `.notConnected` when no conversation is live, and errors the server reports mid-conversation arrive in `onError` as `.serverError`.
+
 ---
 
 ## Text-Only Conversations {#text-only}
@@ -565,6 +594,8 @@ let startupConfig = ConversationStartupConfiguration(
 let config = ConversationConfig(startupConfiguration: startupConfig)
 ```
 
+A timeout fails the start with `.connectionFailed(.agentDidNotJoin, _)` or `.connectionFailed(.initializationTimedOut, _)`.
+
 ---
 
 ## Feedback & Context {#feedback-context}
@@ -598,7 +629,7 @@ try await client.updateContext("user_prefers_detailed_answers=true")
 
 ## Reconnect & Recovery {#reconnect}
 
-The client is reusable, so recovering from a drop is just calling start again on the same client — your UI bindings stay in place.
+The client is reusable, so recovering from a drop is just calling start again on the same client — your UI bindings stay in place. Only connection failures are worth retrying.
 
 ```swift
 @MainActor
@@ -621,14 +652,12 @@ final class ReconnectionManager: ObservableObject {
                 guard let self else { return }
 
                 switch state {
-                case .ended(let reason):
-                    if reason == .remoteDisconnected {
-                        self.showReconnectButton = true
-                    }
+                case .ended(reason: .remoteDisconnected), .error(.connectionFailed):
+                    self.showReconnectButton = true
                 case .connected:
                     self.showReconnectButton = false
                     self.isReconnecting = false
-                case .idle, .connecting, .error:
+                default:
                     break
                 }
             }
@@ -643,10 +672,12 @@ final class ReconnectionManager: ObservableObject {
             do {
                 _ = try await client.startVoiceConversation(.publicAgent(id: agentId))
                 return
-            } catch {
-                // Exponential backoff: 1s, 2s, 4s
+            } catch ConversationError.connectionFailed {
+                // Worth retrying: back off 1s, 2s, 4s.
                 let delay = pow(2.0, Double(attempt))
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return // Credentials refused, mic failed, or the user ended it: retrying won't help.
             }
         }
         print("Max reconnection attempts reached")
@@ -775,7 +806,7 @@ do {
 } catch is CancellationError {
     // connection cancelled
 } catch {
-    // startup error
+    // startup failed: a ConversationError, see Handling Errors
 }
 ```
 
@@ -802,13 +833,13 @@ do {
 } catch is CancellationError {
     // cancelled due to timeout
 } catch {
-    // startup error
+    // startup failed: a ConversationError, see Handling Errors
 }
 ```
 
 ### 4. Handling Connection Drops
 
-Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff.
+Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
 
 ### 5. Privacy
 

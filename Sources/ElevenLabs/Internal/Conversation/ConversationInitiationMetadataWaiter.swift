@@ -49,7 +49,9 @@ actor ConversationInitiationMetadataWaiter {
             } catch {
                 return
             }
-            await self?.complete(.failure(ConversationError.initiationMetadataTimeout))
+            await self?.complete(.failure(ConversationError.connectionFailed(
+                .initializationTimedOut, "The server did not confirm the conversation in time."
+            )))
         }
     }
 

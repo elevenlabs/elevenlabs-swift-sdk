@@ -4,8 +4,8 @@ import LiveKit
 
 enum AgentReadyWaitResult: Equatable {
     case success(elapsed: TimeInterval)
-    case timedOut(elapsed: TimeInterval)
-    case cancelled(elapsed: TimeInterval)
+    case timedOut
+    case cancelled
 }
 
 enum WebRTCConnectionManagerError: Error {
@@ -99,7 +99,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         // 1. Resolve the conversation token.
         onStartupStateChange(.resolvingToken)
         let token = try await runPhase(
-            timing: \.tokenFetch, metrics: &metrics, startTime: startTime
+            timing: \.tokenFetch, metrics: &metrics
         ) {
             try await tokenService.fetchToken(for: auth, environment: config.environment)
         }
@@ -112,7 +112,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         onStartupStateChange(.connectingRoom)
         let throwOnMicFailure = !config.continueWithoutMicrophoneOnFailure
         try await runPhase(
-            timing: \.roomConnect, metrics: &metrics, startTime: startTime
+            timing: \.roomConnect, metrics: &metrics
         ) {
             try await connectToRoom(
                 token: token,
@@ -130,21 +130,17 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         case let .success(elapsed):
             metrics.agentReady = elapsed
             onStartupStateChange(.agentReady(elapsed: elapsed))
-        case let .timedOut(elapsed):
-            metrics.agentReady = elapsed
-            metrics.total = Date().timeIntervalSince(startTime)
+        case .timedOut:
             logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
-            throw ConversationError.agentTimeout
-        case let .cancelled(elapsed):
-            metrics.agentReady = elapsed
-            metrics.total = Date().timeIntervalSince(startTime)
+            throw ConversationError.connectionFailed(.agentDidNotJoin, "The agent did not join in time.")
+        case .cancelled:
             throw CancellationError()
         }
 
         // 5. Send conversation_initiation_client_data (sent once).
         onStartupStateChange(.sendingConversationInit)
         try await runPhase(
-            timing: \.conversationInit, metrics: &metrics, startTime: startTime
+            timing: \.conversationInit, metrics: &metrics
         ) {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
@@ -163,11 +159,11 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     /// Race the delegate's "first remote participant joined" signal against `timeout`.
-    /// `.timedOut` → `ConversationError.agentTimeout`; `.cancelled` → `CancellationError`
+    /// `.timedOut` → `ConversationError.connectionFailed(.agentDidNotJoin, _)`; `.cancelled` → `CancellationError`
     /// (disconnect/release during the wait).
     private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
-            return .timedOut(elapsed: 0)
+            return .timedOut
         }
         let start = Date()
         return await withTaskGroup(of: AgentReadyWaitResult.self) { group in
@@ -176,14 +172,14 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                     try await delegate.awaitRemoteParticipant()
                     return .success(elapsed: Date().timeIntervalSince(start))
                 } catch is CancellationError {
-                    return .cancelled(elapsed: Date().timeIntervalSince(start))
+                    return .cancelled
                 } catch {
-                    return .timedOut(elapsed: Date().timeIntervalSince(start))
+                    return .timedOut
                 }
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return .timedOut(elapsed: Date().timeIntervalSince(start))
+                return .timedOut
             }
             let first = await group.next()!
             if case .timedOut = first {
@@ -306,7 +302,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 errorHandler?(error)
 
                 if throwOnMicrophoneFailure {
-                    throw ConversationError.microphoneToggleFailed(error)
+                    throw ConversationError.microphoneFailed(error.localizedDescription)
                 } else {
                     logger.warning("Continuing without microphone due to error handling policy")
                 }
@@ -340,30 +336,17 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     // MARK: – Private helpers
 
-    /// Run one timed startup phase: record its duration into `metrics[keyPath:]`,
-    /// let `CancellationError` propagate unwrapped, and wrap any other error as
-    /// `ConversationError` (stamping `total`).
+    /// Run one startup phase, recording its duration into `metrics[keyPath:]`.
     @MainActor
     private func runPhase<T: Sendable>(
         timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
         metrics: inout ConversationStartupMetrics,
-        startTime: Date,
         _ body: () async throws -> T
     ) async throws -> T {
         let start = Date()
-        do {
-            let result = try await body()
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            return result
-        } catch is CancellationError {
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw CancellationError()
-        } catch {
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
-        }
+        let result = try await body()
+        metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
+        return result
     }
 
     private func requestMicrophonePermission() async -> Bool {

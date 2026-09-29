@@ -44,26 +44,20 @@ struct TokenService: Sendable {
     }
     #endif
 
-    /// Resolve the token a voice conversation authenticates with.
-    ///
-    /// Translates internal `TokenError`s into public `ConversationError`s so
-    /// callers only ever deal with one error type.
+    /// Resolve the token a voice conversation authenticates with. Failures are `ConversationError`s.
     func fetchToken(for auth: ConversationAuth.Voice, environment: String?) async throws -> String {
-        do {
-            switch auth {
-            case let .publicAgent(agentId):
-                return try await fetchTokenFromAPI(agentId: agentId, environment: environment)
-            case let .conversationToken(mint):
+        switch auth {
+        case let .publicAgent(agentId):
+            return try await fetchTokenFromAPI(agentId: agentId, environment: environment)
+        case let .conversationToken(mint):
+            do {
                 return try await mint()
+            } catch let error as ConversationError {
+                throw error
+            } catch {
+                // Producing credentials is the closure's whole job, so any other failure is an authentication failure.
+                throw ConversationError.authenticationFailed(error.localizedDescription)
             }
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as ConversationError {
-            throw error
-        } catch let error as TokenError {
-            throw ConversationError.authenticationFailed(error.localizedDescription)
-        } catch {
-            throw ConversationError.connectionFailed(error)
         }
     }
 
@@ -75,7 +69,7 @@ struct TokenService: Sendable {
             url: endpoints.conversationToken,
             resolvingAgainstBaseURL: false
         ) else {
-            throw TokenError.invalidURL
+            throw ConversationError.authenticationFailed("Invalid URL for token request")
         }
         var queryItems = components.queryItems ?? []
         queryItems += [
@@ -89,7 +83,7 @@ struct TokenService: Sendable {
         components.queryItems = queryItems
 
         guard let url = components.url else {
-            throw TokenError.invalidURL
+            throw ConversationError.authenticationFailed("Invalid URL for token request")
         }
 
         var request = URLRequest(url: url)
@@ -106,17 +100,30 @@ struct TokenService: Sendable {
         }
         #endif
 
-        let (data, response) = try await urlSession.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TokenError.invalidResponse
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw ConversationError.connectionFailed(.tokenRequestFailed, error.localizedDescription)
         }
 
-        guard httpResponse.statusCode == 200 else {
-            if httpResponse.statusCode == 401 {
-                throw TokenError.authenticationFailed
-            }
-            throw TokenError.httpError(statusCode: httpResponse.statusCode)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ConversationError.connectionFailed(.tokenRequestFailed, "Invalid response from the token endpoint")
+        }
+
+        switch httpResponse.statusCode {
+        case 200 ..< 300:
+            break
+        case 401, 403:
+            throw ConversationError.authenticationFailed(
+                "The agent may be private. For private agents, use a conversation token from your backend."
+            )
+        case 429, 500...:
+            // The server said "not now", not "no": a retry can succeed.
+            throw ConversationError.connectionFailed(.tokenServiceUnavailable, "Token request failed with HTTP \(httpResponse.statusCode)")
+        default:
+            throw ConversationError.authenticationFailed("Token request failed with HTTP \(httpResponse.statusCode)")
         }
 
         // Parse response - ElevenLabs returns {"token": "..."}
@@ -124,7 +131,7 @@ struct TokenService: Sendable {
               let token = json["token"] as? String,
               !token.isEmpty
         else {
-            throw TokenError.invalidTokenResponse
+            throw ConversationError.connectionFailed(.tokenRequestFailed, "Invalid token in response")
         }
 
         return token

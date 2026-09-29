@@ -101,7 +101,7 @@ final class ConversationAudioObserverTests: XCTestCase {
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
         } errorHandler: { error in
-            XCTAssertEqual(error as? ConversationError, .agentTimeout)
+            XCTAssertEqual(error as? ConversationError, .connectionFailed(.agentDidNotJoin, "The agent did not join in time."))
         }
 
         XCTAssertEqual(lateObserver.receivedBufferCount, 0)

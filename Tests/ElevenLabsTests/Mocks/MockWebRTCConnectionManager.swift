@@ -3,9 +3,16 @@ import Foundation
 import LiveKit
 
 final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
-    enum Error: Swift.Error {
+    enum Error: Swift.Error, LocalizedError {
         case connectionFailed
         case publishFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .connectionFailed: "Mock connection failed"
+            case .publishFailed: "Publish failed"
+            }
+        }
     }
 
     var onDisconnected: (() async -> Void)?
@@ -89,7 +96,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         onStartupStateChange(.connectingRoom)
         if shouldFailConnection {
             errorHandler?(connectionError)
-            throw connectionError as? ConversationError ?? .connectionFailed(connectionError)
+            throw connectionError
         }
         isConnected = true
 
@@ -98,11 +105,9 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         case let .success(elapsed):
             metrics.agentReady = elapsed
             onStartupStateChange(.agentReady(elapsed: elapsed))
-        case let .timedOut(elapsed):
-            metrics.agentReady = elapsed
-            throw ConversationError.agentTimeout
-        case let .cancelled(elapsed):
-            metrics.agentReady = elapsed
+        case .timedOut:
+            throw ConversationError.connectionFailed(.agentDidNotJoin, "The agent did not join in time.")
+        case .cancelled:
             throw CancellationError()
         }
 
@@ -110,7 +115,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         do {
             try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         } catch {
-            throw error as? ConversationError ?? ConversationError.connectionFailed(error)
+            throw error
         }
 
         if autoDeliverInitiationMetadata {
@@ -148,7 +153,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         isConnected = false
         // Only cancel an in-flight agent-ready wait — don't stash `.cancelled` for the next connect.
         if waitContinuation != nil {
-            cancelAgentReady(elapsed: 0)
+            cancelAgentReady()
         }
         await initiationMetadataWaiter?.cancel()
         initiationMetadataWaiter = nil
@@ -243,13 +248,13 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     @MainActor
-    func timeoutAgentReady(elapsed: TimeInterval = 0.1) {
-        resumeWait(with: .timedOut(elapsed: elapsed))
+    func timeoutAgentReady() {
+        resumeWait(with: .timedOut)
     }
 
     @MainActor
-    func cancelAgentReady(elapsed: TimeInterval = 0.1) {
-        resumeWait(with: .cancelled(elapsed: elapsed))
+    func cancelAgentReady() {
+        resumeWait(with: .cancelled)
     }
 
     @MainActor

@@ -228,7 +228,7 @@ final class ChatWidgetViewModel: ObservableObject {
         // over, so that pairing can't be joined.
         if let startTask {
             guard startTask.kind == .voice || kind == .textOnly else {
-                throw ConversationError.alreadyStarted
+                throw ChatWidgetError.textOnlyStartInProgress
             }
             return try await startTask.task.value
         }
@@ -365,6 +365,15 @@ final class ChatWidgetViewModel: ObservableObject {
                 client.markToolCallCompleted(call.toolCallId)
             }
         }
+    }
+}
+
+/// A voice start was requested while a text-only start, which has no microphone, is still connecting.
+private enum ChatWidgetError: LocalizedError {
+    case textOnlyStartInProgress
+
+    var errorDescription: String? {
+        "A text-only conversation is still starting."
     }
 }
 #endif
