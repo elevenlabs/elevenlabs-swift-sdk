@@ -3,7 +3,7 @@ import LiveKit
 
 /// Event indicating the user is speaking while the microphone is muted.
 public struct MutedSpeechEvent: Sendable {
-    /// Audio level that triggered the event in Db
+    /// Audio level that triggered the event in dB
     public let audioLevel: Float
 
     public init(audioLevel: Float) {
@@ -28,7 +28,7 @@ public struct AudioPipelineConfiguration: Sendable {
     /// Observe LiveKit speech activity events while the microphone is muted.
     public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
 
-    /// Enable software mute. With software mute, the microphone will stay open when `setMuted(true(` is used, but
+    /// Enable software mute. With software mute, the microphone will stay open when `setMuted(true)` is used, but
     /// all captured audio data will be zeroed out. By enabling software mute you can set the `onMutedSpeech` callback
     /// and receive callback events when users speak while the agent is muted.
     public var useSoftwareMute: Bool?
