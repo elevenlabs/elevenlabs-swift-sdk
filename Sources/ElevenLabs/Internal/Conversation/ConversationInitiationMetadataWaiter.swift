@@ -41,6 +41,13 @@ actor ConversationInitiationMetadataWaiter {
         complete(.failure(CancellationError()))
     }
 
+    /// Fail a start still waiting for metadata; `false` once the conversation has started.
+    func fail(_ error: Error) -> Bool {
+        guard outcome == nil else { return false }
+        complete(.failure(error))
+        return true
+    }
+
     private func startTimeout() {
         guard timeoutTask == nil else { return }
         timeoutTask = Task { [weak self, timeoutNanoseconds] in
