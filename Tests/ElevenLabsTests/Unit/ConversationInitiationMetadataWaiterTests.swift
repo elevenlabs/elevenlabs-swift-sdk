@@ -22,6 +22,25 @@ final class ConversationInitiationMetadataWaiterTests: XCTestCase {
         XCTAssertEqual(metadata.conversationId, "first")
     }
 
+    func testFailOnlyAffectsAStartStillWaiting() async throws {
+        let refused = ConversationError.authenticationFailed("rejected")
+        let starting = ConversationInitiationMetadataWaiter(timeout: 1)
+        let failed = await starting.fail(refused)
+        XCTAssertTrue(failed)
+        await XCTAssertThrowsErrorAsync {
+            try await starting.wait()
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, refused)
+        }
+
+        let started = ConversationInitiationMetadataWaiter(timeout: 1)
+        await started.observe(makeMetadata(conversationId: "live"))
+        let failedAfterStart = await started.fail(refused)
+        XCTAssertFalse(failedAfterStart)
+        let metadata = try await started.wait()
+        XCTAssertEqual(metadata.conversationId, "live")
+    }
+
     func testTimeout() async {
         let waiter = ConversationInitiationMetadataWaiter(timeout: 0.01)
 
