@@ -26,7 +26,7 @@ final class ChatWidgetViewModel: ObservableObject {
 
     struct EndedConversation: Equatable {
         let id: String?
-        let endedByUser: Bool
+        let reason: EndReason
     }
 
     /// All four mirror what the host passes to ``ChatWidget``, so changes land
@@ -94,13 +94,11 @@ final class ChatWidgetViewModel: ObservableObject {
                     dismissBanner()
                     endedConversation = EndedConversation(
                         id: client.conversationMetadata?.conversationId,
-                        endedByUser: reason == .userEnded
+                        reason: reason
                     )
                 case .error:
+                    // Only a start fails into `.error`, and the start shows the banner.
                     sessionKind = nil
-                    // The error itself stays on `conversationState` for the host;
-                    // the banner is user-facing copy the host can reword.
-                    show(ChatWidgetBanner(strings.conversationFailed))
                 default:
                     break
                 }
@@ -199,15 +197,8 @@ final class ChatWidgetViewModel: ObservableObject {
     // MARK: - Conversation
 
     func startConversation() {
-        Task {
-            do {
-                try await startConversationAndWait()
-            } catch is CancellationError {
-                // The user ended the call before it connected.
-            } catch {
-                show(ChatWidgetBanner(strings.conversationStartFailed))
-            }
-        }
+        // A failed start shows its own banner.
+        Task { try? await startConversationAndWait() }
     }
 
     /// The SDK connects muted rather than failing when the microphone is off, so
@@ -259,7 +250,22 @@ final class ChatWidgetViewModel: ObservableObject {
             if task.isCancelled || error is CancellationError {
                 throw CancellationError()
             }
+            if sessionGeneration == generation { show(startFailureBanner(for: error)) }
             throw error
+        }
+    }
+
+    /// What the user can do about a failed start; the details are in the SDK's log.
+    private func startFailureBanner(for error: Error) -> ChatWidgetBanner {
+        switch error as? ConversationError {
+        case .connectionFailed:
+            ChatWidgetBanner(strings.connectionFailed)
+        case .microphoneFailed where MicrophonePermission.isDenied:
+            ChatWidgetBanner(strings.microphonePermissionDenied, offersSettings: true)
+        case .microphoneFailed:
+            ChatWidgetBanner(strings.microphoneFailed)
+        default:
+            ChatWidgetBanner(strings.conversationStartFailed)
         }
     }
 
@@ -284,14 +290,16 @@ final class ChatWidgetViewModel: ObservableObject {
         isSending = true
         if banner?.offersSettings != true { dismissBanner() }
         Task {
+            var started = false
             do {
-                try await send(text)
-            } catch is CancellationError {
-                if input.isEmpty { input = text }
+                try await startConversationAndWait(mode.typedSessionKind)
+                started = true
+                try await client.sendMessage(text)
             } catch {
                 // Hand the text back so the user can retry rather than losing it.
                 if input.isEmpty { input = text }
-                show(ChatWidgetBanner(strings.messageSendFailed))
+                // A failed start already showed why; only a failed send needs its own banner.
+                if started, !(error is CancellationError) { show(ChatWidgetBanner(strings.messageSendFailed)) }
             }
             isSending = false
         }
