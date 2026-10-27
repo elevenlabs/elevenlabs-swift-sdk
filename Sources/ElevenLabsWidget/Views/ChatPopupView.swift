@@ -42,11 +42,15 @@ struct ChatPopupView: View {
                 )
             }
             header
-            Divider()
+            if vm.canShowTextInput {
+                Divider()
+            }
             content
-            ChatInputBar(vm: vm, isInputFocused: $isInputFocused)
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
+            if vm.canShowTextInput {
+                ChatInputBar(vm: vm, isInputFocused: $isInputFocused)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+            }
             Text(strings.mainLabel)
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -85,17 +89,24 @@ struct ChatPopupView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !isShowingTranscript {
+        if !vm.canShowTextInput {
+            // Voice-only: the orb carries the call controls, under the transcript when there is one.
+            if isShowingTranscript {
+                ChatTranscriptView(vm: vm)
+            } else {
+                Spacer(minLength: 0)
+            }
+            ChatVoiceControls(vm: vm, orbSize: heroOrbSize)
+                .padding(.vertical, 12)
+            if !isShowingTranscript {
+                Spacer(minLength: 0)
+            }
+        } else if isShowingTranscript {
+            ChatTranscriptView(vm: vm)
+        } else {
             Spacer(minLength: 0)
             orb(size: heroOrbSize)
             Spacer(minLength: 0)
-        } else {
-            // A voice-only drawer has no composer to anchor it, so the orb stays
-            // visible above the transcript.
-            if !vm.canShowTextInput {
-                orb(size: heroOrbSize * 0.75).padding(.vertical, 12)
-            }
-            ChatTranscriptView(vm: vm)
         }
     }
 
@@ -103,23 +114,38 @@ struct ChatPopupView: View {
         ChatOrbView(levels: vm.audioLevels, state: vm.orbState, size: size, theme: vm.widgetConfig.theme)
     }
 
+    @ViewBuilder
     private var header: some View {
-        HStack(spacing: 12) {
-            orb(size: 36)
+        if vm.canShowTextInput {
+            HStack(spacing: 12) {
+                orb(size: 36)
+                Text(strings.title)
+                    .font(.headline)
+                Spacer(minLength: 0)
+                closeButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        } else {
+            // Voice-only shows the orb just below, so the title stands alone, centered.
             Text(strings.title)
                 .font(.headline)
-            Spacer(minLength: 0)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(strings.closeChatLabel)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .trailing) { closeButton }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+    }
+
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(strings.closeChatLabel)
     }
 
     // MARK: - Drag

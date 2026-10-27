@@ -18,9 +18,11 @@ public struct ChatWidgetStrings: Equatable, Sendable {
     public var unmuteMicrophoneLabel: String
     public var userEndedConversation: String
     public var agentEndedConversation: String
+    public var connectionLost: String
     public var conversationIdFormat: String
     public var conversationStartFailed: String
-    public var conversationFailed: String
+    public var connectionFailed: String
+    public var microphoneFailed: String
     public var messageSendFailed: String
     public var microphonePermissionDenied: String
     public var openSettingsLabel: String
@@ -41,9 +43,11 @@ public struct ChatWidgetStrings: Equatable, Sendable {
         unmuteMicrophoneLabel: String = "Unmute microphone",
         userEndedConversation: String = "You ended the conversation.",
         agentEndedConversation: String = "The agent ended the conversation.",
+        connectionLost: String = "The connection was lost.",
         conversationIdFormat: String = "Conversation ID: %@",
         conversationStartFailed: String = "The conversation couldn't be started.",
-        conversationFailed: String = "The conversation ran into a problem.",
+        connectionFailed: String = "Couldn't connect. Check your connection and try again.",
+        microphoneFailed: String = "The microphone couldn't be turned on.",
         messageSendFailed: String = "That message couldn't be sent.",
         microphonePermissionDenied: String = "Microphone access is off, so the agent can't hear you.",
         openSettingsLabel: String = "Settings",
@@ -63,9 +67,11 @@ public struct ChatWidgetStrings: Equatable, Sendable {
         self.unmuteMicrophoneLabel = unmuteMicrophoneLabel
         self.userEndedConversation = userEndedConversation
         self.agentEndedConversation = agentEndedConversation
+        self.connectionLost = connectionLost
         self.conversationIdFormat = conversationIdFormat
         self.conversationStartFailed = conversationStartFailed
-        self.conversationFailed = conversationFailed
+        self.connectionFailed = connectionFailed
+        self.microphoneFailed = microphoneFailed
         self.messageSendFailed = messageSendFailed
         self.microphonePermissionDenied = microphonePermissionDenied
         self.openSettingsLabel = openSettingsLabel

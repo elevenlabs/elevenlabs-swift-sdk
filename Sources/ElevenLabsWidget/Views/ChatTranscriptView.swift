@@ -31,8 +31,13 @@ struct ChatTranscriptView: View {
 
     private func endedFooter(_ ended: ChatWidgetViewModel.EndedConversation) -> some View {
         let strings = vm.widgetConfig.strings
+        let message = switch ended.reason {
+        case .userEnded: strings.userEndedConversation
+        case .agentEnded: strings.agentEndedConversation
+        case .remoteDisconnected: strings.connectionLost
+        }
         return VStack(spacing: 2) {
-            Text(ended.endedByUser ? strings.userEndedConversation : strings.agentEndedConversation)
+            Text(message)
                 .font(.subheadline)
             if let id = ended.id {
                 Text(String(format: strings.conversationIdFormat, id))
