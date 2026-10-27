@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-/// Composer plus the mic / start / end / send controls.
+/// Composer plus the mic / start / end / send controls; voice-only uses ``ChatVoiceControls`` instead.
 @available(iOS 16, macCatalyst 16, *)
 struct ChatInputBar: View {
     @ObservedObject var vm: ChatWidgetViewModel
@@ -17,15 +17,13 @@ struct ChatInputBar: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            if vm.canShowTextInput {
-                TextField(strings.inputPlaceholder, text: $vm.input, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1 ... 3)
-                    .padding(.horizontal, 8)
-                    .frame(minHeight: 36)
-                    .focused(isInputFocused)
-                    .onSubmit(vm.send)
-            }
+            TextField(strings.inputPlaceholder, text: $vm.input, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1 ... 3)
+                .padding(.horizontal, 8)
+                .frame(minHeight: 36)
+                .focused(isInputFocused)
+                .onSubmit(vm.send)
 
             HStack(spacing: 10) {
                 if vm.canToggleMicMute {
@@ -37,13 +35,7 @@ struct ChatInputBar: View {
                 } else if vm.canStartVoiceConversation {
                     startConversationButton
                 }
-                if vm.canShowTextInput {
-                    sendButton
-                } else {
-                    // Without a composer there is nothing to push the call
-                    // controls away from, so they sit centered instead.
-                    Spacer(minLength: 0)
-                }
+                sendButton
             }
         }
         .padding(.horizontal, 14)
@@ -58,7 +50,7 @@ struct ChatInputBar: View {
                 .strokeBorder(theme.border, lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onTapGesture { if vm.canShowTextInput { isInputFocused.wrappedValue = true } }
+        .onTapGesture { isInputFocused.wrappedValue = true }
     }
 
     private var startConversationButton: some View {
