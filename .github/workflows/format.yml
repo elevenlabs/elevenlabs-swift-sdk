@@ -11,8 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Pinned, because runner images ship different SwiftFormat versions that format code differently.
+      # To upgrade, change both values and bump --minversion in .swiftformat.
       - name: Install SwiftFormat
-        run: brew install swiftformat
+        env:
+          SWIFTFORMAT_VERSION: 0.64.5
+          SWIFTFORMAT_SHA256: ec017c91fdd46233e5a22dc43ff9564a3cc4b37023d3b4681b6c7d7b781de113
+        run: |
+          zip="$RUNNER_TEMP/swiftformat.zip"
+          curl -fsSL -o "$zip" "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
+          echo "${SWIFTFORMAT_SHA256}  $zip" | shasum -a 256 -c -
+          unzip -q "$zip" -d "$RUNNER_TEMP/swiftformat"
+          bin=$(find "$RUNNER_TEMP/swiftformat" -type f -name swiftformat | head -1)
+          chmod +x "$bin"
+          dirname "$bin" >> "$GITHUB_PATH"
 
       - name: Run SwiftFormat in Strict Mode
-        run: swiftformat . --strict
+        run: |
+          swiftformat --version
+          swiftformat . --strict
