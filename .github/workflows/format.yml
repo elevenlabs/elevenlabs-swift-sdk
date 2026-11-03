@@ -6,27 +6,29 @@ on:
 
 jobs:
   swiftformat:
-    runs-on: macOS-latest
+    # SwiftFormat needs no Xcode, so a Linux runner is enough.
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
 
-      # Pinned, because runner images ship different SwiftFormat versions that format code differently.
+      # Pinned, because SwiftFormat versions format code differently.
       # To upgrade, change both values and bump --minversion in .swiftformat.
       - name: Install SwiftFormat
         env:
           SWIFTFORMAT_VERSION: 0.64.5
-          SWIFTFORMAT_SHA256: ec017c91fdd46233e5a22dc43ff9564a3cc4b37023d3b4681b6c7d7b781de113
+          SWIFTFORMAT_SHA256: 56c50d955903cfedbe28996a70e7551a873cdb6dfa5e416d9332925c455ab365
         run: |
-          zip="$RUNNER_TEMP/swiftformat.zip"
-          curl -fsSL -o "$zip" "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
-          echo "${SWIFTFORMAT_SHA256}  $zip" | shasum -a 256 -c -
-          unzip -q "$zip" -d "$RUNNER_TEMP/swiftformat"
-          bin=$(find "$RUNNER_TEMP/swiftformat" -type f -name swiftformat | head -1)
-          chmod +x "$bin"
-          dirname "$bin" >> "$GITHUB_PATH"
+          zip="$RUNNER_TEMP/swiftformat_linux.zip"
+          curl -fsSL -o "$zip" "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat_linux.zip"
+          echo "${SWIFTFORMAT_SHA256}  $zip" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          unzip -p "$zip" swiftformat_linux > "$RUNNER_TEMP/bin/swiftformat"
+          chmod +x "$RUNNER_TEMP/bin/swiftformat"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Run SwiftFormat in Strict Mode
+      # Lint mode lists each violation with its file, line, and rule.
+      - name: Run SwiftFormat in Lint Mode
         run: |
           swiftformat --version
-          swiftformat . --strict
+          swiftformat --lint .
