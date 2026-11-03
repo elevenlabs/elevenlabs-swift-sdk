@@ -4,9 +4,9 @@ import XCTest
 
 final class EventParserTests: XCTestCase {
     func testParseUserTranscriptEvent() throws {
-        let json = """
+        let json = Data("""
         {"user_transcription_event":{"user_transcript":"Hey, how are you?","event_id":26},"type":"user_transcript"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -19,9 +19,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentResponseEvent() throws {
-        let json = """
+        let json = Data("""
         {"agent_response_event":{"agent_response":"Hello! How can I help you today?","event_id":1,"response_id":"response-1"},"type":"agent_response"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -35,9 +35,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAudioEvent() throws {
-        let json = """
+        let json = Data("""
         {"audio_event":{"audio_base_64":"audio","event_id":26,"alignment":{"chars":["I","'","m"," ","d","o","i","n","g"," ","w","e","l","l",","," ","t","h","a","n","k"," ","y","o","u","!"," ","H","o","w"," ","c","a","n"," ","I"," ","a","s","s","i","s","t"," ","y","o","u"," ","t","o","d","a","y","?"," "],"char_start_times_ms":[0,93,151,197,244,279,337,395,418,453,499,534,592,639,673,708,731,755,789,824,882,929,987,1010,1045,1103,1184,1265,1324,1382,1416,1463,1498,1533,1567,1614,1649,1683,1707,1730,1776,1834,1881,1916,1950,1974,1997,2020,2055,2090,2136,2194,2241,2357,2415],"char_durations_ms":[93,58,46,47,35,58,58,23,35,46,35,58,47,34,35,23,24,34,35,58,47,58,23,35,58,81,81,59,58,34,47,35,35,34,47,35,34,24,23,46,58,47,35,34,24,23,23,35,35,46,58,47,116,58,279]}},"type":"audio"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -50,9 +50,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAudioEventWithTimestamps() throws {
-        let json = """
+        let json = Data("""
         {"audio_event":{"audio_base_64":"AAADAAIAAQABAP///v/+/////f/9//3///8BAAAAAQAB","event_id":1,"alignment":{"chars":["H","e","l","l","o","!"," ","H","o","w"," ","c","a","n"," ","I"," ","h","e","l","p"," ","y","o","u"," ","t","o","d","a","y","?"," "],"char_start_times_ms":[0,93,151,186,244,337,372,395,430,464,499,546,569,615,639,685,720,755,789,813,848,882,917,940,964,998,1033,1057,1091,1149,1184,1277,1312],"char_durations_ms":[93,58,35,58,93,35,23,35,34,35,47,23,46,24,46,35,35,34,24,35,34,35,23,24,34,35,24,34,58,35,93,35,174]}},"type":"audio"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -65,14 +65,14 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseInterruptionEvent() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "interruption",
             "interruption_event": {
                 "event_id": 123
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -85,7 +85,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseClientToolCallEvent() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "client_tool_call",
             "client_tool_call": {
@@ -96,7 +96,7 @@ final class EventParserTests: XCTestCase {
                 "expects_response": false
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -111,7 +111,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseClientToolCallEventExpectsResponse() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "client_tool_call",
             "client_tool_call": {
@@ -122,7 +122,7 @@ final class EventParserTests: XCTestCase {
                 "expects_response": true
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -135,9 +135,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseClientErrorEvent() throws {
-        let json = """
+        let json = Data("""
         {"type":"client_error","error_event":{"code":1008,"error_name":"invalid_api_key","message":"Invalid API key"}}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -152,9 +152,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseMCPConnectionStatusEvent() throws {
-        let json = """
+        let json = Data("""
         {"mcp_connection_status":{"integrations":[{"integration_id":"1REt5AalBdQAof1Ksu6R","integration_type":"mcp_server","is_connected":true,"tool_count":5}]},"type":"mcp_connection_status"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -167,9 +167,9 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseMcpToolCallEvent() throws {
-        let json = """
+        let json = Data("""
         {"mcp_tool_call":{"service_id":"1REt5AalBdQAof1Ksu6R","tool_call_id":"tlcal_6901k6djmbymfbe9rg5ygw62tpwe","tool_name":"search_shop_catalog","tool_description":null,"parameters":{"context":"customer browsing","limit":5,"query":"products"},"timestamp":"2025-09-30T15:07:37.300191+00:00","state":"loading"},"type":"mcp_tool_call"}
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -198,7 +198,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentToolResponseEvent() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_tool_response",
             "agent_tool_response": {
@@ -209,7 +209,7 @@ final class EventParserTests: XCTestCase {
                 "event_id": 123
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -225,34 +225,34 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseInvalidJSON() {
-        let json = "invalid json".data(using: .utf8)!
+        let json = Data("invalid json".utf8)
 
         XCTAssertThrowsError(try EventParser.parseIncomingEvent(from: json))
     }
 
     func testParseUnknownEventType() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "unknown_event",
             "data": {}
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         XCTAssertThrowsError(try EventParser.parseIncomingEvent(from: json))
     }
 
     func testParseMissingRequiredFields() {
-        let json = """
+        let json = Data("""
         {
             "type": "user_transcript"
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         XCTAssertThrowsError(try EventParser.parseIncomingEvent(from: json))
     }
 
     func testParseAgentChatResponsePartStart() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_chat_response_part",
             "text_response_part": {
@@ -262,7 +262,7 @@ final class EventParserTests: XCTestCase {
                 "response_id": "response-13"
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -278,7 +278,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentChatResponsePartDelta() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_chat_response_part",
             "text_response_part": {
@@ -288,7 +288,7 @@ final class EventParserTests: XCTestCase {
                 "response_id": "response-13"
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -304,7 +304,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentChatResponsePartStop() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_chat_response_part",
             "text_response_part": {
@@ -314,7 +314,7 @@ final class EventParserTests: XCTestCase {
                 "response_id": "response-13"
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -330,7 +330,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentChatResponsePartDefaultsToDelta() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_chat_response_part",
             "text_response_part": {
@@ -339,7 +339,7 @@ final class EventParserTests: XCTestCase {
                 "response_id": "response-13"
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
@@ -354,7 +354,7 @@ final class EventParserTests: XCTestCase {
     }
 
     func testParseAgentResponseMetadataEvent() throws {
-        let json = """
+        let json = Data("""
         {
             "type": "agent_response_metadata",
             "agent_response_metadata_event": {
@@ -362,7 +362,7 @@ final class EventParserTests: XCTestCase {
                 "metadata": {"custom_field": "custom_value"}
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let event = try EventParser.parseIncomingEvent(from: json)
 
