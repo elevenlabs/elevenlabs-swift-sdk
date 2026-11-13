@@ -30,8 +30,12 @@ final class ConversationAudioManager {
 
     // MARK: - Configuration
 
-    /// Apply audio pipeline configuration from conversation config.
-    func configure(with config: ConversationConfig, callbacks: ConversationCallbacks) async {
+    /// Apply audio pipeline configuration from conversation config. In the mute modes that
+    /// detect speech while muted, `onSpeechDetectedWhileMuted` runs for each detection.
+    func configure(
+        with config: ConversationConfig,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) async {
         let audioConfig = config.audioConfiguration
         let muteMode = audioConfig?.microphoneMuteMode ?? .inputMixer
 
@@ -49,8 +53,8 @@ final class ConversationAudioManager {
             AudioManager.shared.isVoiceProcessingAGCEnabled = agc
         }
 
-        configureSpeechHandler(muteMode: muteMode, callbacks: callbacks)
-        configureSoftwareMuteProcessor(muteMode: muteMode, callbacks: callbacks)
+        configureSpeechHandler(muteMode: muteMode, onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted)
+        configureSoftwareMuteProcessor(muteMode: muteMode, onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted)
     }
 
     /// Cleanup audio state when conversation ends.
@@ -61,13 +65,19 @@ final class ConversationAudioManager {
 
     // MARK: - Private
 
-    private func configureSpeechHandler(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
-        if muteMode == .voiceProcessing, let onSpeechDetectedWhileMuted = callbacks.onSpeechDetectedWhileMuted {
+    private func configureSpeechHandler(
+        muteMode: MicrophoneMuteMode,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) {
+        if muteMode == .voiceProcessing {
             if !audioSpeechHandlerInstalled {
                 previousSpeechActivityHandler = AudioManager.shared.onMutedSpeechActivity
                 audioSpeechHandlerInstalled = true
             }
-            AudioManager.shared.onMutedSpeechActivity = { _, event in
+            // A handler that the app set on LiveKit itself keeps getting the events.
+            let previousHandler = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = { manager, event in
+                previousHandler?(manager, event)
                 guard event == .started else { return }
                 Task { @MainActor in
                     onSpeechDetectedWhileMuted()
@@ -78,7 +88,10 @@ final class ConversationAudioManager {
         }
     }
 
-    private func configureSoftwareMuteProcessor(muteMode: MicrophoneMuteMode, callbacks: ConversationCallbacks) {
+    private func configureSoftwareMuteProcessor(
+        muteMode: MicrophoneMuteMode,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) {
         guard case let .software(speechThreshold, notificationThrottle) = muteMode else {
             if softwareMuteProcessor != nil {
                 cleanupSoftwareMuteProcessor()
@@ -87,7 +100,7 @@ final class ConversationAudioManager {
         }
 
         softwareMuteProcessor = SoftwareMuteProcessor(
-            onSpeechDetectedWhileMuted: callbacks.onSpeechDetectedWhileMuted,
+            onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted,
             mutedSpeechThresholdInDb: speechThreshold,
             mutedSpeechThrottleInSeconds: notificationThrottle
         )

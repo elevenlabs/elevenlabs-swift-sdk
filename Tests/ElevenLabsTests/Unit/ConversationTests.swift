@@ -1077,13 +1077,11 @@ extension ConversationTests {
     }
 
     private func makeConversation(onClientToolCall: @escaping ClientToolHandler) -> Conversation {
-        let conversation = Conversation(
+        Conversation(
             dependencyProvider: dependencyProvider,
             config: makeConfig(),
-            callbacks: makeCallbacks()
+            callbacks: makeCallbacks { $0.onClientToolCall = onClientToolCall }
         )
-        conversation.onClientToolCall = onClientToolCall
-        return conversation
     }
 }
 

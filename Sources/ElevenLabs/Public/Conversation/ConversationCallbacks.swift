@@ -45,6 +45,13 @@ public struct ConversationCallbacks: Sendable {
     /// Called when audio alignment metadata is emitted.
     public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
 
+    /// Answers each client tool call, on the main actor. Return `.pending` to answer later with
+    /// `sendToolResult`. A thrown error is sent to the agent as an error result.
+    ///
+    /// Without a handler, every call that expects a response gets an error result. Set
+    /// `{ _ in .pending }` to answer every call through `pendingToolCalls`.
+    public var onClientToolCall: ClientToolHandler?
+
     /// Called whenever the agent state changes (event-based mode only).
     public var onAgentStateChange: (@Sendable (AgentState) -> Void)?
 
@@ -63,6 +70,7 @@ public struct ConversationCallbacks: Sendable {
         onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
+        onClientToolCall: ClientToolHandler? = nil,
         onAgentStateChange: (@Sendable (AgentState) -> Void)? = nil
     ) {
         self.onAgentReady = onAgentReady
@@ -79,6 +87,7 @@ public struct ConversationCallbacks: Sendable {
         self.onInterruption = onInterruption
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
+        self.onClientToolCall = onClientToolCall
         self.onAgentStateChange = onAgentStateChange
     }
 }

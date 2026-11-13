@@ -20,7 +20,7 @@ final class Conversation: ObservableObject {
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Set by `ConversationClient`, which keeps it current.
-    var onClientToolCall: ClientToolHandler?
+    var callbacks: ConversationCallbacks
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
     @Published var conversationMetadata: ConversationMetadataEvent?
@@ -33,7 +33,6 @@ final class Conversation: ObservableObject {
 
     private var activeConnectionManager: (any ConnectionManaging)?
     private var agentStateManager: AgentStateManager?
-    private let callbacks: ConversationCallbacks
     private var chatHistoryReconciler = ChatHistoryReconciler()
     private let config: ConversationConfig
     private let dependencyProvider: any ConversationDependencyProvider
@@ -110,7 +109,10 @@ final class Conversation: ObservableObject {
                     self?.refreshAudioObservers()
                 }
             }
-            await audioManager.configure(with: config, callbacks: callbacks)
+            // The closure reads the current callback on each detection, so a new one applies at once.
+            await audioManager.configure(with: config) { [weak self] in
+                self?.callbacks.onSpeechDetectedWhileMuted?()
+            }
             guard state.isConnecting else {
                 audioManager.cleanup()
                 throw CancellationError()
@@ -609,7 +611,7 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            guard let handler = onClientToolCall else {
+            guard let handler = callbacks.onClientToolCall else {
                 // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
                 logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
                 let error = ClientToolError("No client tool handler is configured in the app.")

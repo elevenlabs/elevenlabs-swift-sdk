@@ -1,6 +1,6 @@
 import Foundation
 
-/// Answers a client tool call. See `ConversationClient.onClientToolCall`.
+/// Answers a client tool call. See `ConversationCallbacks.onClientToolCall`.
 public typealias ClientToolHandler = @MainActor @Sendable (ClientToolCallEvent) async throws -> ClientToolReply
 
 /// Builds a `ClientToolHandler` from one handler for each tool.

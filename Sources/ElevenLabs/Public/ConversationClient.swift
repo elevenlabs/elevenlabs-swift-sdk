@@ -32,21 +32,17 @@ public final class ConversationClient: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
 
-    // MARK: - Client tools
+    // MARK: - Callbacks
 
-    /// Answers each client tool call. Return `.pending` to answer later with `sendToolResult`.
-    /// A thrown error is sent to the agent as an error result.
-    ///
-    /// Without a handler, every call that expects a response gets an error result. Set
-    /// `{ _ in .pending }` to answer every call through `pendingToolCalls`. A new value applies
-    /// to calls that arrive after it.
-    public var onClientToolCall: ClientToolHandler? {
-        didSet { session?.onClientToolCall = onClientToolCall }
+    /// The callbacks for every conversation this client starts. A change applies at once, also
+    /// during a conversation. A new `ConversationCallbacks` value replaces all of them, so set
+    /// one field, such as `client.callbacks.onClientToolCall`, to change only that callback.
+    public var callbacks: ConversationCallbacks {
+        didSet { session?.callbacks = callbacks }
     }
 
     // MARK: - Init
 
-    private let callbacks: ConversationCallbacks
     private let dependencyProvider: (any ConversationDependencyProvider)?
     private let logLevel: LogLevel
 
@@ -166,7 +162,6 @@ public final class ConversationClient: ObservableObject {
     private func bind(_ session: Conversation) {
         cancellables.removeAll()
         self.session = session
-        session.onClientToolCall = onClientToolCall
 
         session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
         session.$chatHistory.sink { [weak self] in self?.chatHistory = $0 }.store(in: &cancellables)
