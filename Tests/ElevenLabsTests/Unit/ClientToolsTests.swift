@@ -27,4 +27,45 @@ final class ClientToolsTests: XCTestCase {
 
         XCTAssertEqual(error.localizedDescription, "No such order.")
     }
+
+    // MARK: - Handler from a map
+
+    @MainActor
+    func testMapHandlerRunsTheToolWithTheCallsName() async throws {
+        let handler = ClientTools.handler([
+            "get_order": { _ in .result("Shipped") },
+            "cancel_order": { _ in .pending }
+        ])
+
+        let order = try await handler(makeCall(toolName: "get_order"))
+        let cancel = try await handler(makeCall(toolName: "cancel_order"))
+
+        XCTAssertEqual(order, .result("Shipped"))
+        XCTAssertEqual(cancel, .pending)
+    }
+
+    @MainActor
+    func testMapHandlerFailsACallForAnUnknownTool() async {
+        let handler = ClientTools.handler(["get_order": { _ in .result("Shipped") }])
+
+        do {
+            _ = try await handler(makeCall(toolName: "open_settings"))
+            XCTFail("Expected an error for a tool that isn't in the map")
+        } catch {
+            XCTAssertEqual(
+                error as? ClientToolError,
+                ClientToolError("No client tool named open_settings is registered in this app.")
+            )
+        }
+    }
+
+    private func makeCall(toolName: String) -> ClientToolCallEvent {
+        ClientToolCallEvent(
+            toolName: toolName,
+            toolCallId: "call_1",
+            parametersData: Data("{}".utf8),
+            eventId: 1,
+            expectsResponse: true
+        )
+    }
 }
