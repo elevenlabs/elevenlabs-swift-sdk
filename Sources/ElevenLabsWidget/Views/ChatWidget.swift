@@ -59,10 +59,10 @@ import UIKit
         // This view is rebuilt on every host update while the view model
         // survives, so session configuration and host closures are handed over
         // fresh here rather than left at whatever the first mount captured.
-        // None are published, so these assignments invalidate nothing.
+        // None are published, so these updates invalidate nothing.
         vm.mode = mode
         vm.conversationConfig = conversationConfig
-        vm.onClientToolCall = onClientToolCall
+        vm.setClientToolHandler(onClientToolCall)
         return ZStack(alignment: .bottomTrailing) {
             if vm.widgetConfig.showBackdrop {
                 // Always mounted so hit-testing switches off the instant we close;

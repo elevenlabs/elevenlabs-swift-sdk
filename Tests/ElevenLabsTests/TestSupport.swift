@@ -68,6 +68,45 @@ extension XCTestCase {
             errorHandler(error)
         }
     }
+
+    /// Checks `condition` until it holds or `timeout` passes, and returns whether it held.
+    func eventually(timeout: TimeInterval = 1, _ condition: @escaping () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return true
+    }
+}
+
+extension ClientToolCallEvent {
+    /// A call with empty parameters.
+    static func fixture(
+        id: String = "call_1",
+        toolName: String = "get_order_status",
+        expectsResponse: Bool = true
+    ) -> ClientToolCallEvent {
+        ClientToolCallEvent(
+            toolName: toolName,
+            toolCallId: id,
+            parametersData: Data("{}".utf8),
+            eventId: 1,
+            expectsResponse: expectsResponse
+        )
+    }
+}
+
+extension MockWebRTCConnectionManager {
+    /// The `client_tool_result` messages sent so far, in order.
+    var sentToolResults: [[String: Any]] {
+        publishedPayloads.compactMap { payload in
+            guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                  json["type"] as? String == "client_tool_result"
+            else { return nil }
+            return json
+        }
+    }
 }
 
 actor ValueRecorder<Value: Sendable> {

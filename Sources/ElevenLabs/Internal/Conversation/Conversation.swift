@@ -16,8 +16,11 @@ final class Conversation: ObservableObject {
     @Published var chatHistory: [any ChatHistoryItem] = []
     @Published var agentState: AgentState = .listening
 
-    /// Stream of client tool calls that need to be executed by the app
+    /// Client tool calls without an answer yet
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
+
+    /// Set by `ConversationClient`, which keeps it current.
+    var callbacks: ConversationCallbacks
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
     @Published var conversationMetadata: ConversationMetadataEvent?
@@ -30,7 +33,6 @@ final class Conversation: ObservableObject {
 
     private var activeConnectionManager: (any ConnectionManaging)?
     private var agentStateManager: AgentStateManager?
-    private let callbacks: ConversationCallbacks
     private var chatHistoryReconciler = ChatHistoryReconciler()
     private let config: ConversationConfig
     private let dependencyProvider: any ConversationDependencyProvider
@@ -67,6 +69,8 @@ final class Conversation: ObservableObject {
     }
 
     private var speakingTimer: Task<Void, Never>?
+    /// Running `onClientToolCall` handlers, by tool call id.
+    private var clientToolTasks: [String: Task<Void, Never>] = [:]
     /// The in-flight teardown; later `endConversation()` calls wait for it instead of returning early.
     private var ending: Task<Void, Never>?
 
@@ -105,7 +109,10 @@ final class Conversation: ObservableObject {
                     self?.refreshAudioObservers()
                 }
             }
-            await audioManager.configure(with: config, callbacks: callbacks)
+            // The closure reads the current callback on each detection, so a new one applies at once.
+            await audioManager.configure(with: config) { [weak self] in
+                self?.callbacks.onSpeechDetectedWhileMuted?()
+            }
             guard state.isConnecting else {
                 audioManager.cleanup()
                 throw CancellationError()
@@ -285,15 +292,18 @@ final class Conversation: ObservableObject {
         try await publish(.mcpToolApprovalResult(approval))
     }
 
-    /// Send the result of a client tool call back to the agent.
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
     func sendToolResult(_ result: ClientToolResultEvent) async throws {
-        guard state.isConnected else { throw ConversationError.notConnected }
+        guard state.isConnected || state.isConnecting else { throw ConversationError.notConnected }
         try await publish(.clientToolResult(result))
-        pendingToolCalls.removeAll { $0.toolCallId == result.toolCallId }
+        markToolCallCompleted(result.toolCallId)
     }
 
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
     func markToolCallCompleted(_ toolCallId: String) {
+        // `@Published` publishes on every write, also on one that removes nothing.
+        guard pendingToolCalls.contains(where: { $0.toolCallId == toolCallId }) else { return }
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
 
@@ -451,6 +461,10 @@ final class Conversation: ObservableObject {
         isTearingDown = true
         speakingTimer?.cancel()
         speakingTimer = nil
+        for task in clientToolTasks.values {
+            task.cancel()
+        }
+        clientToolTasks.removeAll()
         pendingMuteState = nil
         agentState = .listening
 
@@ -479,6 +493,71 @@ final class Conversation: ObservableObject {
         }
 
         try await connectionManager.send(event: event)
+    }
+
+    // MARK: - Client tools
+
+    private func runClientTool(_ call: ClientToolCallEvent, handler: @escaping ClientToolHandler) {
+        clientToolTasks[call.toolCallId] = Task { [weak self] in
+            let reply: Result<ClientToolReply, Error>
+            do {
+                reply = try await .success(handler(call))
+            } catch {
+                reply = .failure(error)
+            }
+            // A cancelled handler belongs to a session that ended.
+            guard let self, !Task.isCancelled else { return }
+            clientToolTasks[call.toolCallId] = nil
+            // The app may have answered the call itself while the handler ran.
+            guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
+            switch reply {
+            case .success(.pending):
+                return
+            case let .success(.result(text)):
+                await completeClientToolCall(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+            case let .failure(error as ClientToolError):
+                // The handler chose this answer, for example because the user declined.
+                logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
+            case let .failure(error):
+                // Like the error result, the log leaves out an `NSError`'s user info.
+                logger.warning(
+                    "A client tool handler failed",
+                    context: ["tool": call.toolName, "error": error.localizedDescription]
+                )
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
+            }
+        }
+    }
+
+    private static func errorResult(_ error: Error, for call: ClientToolCallEvent) -> ClientToolResultEvent {
+        if let error = error as? ClientToolError {
+            return ClientToolResultEvent(
+                toolCallId: call.toolCallId,
+                result: error.message,
+                isError: true,
+                errorType: error.errorType
+            )
+        }
+        // `String(describing:)` would add an `NSError`'s user info, which can hold a URL with a token.
+        return ClientToolResultEvent(
+            toolCallId: call.toolCallId,
+            result: "Client tool execution failed: \(error.localizedDescription)",
+            isError: true
+        )
+    }
+
+    /// Sends `result` if the agent waits for one. Otherwise marks the call completed.
+    private func completeClientToolCall(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
+        guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
+        do {
+            try await sendToolResult(result)
+        } catch {
+            logger.warning(
+                "Failed to send a client tool result",
+                context: ["tool": call.toolName, "error": "\(error)"]
+            )
+        }
     }
 
     // MARK: - Event Handling
@@ -532,8 +611,15 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            callbacks.onClientToolCall?(toolCall)
+            guard let handler = callbacks.onClientToolCall else {
+                // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
+                logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
+                let error = ClientToolError("No client tool handler is configured in the app.")
+                await completeClientToolCall(toolCall, with: Self.errorResult(error, for: toolCall))
+                break
+            }
             pendingToolCalls.append(toolCall)
+            runClientTool(toolCall, handler: handler)
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))

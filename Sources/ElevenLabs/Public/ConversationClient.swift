@@ -20,7 +20,7 @@ public final class ConversationClient: ObservableObject {
     /// Whether the agent's voice is silenced.
     @Published public private(set) var isAgentMuted: Bool = false
 
-    /// Stream of client tool calls that need to be executed by the app
+    /// Client tool calls without an answer yet. Cleared when the conversation ends.
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
@@ -32,9 +32,17 @@ public final class ConversationClient: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
 
+    // MARK: - Callbacks
+
+    /// The callbacks for every conversation this client starts. A change applies at once, also
+    /// during a conversation. A new `ConversationCallbacks` value replaces all of them, so set
+    /// one field, such as `client.callbacks.onClientToolCall`, to change only that callback.
+    public var callbacks: ConversationCallbacks {
+        didSet { session?.callbacks = callbacks }
+    }
+
     // MARK: - Init
 
-    private let callbacks: ConversationCallbacks
     private let dependencyProvider: (any ConversationDependencyProvider)?
     private let logLevel: LogLevel
 
@@ -274,7 +282,8 @@ public final class ConversationClient: ObservableObject {
         try await requireSession().sendMCPToolApproval(toolCallId: toolCallId, isApproved: isApproved)
     }
 
-    /// Send the result of a client tool call back to the agent.
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
     public func sendToolResult(_ result: ClientToolResultEvent) async throws {
         try await requireSession().sendToolResult(result)
     }

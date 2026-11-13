@@ -29,17 +29,14 @@ final class ChatWidgetViewModel: ObservableObject {
         let reason: EndReason
     }
 
-    /// All four mirror what the host passes to ``ChatWidget``, so changes land
+    /// All three mirror what the host passes to ``ChatWidget``, so changes land
     /// on the live view model instead of needing a new conversation.
     var mode: WidgetConversationMode
     var conversationConfig: ConversationConfig
-    var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
     let audioLevels = OrbAudioLevels()
 
-    /// Tool calls already dispatched, so a re-published snapshot doesn't run them twice.
-    private var dispatchedToolCallIds: Set<String> = []
     /// The in-flight startup, so overlapping callers join it instead of racing.
     private var startTask: (kind: WidgetSessionKind, task: Task<Void, Error>)?
     /// Bumped per start, so work outliving a session can tell it went stale.
@@ -60,7 +57,6 @@ final class ChatWidgetViewModel: ObservableObject {
         self.widgetConfig = widgetConfig
         self.client = client
         self.conversationConfig = conversationConfig
-        self.onClientToolCall = onClientToolCall
 
         // The client is durable across sessions, so every subscription and
         // observer is wired once.
@@ -76,12 +72,7 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$chatHistory
             .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
-        client.$pendingToolCalls
-            .combineLatest(client.$state)
-            .filter { _, state in state.isConnected }
-            .map { calls, _ in calls }
-            .sink { [weak self] in self?.dispatchNewToolCalls($0) }
-            .store(in: &cancellables)
+        setClientToolHandler(onClientToolCall)
         // Only a finished session clears the kind: the client rebinds to a fresh
         // conversation on every start, and that publishes `.idle` before it
         // connects, which would wipe the kind of the session just requested.
@@ -228,7 +219,6 @@ final class ChatWidgetViewModel: ObservableObject {
         let mode = mode
         let client = client
         let config = conversationConfig
-        dispatchedToolCallIds.removeAll()
         let task = Task {
             try await mode.start(kind, client: client, config: config)
         }
@@ -343,35 +333,17 @@ final class ChatWidgetViewModel: ObservableObject {
 
     // MARK: - Client tools
 
-    private func dispatchNewToolCalls(_ calls: [ClientToolCallEvent]) {
-        let ids = Set(calls.map(\.toolCallId))
-        let added = ids.subtracting(dispatchedToolCallIds)
-        dispatchedToolCallIds.formUnion(added)
-        for call in calls where added.contains(call.toolCallId) {
-            dispatch(call)
+    /// Passes the host's handler to the client. Without one, the client answers each call that
+    /// expects a response with its own error result.
+    func setClientToolHandler(_ handler: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?) {
+        guard let handler else {
+            client.callbacks.onClientToolCall = nil
+            return
         }
-    }
-
-    private func dispatch(_ call: ClientToolCallEvent) {
-        let generation = sessionGeneration
-        let handler = onClientToolCall
-        Task { @MainActor [weak self] in
-            let result = if let handler {
-                await handler(call)
-            } else {
-                ClientToolResultEvent(
-                    toolCallId: call.toolCallId,
-                    result: "No client tool handler is configured in the app.",
-                    isError: true
-                )
-            }
-            // The host handler can outlive the conversation that asked for it.
-            guard let self, generation == sessionGeneration else { return }
-            if call.expectsResponse {
-                try? await client.sendToolResult(result)
-            } else {
-                client.markToolCallCompleted(call.toolCallId)
-            }
+        client.callbacks.onClientToolCall = { call in
+            let result = await handler(call)
+            guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
+            return .result(result.result)
         }
     }
 }

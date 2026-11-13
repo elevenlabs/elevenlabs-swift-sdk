@@ -248,6 +248,30 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(client.state, .idle)
     }
 
+    // MARK: - Client tool handler
+
+    func testClientToolHandlerSetOnTheClientAnswersCalls() async throws {
+        client.callbacks.onClientToolCall = { _ in .result("Shipped") }
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
+        XCTAssertTrue(sent)
+        XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.first?["result"] as? String, "Shipped")
+    }
+
+    func testClientToolHandlerSetDuringAConversationAppliesToLaterCalls() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        client.callbacks.onClientToolCall = { _ in .pending }
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+
+        let pending = await eventually { self.client.pendingToolCalls.map(\.toolCallId) == ["call_1"] }
+        XCTAssertTrue(pending)
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
+    }
+
     func testPreStartMuteIsAppliedToConversation() async throws {
         mockWebRTCConnectionManager.isMicrophoneMuted = false
 

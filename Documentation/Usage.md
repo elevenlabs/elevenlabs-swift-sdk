@@ -266,136 +266,66 @@ client.addMicAudioObserver(observer)
 
 Client tools allow your agent to execute logic within your app. You must register the tools in the ElevenLabs Dashboard first.
 
+#### Answer calls with a handler
+
+Set `client.callbacks.onClientToolCall` to answer the calls, or pass `onClientToolCall` in the `ConversationCallbacks` that you give the client. A new value applies to the calls that arrive after it. The SDK runs the handler once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
+
+- `.result(text)` sends the text to the agent.
+- `.result(json: value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
+- `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
+
+`ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
+
 ```swift
-// Complete example with lifecycle management
-@MainActor
-final class ConversationViewModel: ObservableObject {
-    @Published var pendingTools: [ClientToolCallEvent] = []
-    @Published var isProcessingTool = false
+client.callbacks.onClientToolCall = ClientTools.handler([
+    "get_weather": { call in
+        let location = try call.getParameters()["location"] as? String ?? ""
+        return .result(await weather(for: location))
+    },
+    "get_order": { call in
+        let id = try call.getParameters()["order_id"] as? String ?? ""
+        return try .result(json: await orders.order(id: id))
+    },
+    "open_settings": { _ in
+        router.show(.settings)
+        return .result("Opened the settings screen.")
+    },
+    "confirm_cancellation": { _ in .pending } // the confirmation UI below answers it
+])
+```
 
-    private var cancellables = Set<AnyCancellable>()
-    private let client: ConversationClient
-    private var toolObserverTask: Task<Void, Never>?
+To route calls yourself, set your own closure as `client.callbacks.onClientToolCall`.
 
-    init(client: ConversationClient) {
-        self.client = client
-        setupToolObserver()
-    }
+A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
 
-    private func setupToolObserver() {
-        // Option 1: Using async/await pattern (recommended for automatic execution)
-        toolObserverTask = Task {
-            for await toolCalls in client.$pendingToolCalls.values {
-                await withTaskGroup(of: Void.self) { group in
-                    for toolCall in toolCalls {
-                        group.addTask {
-                            await self.executeTool(toolCall)
-                        }
-                    }
-                }
-            }
-        }
+If a tool doesn't expect a response, the SDK runs the handler and sends nothing. When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.
 
-        // Option 2: Using Combine (for manual execution with UI control)
-        client.$pendingToolCalls
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] toolCalls in
-                self?.pendingTools = toolCalls
-            }
-            .store(in: &cancellables)
-    }
+#### Answer calls later
 
-    func executeTool(_ toolCall: ClientToolCallEvent) async {
-        isProcessingTool = true
-        defer { isProcessingTool = false }
+If the handler returns `.pending`, the call stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:
 
-        do {
-            let params = try toolCall.getParameters()
-
-            // Execute specific tool based on name
-            let result: String
-            switch toolCall.toolName {
-            case "get_weather":
-                let location = params["location"] as? String ?? "Unknown"
-                result = await getWeather(for: location)
-
-            case "search_database":
-                let query = params["query"] as? String ?? ""
-                result = await searchDatabase(query: query)
-
-            case "calculate":
-                let expression = params["expression"] as? String ?? "0"
-                result = calculateExpression(expression)
-
-            default:
-                result = "Unknown tool: \(toolCall.toolName)"
-            }
-
-            try await client.sendToolResult(
-                .init(toolCallId: toolCall.toolCallId, result: result)
-            )
-        } catch {
-            print("Tool execution failed: \(error)")
-            try? await client.sendToolResult(
-                .init(
-                    toolCallId: toolCall.toolCallId,
-                    result: "Error: \(error.localizedDescription)",
-                    isError: true
-                )
-            )
-        }
-    }
-
-    func stopObserving() {
-        toolObserverTask?.cancel()
-    }
-
-    // Example tool implementations
-    private func getWeather(for location: String) async -> String {
-        // Your weather API call
-        return "Sunny, 22°C in \(location)"
-    }
-
-    private func searchDatabase(query: String) async -> String {
-        // Your database search
-        return "Found 3 results for '\(query)'"
-    }
-
-    private func calculateExpression(_ expression: String) -> String {
-        // Your calculation logic
-        return "Result: 42"
-    }
-}
-
-// SwiftUI usage
-struct ConversationView: View {
-    @StateObject private var viewModel: ConversationViewModel
-
-    init(client: ConversationClient) {
-        _viewModel = StateObject(wrappedValue: ConversationViewModel(client: client))
-    }
+```swift
+struct CancellationPrompt: View {
+    @ObservedObject var client: ConversationClient
 
     var body: some View {
-        VStack {
-            if viewModel.isProcessingTool {
-                ProgressView("Processing tool...")
+        if let call = client.pendingToolCalls.first(where: { $0.toolName == "confirm_cancellation" }) {
+            ConfirmationCard("Cancel this order?") { confirmed in
+                let result: ClientToolResultEvent = confirmed
+                    ? .init(toolCallId: call.toolCallId, result: "The user confirmed the cancellation.")
+                    : .init(toolCallId: call.toolCallId, result: "The user kept the order.", errorType: .userRejected)
+                Task { try? await client.sendToolResult(result) }
             }
-
-            // Optional: Show pending tools for manual approval
-            ForEach(viewModel.pendingTools, id: \.toolCallId) { toolCall in
-                Button("Execute \(toolCall.toolName)") {
-                    Task {
-                        await viewModel.executeTool(toolCall)
-                    }
-                }
-            }
-        }
-        .onDisappear {
-            viewModel.stopObserving()
         }
     }
 }
 ```
+
+The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
+
+The agent waits for a result only as long as the tool's response timeout in the agent settings. Give a tool that waits for the user a longer timeout, or no timeout.
+
+To answer every call this way, set `client.callbacks.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it.
 
 ### MCP (Model Context Protocol) Tools
 
@@ -553,6 +483,8 @@ let callbacks = ConversationCallbacks(
 
 let client = ConversationClient(callbacks: callbacks)
 ```
+
+To change a callback later, set its field on `client.callbacks`, for example `client.callbacks.onAgentResponse = { ... }`. The change applies at once, also during a conversation.
 
 ---
 

@@ -80,20 +80,27 @@ public struct ClientToolResultEvent: Sendable {
         self.errorType = errorType
     }
 
-    /// JSON-encodes `result` before creating the event.
+    /// JSON-encodes `result` before creating the event. Dates are encoded in ISO 8601.
     public init(
         toolCallId: String,
         result: some Encodable,
         isError: Bool = false,
         errorType: ClientToolErrorType? = nil
     ) throws {
-        let json = try String(decoding: JSONEncoder().encode(result), as: UTF8.self)
-        self.init(
+        try self.init(
             toolCallId: toolCallId,
-            result: json,
+            result: Self.json(result),
             isError: isError,
             errorType: errorType
         )
+    }
+
+    /// The agent's model reads the result as text, so dates are ISO 8601, not
+    /// `JSONEncoder`'s default of seconds since 2001.
+    static func json(_ value: some Encodable) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try String(decoding: encoder.encode(value), as: UTF8.self)
     }
 }
 
