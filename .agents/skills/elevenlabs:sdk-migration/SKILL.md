@@ -162,7 +162,8 @@ case .connecting(let stage): Text("Connecting… (\(stage))")
 When migrating:
 
 - Remove observation of `startupState` and `startupMetrics` — the former is inside `.connecting`, the latter is returned by the start call.
-- `pendingToolCalls`, `conversationMetadata`, `mcpToolCalls`, and `mcpConnectionStatus` are unchanged, just on the client.
+- `conversationMetadata`, `mcpToolCalls`, and `mcpConnectionStatus` are unchanged, just on the client.
+- `pendingToolCalls` is also on the client, but a call enters it only when a tool handler is set. See the client tool notes under "Update microphone and tool-result APIs".
 - After a conversation ends, the client keeps the last state for display; `client.reset()` clears it back to idle defaults (useful when dismissing a screen).
 
 ## Update microphone and tool-result APIs
