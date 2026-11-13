@@ -266,136 +266,73 @@ client.addMicAudioObserver(observer)
 
 Client tools allow your agent to execute logic within your app. You must register the tools in the ElevenLabs Dashboard first.
 
+#### Answer calls with a handler
+
+Pass `onClientToolCall` when you create the client. The SDK runs it once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
+
+- `.result(text)` sends the text to the agent.
+- `.json(value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
+- `.later` leaves the call in `pendingToolCalls`, for the app to answer later.
+
 ```swift
-// Complete example with lifecycle management
-@MainActor
-final class ConversationViewModel: ObservableObject {
-    @Published var pendingTools: [ClientToolCallEvent] = []
-    @Published var isProcessingTool = false
-
-    private var cancellables = Set<AnyCancellable>()
-    private let client: ConversationClient
-    private var toolObserverTask: Task<Void, Never>?
-
-    init(client: ConversationClient) {
-        self.client = client
-        setupToolObserver()
+let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
+    let params = try call.getParameters()
+    switch call.toolName {
+    case "get_weather":
+        return .result(await weather(for: params["location"] as? String ?? ""))
+    case "get_order":
+        return try .json(await orders.order(id: params["order_id"] as? String ?? ""))
+    case "open_settings":
+        router.show(.settings)
+        return .result("Opened the settings screen.")
+    case "cancel_order":
+        return .later // the confirmation UI below answers it
+    default:
+        throw ClientToolError("This app version doesn't support \(call.toolName).")
     }
+}))
+```
 
-    private func setupToolObserver() {
-        // Option 1: Using async/await pattern (recommended for automatic execution)
-        toolObserverTask = Task {
-            for await toolCalls in client.$pendingToolCalls.values {
-                await withTaskGroup(of: Void.self) { group in
-                    for toolCall in toolCalls {
-                        group.addTask {
-                            await self.executeTool(toolCall)
-                        }
-                    }
-                }
-            }
-        }
+A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
 
-        // Option 2: Using Combine (for manual execution with UI control)
-        client.$pendingToolCalls
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] toolCalls in
-                self?.pendingTools = toolCalls
-            }
-            .store(in: &cancellables)
-    }
+If a tool doesn't expect a response, the SDK runs the handler and sends nothing.
 
-    func executeTool(_ toolCall: ClientToolCallEvent) async {
-        isProcessingTool = true
-        defer { isProcessingTool = false }
+#### Answer calls later
 
-        do {
-            let params = try toolCall.getParameters()
+A call that the handler leaves for `.later` stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:
 
-            // Execute specific tool based on name
-            let result: String
-            switch toolCall.toolName {
-            case "get_weather":
-                let location = params["location"] as? String ?? "Unknown"
-                result = await getWeather(for: location)
-
-            case "search_database":
-                let query = params["query"] as? String ?? ""
-                result = await searchDatabase(query: query)
-
-            case "calculate":
-                let expression = params["expression"] as? String ?? "0"
-                result = calculateExpression(expression)
-
-            default:
-                result = "Unknown tool: \(toolCall.toolName)"
-            }
-
-            try await client.sendToolResult(
-                .init(toolCallId: toolCall.toolCallId, result: result)
-            )
-        } catch {
-            print("Tool execution failed: \(error)")
-            try? await client.sendToolResult(
-                .init(
-                    toolCallId: toolCall.toolCallId,
-                    result: "Error: \(error.localizedDescription)",
-                    isError: true
-                )
-            )
-        }
-    }
-
-    func stopObserving() {
-        toolObserverTask?.cancel()
-    }
-
-    // Example tool implementations
-    private func getWeather(for location: String) async -> String {
-        // Your weather API call
-        return "Sunny, 22°C in \(location)"
-    }
-
-    private func searchDatabase(query: String) async -> String {
-        // Your database search
-        return "Found 3 results for '\(query)'"
-    }
-
-    private func calculateExpression(_ expression: String) -> String {
-        // Your calculation logic
-        return "Result: 42"
-    }
-}
-
-// SwiftUI usage
-struct ConversationView: View {
-    @StateObject private var viewModel: ConversationViewModel
-
-    init(client: ConversationClient) {
-        _viewModel = StateObject(wrappedValue: ConversationViewModel(client: client))
-    }
+```swift
+struct CancelOrderPrompt: View {
+    @ObservedObject var client: ConversationClient
 
     var body: some View {
-        VStack {
-            if viewModel.isProcessingTool {
-                ProgressView("Processing tool...")
+        if let call = client.pendingToolCalls.first(where: { $0.toolName == "cancel_order" }) {
+            ConfirmationCard("Cancel this order?") { confirmed in
+                Task { try? await answer(call, confirmed: confirmed) }
             }
+        }
+    }
 
-            // Optional: Show pending tools for manual approval
-            ForEach(viewModel.pendingTools, id: \.toolCallId) { toolCall in
-                Button("Execute \(toolCall.toolName)") {
-                    Task {
-                        await viewModel.executeTool(toolCall)
-                    }
-                }
-            }
+    private func answer(_ call: ClientToolCallEvent, confirmed: Bool) async throws {
+        guard confirmed else {
+            return try await client.sendToolResult(
+                .init(toolCallId: call.toolCallId, result: "The user kept the order.", errorType: .userRejected)
+            )
         }
-        .onDisappear {
-            viewModel.stopObserving()
-        }
+        try await orders.cancel(call.getParameters()["order_id"] as? String ?? "")
+        try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
     }
 }
 ```
+
+The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
+
+Without a handler, every call waits in `pendingToolCalls`, and the app answers each one this way.
+
+#### Timeouts and the end of a conversation
+
+- The agent waits for a result only as long as the tool's response timeout in the agent settings. Give a tool that waits for the user a longer timeout, or no timeout.
+- When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.
 
 ### MCP (Model Context Protocol) Tools
 

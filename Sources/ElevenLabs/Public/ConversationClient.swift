@@ -20,7 +20,9 @@ public final class ConversationClient: ObservableObject {
     /// Whether the agent's voice is silenced.
     @Published public private(set) var isAgentMuted: Bool = false
 
-    /// Stream of client tool calls that need to be executed by the app
+    /// Client tool calls without an answer yet: calls that `onClientToolCall` is running
+    /// or left for `.later`, and every call when there is no handler. Answer one with
+    /// `sendToolResult` or `markToolCallCompleted`. Cleared when the conversation ends.
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
