@@ -37,9 +37,6 @@ final class ChatWidgetViewModel: ObservableObject {
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
     let audioLevels = OrbAudioLevels()
-
-    /// Tool calls already dispatched, so a re-published snapshot doesn't run them twice.
-    private var dispatchedToolCallIds: Set<String> = []
     /// The in-flight startup, so overlapping callers join it instead of racing.
     private var startTask: (kind: WidgetSessionKind, task: Task<Void, Error>)?
     /// Bumped per start, so work outliving a session can tell it went stale.
@@ -76,14 +73,15 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$chatHistory
             .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
-        // The calls wait in `pendingToolCalls`, and `dispatchNewToolCalls` answers them.
-        client.onClientToolCall = { _ in .pending }
-        client.$pendingToolCalls
-            .combineLatest(client.$state)
-            .filter { _, state in state.isConnected }
-            .map { calls, _ in calls }
-            .sink { [weak self] in self?.dispatchNewToolCalls($0) }
-            .store(in: &cancellables)
+        // Reads the host's handler on each call, because the host passes it again on every update.
+        client.onClientToolCall = { [weak self] call in
+            guard let handler = self?.onClientToolCall else {
+                throw ClientToolError("No client tool handler is configured in the app.")
+            }
+            let result = await handler(call)
+            guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
+            return .result(result.result)
+        }
         // Only a finished session clears the kind: the client rebinds to a fresh
         // conversation on every start, and that publishes `.idle` before it
         // connects, which would wipe the kind of the session just requested.
@@ -230,7 +228,6 @@ final class ChatWidgetViewModel: ObservableObject {
         let mode = mode
         let client = client
         let config = conversationConfig
-        dispatchedToolCallIds.removeAll()
         let task = Task {
             try await mode.start(kind, client: client, config: config)
         }
@@ -341,40 +338,6 @@ final class ChatWidgetViewModel: ObservableObject {
     func openSettings() {
         dismissBanner()
         MicrophonePermission.openSettings()
-    }
-
-    // MARK: - Client tools
-
-    private func dispatchNewToolCalls(_ calls: [ClientToolCallEvent]) {
-        let ids = Set(calls.map(\.toolCallId))
-        let added = ids.subtracting(dispatchedToolCallIds)
-        dispatchedToolCallIds.formUnion(added)
-        for call in calls where added.contains(call.toolCallId) {
-            dispatch(call)
-        }
-    }
-
-    private func dispatch(_ call: ClientToolCallEvent) {
-        let generation = sessionGeneration
-        let handler = onClientToolCall
-        Task { @MainActor [weak self] in
-            let result = if let handler {
-                await handler(call)
-            } else {
-                ClientToolResultEvent(
-                    toolCallId: call.toolCallId,
-                    result: "No client tool handler is configured in the app.",
-                    isError: true
-                )
-            }
-            // The host handler can outlive the conversation that asked for it.
-            guard let self, generation == sessionGeneration else { return }
-            if call.expectsResponse {
-                try? await client.sendToolResult(result)
-            } else {
-                client.markToolCallCompleted(call.toolCallId)
-            }
-        }
     }
 }
 
