@@ -268,36 +268,11 @@ Client tools allow your agent to execute logic within your app. You must registe
 
 #### Answer calls with a handler
 
-Set `client.onClientToolCall` before you start a conversation. You can set it at any time, for example from a view or after an object's `init`, and a new value applies to the calls that arrive after it. The SDK runs it once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
+Set `client.onClientToolCall` to answer the calls. A new value applies to the calls that arrive after it. The SDK runs the handler once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
 
 - `.result(text)` sends the text to the agent.
 - `.json(value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
 - `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
-
-```swift
-client.onClientToolCall = { call in
-    let params = try call.getParameters()
-    switch call.toolName {
-    case "get_weather":
-        return .result(await weather(for: params["location"] as? String ?? ""))
-    case "get_order":
-        return try .json(await orders.order(id: params["order_id"] as? String ?? ""))
-    case "open_settings":
-        router.show(.settings)
-        return .result("Opened the settings screen.")
-    case "cancel_order":
-        return .pending // the confirmation UI below answers it
-    default:
-        throw ClientToolError("This app version doesn't support \(call.toolName).")
-    }
-}
-```
-
-A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
-
-If a tool doesn't expect a response, the SDK runs the handler and sends nothing.
-
-#### Register tools by name
 
 `ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
 
@@ -307,57 +282,50 @@ client.onClientToolCall = ClientTools.handler([
         let location = try call.getParameters()["location"] as? String ?? ""
         return .result(await weather(for: location))
     },
+    "get_order": { call in
+        let id = try call.getParameters()["order_id"] as? String ?? ""
+        return try .json(await orders.order(id: id))
+    },
     "open_settings": { _ in
         router.show(.settings)
         return .result("Opened the settings screen.")
     },
-    "cancel_order": { _ in .pending }
+    "confirm_cancellation": { _ in .pending } // the confirmation UI below answers it
 ])
 ```
+
+To route calls yourself, set your own closure as `client.onClientToolCall`.
+
+A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
+
+If a tool doesn't expect a response, the SDK runs the handler and sends nothing. When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.
 
 #### Answer calls later
 
 If the handler returns `.pending`, the call stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:
 
 ```swift
-struct CancelOrderPrompt: View {
+struct CancellationPrompt: View {
     @ObservedObject var client: ConversationClient
 
     var body: some View {
-        if let call = client.pendingToolCalls.first(where: { $0.toolName == "cancel_order" }) {
+        if let call = client.pendingToolCalls.first(where: { $0.toolName == "confirm_cancellation" }) {
             ConfirmationCard("Cancel this order?") { confirmed in
-                Task { try? await answer(call, confirmed: confirmed) }
+                let result: ClientToolResultEvent = confirmed
+                    ? .init(toolCallId: call.toolCallId, result: "The user confirmed the cancellation.")
+                    : .init(toolCallId: call.toolCallId, result: "The user kept the order.", errorType: .userRejected)
+                Task { try? await client.sendToolResult(result) }
             }
         }
-    }
-
-    private func answer(_ call: ClientToolCallEvent, confirmed: Bool) async throws {
-        guard confirmed else {
-            return try await client.sendToolResult(
-                .init(toolCallId: call.toolCallId, result: "The user kept the order.", errorType: .userRejected)
-            )
-        }
-        do {
-            try await orders.cancel(call.getParameters()["order_id"] as? String ?? "")
-        } catch {
-            // Without a result, the agent waits until the tool's timeout.
-            return try await client.sendToolResult(
-                .init(toolCallId: call.toolCallId, result: "The order couldn't be cancelled.", isError: true)
-            )
-        }
-        try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
     }
 }
 ```
 
 The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
 
+The agent waits for a result only as long as the tool's response timeout in the agent settings. Give a tool that waits for the user a longer timeout, or no timeout.
+
 To answer every call this way, set `client.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it.
-
-#### Timeouts and the end of a conversation
-
-- The agent waits for a result only as long as the tool's response timeout in the agent settings. Give a tool that waits for the user a longer timeout, or no timeout.
-- When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.
 
 ### MCP (Model Context Protocol) Tools
 
