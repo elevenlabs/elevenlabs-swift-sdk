@@ -219,7 +219,7 @@ client.onClientToolCall = ClientTools.handler([
         let id = try call.getParameters()["order_id"] as? String ?? ""
         return try .json(await orders.order(id: id)) // any Encodable
     },
-    "cancel_order": { _ in .pending } // the app answers it later, after the user confirms
+    "confirm_cancellation": { _ in .pending } // the app answers it after the user decides
 ])
 ```
 
@@ -227,15 +227,9 @@ A call for a tool that isn't in the map gets an error result. To route calls you
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
-If the handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it, from anywhere in your app:
-
-```swift
-try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
-```
+If the handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it with `client.sendToolResult`, from anywhere in your app.
 
 Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.onClientToolCall = { _ in .pending }`.
-
-The agent waits for a result only as long as the tool's response timeout in the agent settings, so give a tool that waits for the user a longer timeout.
 
 If you use `ChatWidget`, pass a handler instead and the widget wires this up for you:
 
