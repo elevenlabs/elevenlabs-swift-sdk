@@ -12,7 +12,7 @@ import Foundation
 /// host so state only ever changes through a command.
 @available(iOS 16, macCatalyst 16, *)
 @MainActor
-public final class ChatWidgetController: ObservableObject {
+@_spi(Experimental) public final class ChatWidgetController: ObservableObject {
     @Published public internal(set) var state: ConversationState = .idle
     @Published public internal(set) var isMicMuted = false
     @Published public internal(set) var isOpen = false

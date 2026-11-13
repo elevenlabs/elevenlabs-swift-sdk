@@ -3,7 +3,7 @@ import Foundation
 
 /// User-facing copy for ``ChatWidget``. Override individual fields to localize
 /// or reword; every field has an English default.
-public struct ChatWidgetStrings: Equatable, Sendable {
+@_spi(Experimental) public struct ChatWidgetStrings: Equatable, Sendable {
     public var title: String
     public var mainLabel: String
     public var inputPlaceholder: String

@@ -12,7 +12,7 @@ import UIKit
 /// ChatWidget(mode: .voiceAndText(.publicAgent(id: "agent_id")))
 /// ```
 @available(iOS 16, macCatalyst 16, *)
-public struct ChatWidget: View {
+@_spi(Experimental) public struct ChatWidget: View {
     @StateObject private var vm: ChatWidgetViewModel
     private let mode: WidgetConversationMode
     private let widgetConfig: ChatWidgetConfig
