@@ -504,22 +504,24 @@ final class Conversation: ObservableObject {
             // A cancelled handler belongs to a session that ended.
             guard let self, !Task.isCancelled else { return }
             clientToolTasks[call.toolCallId] = nil
+            // The app may have answered the call itself while the handler ran.
+            guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
             switch reply {
             case .success(.pending):
                 return
             case let .success(.result(text)):
-                await answer(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+                await completeClientToolCall(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
             case let .failure(error as ClientToolError):
                 // The handler chose this answer, for example because the user declined.
                 logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
-                await answer(call, with: Self.errorResult(error, for: call))
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
             case let .failure(error):
                 // Like the error result, the log leaves out an `NSError`'s user info.
                 logger.warning(
                     "A client tool handler failed",
                     context: ["tool": call.toolName, "error": error.localizedDescription]
                 )
-                await answer(call, with: Self.errorResult(error, for: call))
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
             }
         }
     }
@@ -541,23 +543,9 @@ final class Conversation: ObservableObject {
         )
     }
 
-    private func answer(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
-        // The app may have answered the call itself while the handler ran.
-        guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
+    /// Sends `result` if the agent waits for one. Otherwise marks the call completed.
+    private func completeClientToolCall(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
         guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
-        await send(result, for: call)
-    }
-
-    /// Without a handler, the app never sees the call, so the agent gets an error now
-    /// instead of waiting out the tool's timeout.
-    private func answerWithoutHandler(_ call: ClientToolCallEvent) async {
-        logger.warning("No client tool handler is set", context: ["tool": call.toolName])
-        guard call.expectsResponse else { return }
-        let error = ClientToolError("No client tool handler is configured in the app.")
-        await send(Self.errorResult(error, for: call), for: call)
-    }
-
-    private func send(_ result: ClientToolResultEvent, for call: ClientToolCallEvent) async {
         do {
             try await sendToolResult(result)
         } catch {
@@ -620,7 +608,10 @@ final class Conversation: ObservableObject {
 
         case let .clientToolCall(toolCall):
             guard let handler = onClientToolCall else {
-                await answerWithoutHandler(toolCall)
+                // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
+                logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
+                let error = ClientToolError("No client tool handler is configured in the app.")
+                await completeClientToolCall(toolCall, with: Self.errorResult(error, for: toolCall))
                 break
             }
             pendingToolCalls.append(toolCall)
