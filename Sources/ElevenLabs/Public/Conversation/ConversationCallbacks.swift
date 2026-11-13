@@ -45,18 +45,6 @@ public struct ConversationCallbacks: Sendable {
     /// Called when audio alignment metadata is emitted.
     public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
 
-    /// Called once for each client tool call, while the call is in `pendingToolCalls`.
-    ///
-    /// Return `.result` to answer the agent now, or `.pending` to answer it later with
-    /// `sendToolResult`. A thrown error is sent to the agent as an error result, and a
-    /// `ClientToolError` keeps its message and `errorType`. When the conversation ends,
-    /// a running handler is cancelled and its reply is not sent.
-    ///
-    /// Without a handler, the SDK answers every call with an error result, so the agent
-    /// doesn't wait for it. To answer every call through `pendingToolCalls` instead,
-    /// pass `{ _ in .pending }`.
-    public var onClientToolCall: ClientToolHandler?
-
     /// Called whenever the agent state changes (event-based mode only).
     public var onAgentStateChange: (@Sendable (AgentState) -> Void)?
 
@@ -75,7 +63,6 @@ public struct ConversationCallbacks: Sendable {
         onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
-        onClientToolCall: ClientToolHandler? = nil,
         onAgentStateChange: (@Sendable (AgentState) -> Void)? = nil
     ) {
         self.onAgentReady = onAgentReady
@@ -92,7 +79,6 @@ public struct ConversationCallbacks: Sendable {
         self.onInterruption = onInterruption
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
-        self.onClientToolCall = onClientToolCall
         self.onAgentStateChange = onAgentStateChange
     }
 }

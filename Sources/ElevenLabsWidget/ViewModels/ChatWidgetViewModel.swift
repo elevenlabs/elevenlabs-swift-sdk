@@ -76,6 +76,8 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$chatHistory
             .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
+        // The calls wait in `pendingToolCalls`, and `dispatchNewToolCalls` answers them.
+        client.onClientToolCall = { _ in .pending }
         client.$pendingToolCalls
             .combineLatest(client.$state)
             .filter { _, state in state.isConnected }

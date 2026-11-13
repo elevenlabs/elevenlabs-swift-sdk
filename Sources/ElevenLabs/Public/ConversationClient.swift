@@ -34,6 +34,25 @@ public final class ConversationClient: ObservableObject {
     /// Current MCP connection status for all integrations
     @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
 
+    // MARK: - Client tools
+
+    /// Called once for each client tool call, while the call is in `pendingToolCalls`.
+    ///
+    /// Return `.result` to answer the agent now, or `.pending` to answer it later with
+    /// `sendToolResult`. A thrown error is sent to the agent as an error result, and a
+    /// `ClientToolError` keeps its message and `errorType`. When the conversation ends,
+    /// a running handler is cancelled and its reply is not sent.
+    ///
+    /// Without a handler, the SDK answers every call with an error result, so the agent
+    /// doesn't wait for it. To answer every call through `pendingToolCalls` instead,
+    /// set `{ _ in .pending }`.
+    ///
+    /// Set it before you start a conversation. A new value applies to the calls that
+    /// arrive after you set it, in this conversation and the next ones.
+    public var onClientToolCall: ClientToolHandler? {
+        didSet { session?.onClientToolCall = onClientToolCall }
+    }
+
     // MARK: - Init
 
     private let callbacks: ConversationCallbacks
@@ -156,6 +175,7 @@ public final class ConversationClient: ObservableObject {
     private func bind(_ session: Conversation) {
         cancellables.removeAll()
         self.session = session
+        session.onClientToolCall = onClientToolCall
 
         session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
         session.$chatHistory.sink { [weak self] in self?.chatHistory = $0 }.store(in: &cancellables)

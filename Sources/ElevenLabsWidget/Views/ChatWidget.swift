@@ -49,8 +49,7 @@ import UIKit
         _vm = StateObject(wrappedValue: ChatWidgetViewModel(
             mode: mode,
             widgetConfig: widgetConfig,
-            // The view model answers tool calls from `pendingToolCalls`.
-            client: ConversationClient(callbacks: .init(onClientToolCall: { _ in .pending })),
+            client: ConversationClient(),
             conversationConfig: conversationConfig,
             onClientToolCall: onClientToolCall
         ))

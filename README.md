@@ -206,10 +206,11 @@ try await client.sendMessage("Hello!")
 
 ## Empower Your Agent with Tools
 
-You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**. Pass a handler for each tool when you create the client. A handler runs once for each call of its tool, and the SDK sends what it returns to the agent:
+You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**. Set a handler for each tool before you start a conversation. A handler runs once for each call of its tool, and the SDK sends what it returns to the agent:
 
 ```swift
-let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.handler([
+let client = ConversationClient()
+client.onClientToolCall = ClientTools.handler([
     "get_weather": { call in
         let city = try call.getParameters()["city"] as? String ?? ""
         return .result(await weather(for: city))
@@ -219,10 +220,10 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.h
         return try .json(await orders.order(id: id)) // any Encodable
     },
     "cancel_order": { _ in .pending } // the app answers it later, after the user confirms
-])))
+])
 ```
 
-A call for a tool that isn't in the map gets an error result. To route calls yourself, pass your own closure as `onClientToolCall` instead.
+A call for a tool that isn't in the map gets an error result. To route calls yourself, set your own closure as `client.onClientToolCall` instead.
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
@@ -232,7 +233,7 @@ If the handler returns `.pending`, the call stays in `client.pendingToolCalls` u
 try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
 ```
 
-Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, pass `onClientToolCall: { _ in .pending }`.
+Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.onClientToolCall = { _ in .pending }`.
 
 The agent waits for a result only as long as the tool's response timeout in the agent settings, so give a tool that waits for the user a longer timeout.
 

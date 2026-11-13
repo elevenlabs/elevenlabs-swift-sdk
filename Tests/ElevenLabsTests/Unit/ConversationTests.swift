@@ -832,11 +832,11 @@ final class ConversationTests: XCTestCase {
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
 
-        let sent = await eventually { self.sentToolResults().count == 1 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
         XCTAssertTrue(sent)
-        let result = try XCTUnwrap(sentToolResults().first)
+        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
         XCTAssertEqual(result["tool_call_id"] as? String, "call_1")
         XCTAssertEqual(result["result"] as? String, "Shipped")
         XCTAssertEqual(result["is_error"] as? Bool, false)
@@ -849,11 +849,11 @@ final class ConversationTests: XCTestCase {
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
 
-        let sent = await eventually { self.sentToolResults().count == 1 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
         XCTAssertTrue(sent)
-        let result = try XCTUnwrap(sentToolResults().first)
+        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
         XCTAssertEqual(result["result"] as? String, "The user kept the order.")
         XCTAssertEqual(result["is_error"] as? Bool, true)
         XCTAssertEqual(result["error_type"] as? String, "user_rejected")
@@ -868,11 +868,11 @@ final class ConversationTests: XCTestCase {
         let conversation = makeConversation { _ in throw OrderServiceDown() }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
 
-        let sent = await eventually { self.sentToolResults().count == 1 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
         XCTAssertTrue(sent)
-        let result = try XCTUnwrap(sentToolResults().first)
+        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
         XCTAssertEqual(result["result"] as? String, "Client tool execution failed: The order service is down.")
         XCTAssertEqual(result["is_error"] as? Bool, true)
         XCTAssertNil(result["error_type"])
@@ -886,15 +886,15 @@ final class ConversationTests: XCTestCase {
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
         await fulfillment(of: [handled], timeout: 1)
 
         XCTAssertEqual(conversation.pendingToolCalls.map(\.toolCallId), ["call_1"])
-        XCTAssertTrue(sentToolResults().isEmpty)
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
 
         try await conversation.sendToolResult(.init(toolCallId: "call_1", result: "Cancelled"))
 
-        XCTAssertEqual(sentToolResults().first?["result"] as? String, "Cancelled")
+        XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.first?["result"] as? String, "Cancelled")
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
     }
 
@@ -906,22 +906,22 @@ final class ConversationTests: XCTestCase {
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1", expectsResponse: false)))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1", expectsResponse: false)))
         await fulfillment(of: [handled], timeout: 1)
 
         let completed = await eventually { conversation.pendingToolCalls.isEmpty }
         XCTAssertTrue(completed)
-        XCTAssertTrue(sentToolResults().isEmpty)
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
     }
 
     func testCallWithoutAHandlerGetsAnErrorResult() async throws {
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
 
-        let sent = await eventually { self.sentToolResults().count == 1 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
         XCTAssertTrue(sent)
-        let result = try XCTUnwrap(sentToolResults().first)
+        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
         XCTAssertEqual(result["tool_call_id"] as? String, "call_1")
         XCTAssertEqual(result["result"] as? String, "No client tool handler is configured in the app.")
         XCTAssertEqual(result["is_error"] as? Bool, true)
@@ -943,14 +943,14 @@ final class ConversationTests: XCTestCase {
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
         await fulfillment(of: [started], timeout: 1)
         XCTAssertEqual(conversation.pendingToolCalls.map(\.toolCallId), ["call_1"])
 
         await conversation.endConversation()
         await fulfillment(of: [cancelled], timeout: 1)
 
-        XCTAssertTrue(sentToolResults().isEmpty)
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
     }
 
@@ -1058,41 +1058,13 @@ extension ConversationTests {
     }
 
     private func makeConversation(onClientToolCall: @escaping ClientToolHandler) -> Conversation {
-        Conversation(
+        let conversation = Conversation(
             dependencyProvider: dependencyProvider,
             config: makeConfig(),
-            callbacks: makeCallbacks { $0.onClientToolCall = onClientToolCall }
+            callbacks: makeCallbacks()
         )
-    }
-
-    private func makeToolCall(id: String, expectsResponse: Bool = true) -> ClientToolCallEvent {
-        ClientToolCallEvent(
-            toolName: "get_order_status",
-            toolCallId: id,
-            parametersData: Data("{}".utf8),
-            eventId: 1,
-            expectsResponse: expectsResponse
-        )
-    }
-
-    /// The `client_tool_result` messages the conversation sent, in order.
-    private func sentToolResults() -> [[String: Any]] {
-        mockWebRTCConnectionManager.publishedPayloads.compactMap { payload in
-            guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-                  json["type"] as? String == "client_tool_result"
-            else { return nil }
-            return json
-        }
-    }
-
-    /// Checks `condition` until it holds or `timeout` passes, and returns whether it held.
-    private func eventually(timeout: TimeInterval = 1, _ condition: () -> Bool) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            guard Date() < deadline else { return false }
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-        return true
+        conversation.onClientToolCall = onClientToolCall
+        return conversation
     }
 }
 

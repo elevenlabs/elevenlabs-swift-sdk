@@ -274,10 +274,7 @@ final class ConversationEventHandlerTests: XCTestCase {
             eventId: 1,
             expectsResponse: false
         )
-        conversation = Conversation(
-            dependencyProvider: mockDependencyProvider,
-            callbacks: ConversationCallbacks(onClientToolCall: { _ in .pending })
-        )
+        conversation.onClientToolCall = { _ in .pending }
         await conversation.handleIncomingEvent(.clientToolCall(toolCall))
 
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)

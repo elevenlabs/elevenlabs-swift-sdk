@@ -37,8 +37,8 @@ final class ClientToolsTests: XCTestCase {
             "cancel_order": { _ in .pending }
         ])
 
-        let order = try await handler(makeCall(toolName: "get_order"))
-        let cancel = try await handler(makeCall(toolName: "cancel_order"))
+        let order = try await handler(.fixture(toolName: "get_order"))
+        let cancel = try await handler(.fixture(toolName: "cancel_order"))
 
         XCTAssertEqual(order, .result("Shipped"))
         XCTAssertEqual(cancel, .pending)
@@ -49,7 +49,7 @@ final class ClientToolsTests: XCTestCase {
         let handler = ClientTools.handler(["get_order": { _ in .result("Shipped") }])
 
         do {
-            _ = try await handler(makeCall(toolName: "open_settings"))
+            _ = try await handler(.fixture(toolName: "open_settings"))
             XCTFail("Expected an error for a tool that isn't in the map")
         } catch {
             XCTAssertEqual(
@@ -57,15 +57,5 @@ final class ClientToolsTests: XCTestCase {
                 ClientToolError("No client tool named open_settings is registered in this app.")
             )
         }
-    }
-
-    private func makeCall(toolName: String) -> ClientToolCallEvent {
-        ClientToolCallEvent(
-            toolName: toolName,
-            toolCallId: "call_1",
-            parametersData: Data("{}".utf8),
-            eventId: 1,
-            expectsResponse: true
-        )
     }
 }
