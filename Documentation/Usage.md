@@ -268,14 +268,14 @@ Client tools allow your agent to execute logic within your app. You must registe
 
 #### Answer calls with a handler
 
-Pass `onClientToolCall` when you create the client. The SDK runs it once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
+Set `client.onClientToolCall` before you start a conversation. You can set it at any time, for example from a view or after an object's `init`, and a new value applies to the calls that arrive after it. The SDK runs it once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
 
 - `.result(text)` sends the text to the agent.
 - `.json(value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
 - `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
 
 ```swift
-let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
+client.onClientToolCall = { call in
     let params = try call.getParameters()
     switch call.toolName {
     case "get_weather":
@@ -290,7 +290,7 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
     default:
         throw ClientToolError("This app version doesn't support \(call.toolName).")
     }
-}))
+}
 ```
 
 A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
@@ -302,7 +302,7 @@ If a tool doesn't expect a response, the SDK runs the handler and sends nothing.
 `ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
 
 ```swift
-let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.handler([
+client.onClientToolCall = ClientTools.handler([
     "get_weather": { call in
         let location = try call.getParameters()["location"] as? String ?? ""
         return .result(await weather(for: location))
@@ -312,7 +312,7 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.h
         return .result("Opened the settings screen.")
     },
     "cancel_order": { _ in .pending }
-])))
+])
 ```
 
 #### Answer calls later
@@ -345,7 +345,7 @@ struct CancelOrderPrompt: View {
 
 The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
 
-To answer every call this way, pass `onClientToolCall: { _ in .pending }`. Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it.
+To answer every call this way, set `client.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it.
 
 #### Timeouts and the end of a conversation
 

@@ -19,6 +19,9 @@ final class Conversation: ObservableObject {
     /// Client tool calls without an answer yet
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
 
+    /// Set by `ConversationClient`, which keeps it current.
+    var onClientToolCall: ClientToolHandler?
+
     /// Conversation metadata including conversation ID, received when the conversation is initialized
     @Published var conversationMetadata: ConversationMetadataEvent?
 
@@ -607,7 +610,7 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            if let handler = callbacks.onClientToolCall {
+            if let handler = onClientToolCall {
                 pendingToolCalls.append(toolCall)
                 runClientTool(toolCall, handler: handler)
             } else {
