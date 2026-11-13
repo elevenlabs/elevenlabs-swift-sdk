@@ -213,6 +213,25 @@ if let agentTrack = conversation.agentAudioTrack as? RemoteAudioTrack {
 
 Client tools allow your agent to execute logic within your app. You must register the tools in the ElevenLabs Dashboard first.
 
+The simplest way to handle them is to register a handler per tool name in `clientTools`. The SDK runs the matching handler for each call and, when the agent expects a response, sends the returned string as the result. Return `nil` to send a default success message; a thrown error is sent as an error result.
+
+```swift
+let config = ConversationConfig(
+    clientTools: [
+        "get_weather": { call in
+            let params = try call.getParameters()
+            return await fetchWeather(city: params["city"] as? String)
+        },
+        "open_settings": { _ in
+            await MainActor.run { router.showSettings() }
+            return nil
+        }
+    ]
+)
+```
+
+Calls to tools without a registered handler go to `onUnhandledClientToolCall` and `pendingToolCalls`, where your app answers them with `sendToolResult`:
+
 ```swift
 // Complete example with lifecycle management
 class ConversationViewModel: ObservableObject {

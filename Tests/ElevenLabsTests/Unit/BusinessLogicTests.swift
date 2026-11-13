@@ -83,6 +83,117 @@ final class ElevenLabsBusinessLogicTests: XCTestCase {
         XCTAssertEqual(parsed?["condition"] as? String, "Sunny")
     }
 
+    // MARK: - Registered Client Tool Tests
+
+    private struct ToolFailure: LocalizedError {
+        var errorDescription: String? {
+            "Location unavailable"
+        }
+    }
+
+    private func activeConversation(
+        clientTools: [String: ClientToolHandler],
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil
+    ) -> Conversation {
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider,
+            options: ConversationOptions(clientTools: clientTools, onUnhandledClientToolCall: onUnhandledClientToolCall)
+        )
+        mockWebRTCConnectionManager.room = Room()
+        conversation._testing_setWebRTCConnectionManager(mockWebRTCConnectionManager)
+        conversation._testing_setState(.active(CallInfo(agentId: "test")))
+        return conversation
+    }
+
+    private func clientToolCall(name: String, expectsResponse: Bool = true) throws -> ClientToolCallEvent {
+        try ClientToolCallEvent(
+            toolName: name,
+            toolCallId: "call_\(name)",
+            parametersData: JSONSerialization.data(withJSONObject: ["city": "Paris"]),
+            eventId: 1,
+            expectsResponse: expectsResponse
+        )
+    }
+
+    private func lastPublishedEnvelope() throws -> [String: Any] {
+        let payload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.last)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: payload) as? [String: Any])
+    }
+
+    func testRegisteredClientToolRunsHandlerAndSendsResult() async throws {
+        let conversation = activeConversation(clientTools: [
+            "get_weather": { call in
+                let city = try call.getParameters()["city"] as? String ?? "unknown"
+                return "Sunny in \(city)"
+            }
+        ])
+
+        try await conversation._testing_handleIncomingEvent(.clientToolCall(clientToolCall(name: "get_weather")))
+
+        let envelope = try lastPublishedEnvelope()
+        XCTAssertEqual(envelope["type"] as? String, "client_tool_result")
+        XCTAssertEqual(envelope["tool_call_id"] as? String, "call_get_weather")
+        XCTAssertEqual(envelope["result"] as? String, "Sunny in Paris")
+        XCTAssertEqual(envelope["is_error"] as? Bool, false)
+        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
+    }
+
+    func testRegisteredClientToolReturningNilSendsDefaultSuccess() async throws {
+        let conversation = activeConversation(clientTools: ["open_screen": { _ in nil }])
+
+        try await conversation._testing_handleIncomingEvent(.clientToolCall(clientToolCall(name: "open_screen")))
+
+        let envelope = try lastPublishedEnvelope()
+        XCTAssertEqual(envelope["result"] as? String, "Client tool execution successful.")
+        XCTAssertEqual(envelope["is_error"] as? Bool, false)
+    }
+
+    func testRegisteredClientToolThatThrowsSendsErrorResult() async throws {
+        let conversation = activeConversation(clientTools: ["get_location": { _ in throw ToolFailure() }])
+
+        try await conversation._testing_handleIncomingEvent(.clientToolCall(clientToolCall(name: "get_location")))
+
+        let envelope = try lastPublishedEnvelope()
+        XCTAssertEqual(envelope["tool_call_id"] as? String, "call_get_location")
+        XCTAssertEqual(envelope["result"] as? String, "Client tool execution failed: Location unavailable")
+        XCTAssertEqual(envelope["is_error"] as? Bool, true)
+    }
+
+    func testRegisteredClientToolWithoutExpectedResponseSendsNothing() async throws {
+        let ranToolCalls = ValueRecorder<String>()
+        let conversation = activeConversation(clientTools: [
+            "log_event": { call in
+                await ranToolCalls.append(call.toolCallId)
+                return "logged"
+            }
+        ])
+
+        try await conversation._testing_handleIncomingEvent(
+            .clientToolCall(clientToolCall(name: "log_event", expectsResponse: false))
+        )
+
+        let ran = await ranToolCalls.values()
+        XCTAssertEqual(ran, ["call_log_event"])
+        XCTAssertTrue(mockWebRTCConnectionManager.publishedPayloads.isEmpty)
+    }
+
+    func testClientToolWithoutHandlerStaysPendingForTheApp() async throws {
+        let unhandledToolCalls = ValueRecorder<String>()
+        let conversation = activeConversation(
+            clientTools: ["get_weather": { _ in "Sunny" }],
+            onUnhandledClientToolCall: { call in
+                Task { await unhandledToolCalls.append(call.toolCallId) }
+            }
+        )
+
+        try await conversation._testing_handleIncomingEvent(.clientToolCall(clientToolCall(name: "other_tool")))
+
+        XCTAssertEqual(conversation.pendingToolCalls.map(\.toolCallId), ["call_other_tool"])
+        let unhandled = await unhandledToolCalls.values(waitingFor: 1)
+        XCTAssertEqual(unhandled, ["call_other_tool"])
+        XCTAssertTrue(mockWebRTCConnectionManager.publishedPayloads.isEmpty)
+    }
+
     // MARK: - Streaming Message Tests
 
     func testAgentStreamingMessages() async {

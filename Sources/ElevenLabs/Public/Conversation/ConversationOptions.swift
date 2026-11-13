@@ -1,6 +1,12 @@
 import Foundation
 import LiveKit
 
+/// Runs a client tool the agent invokes and returns the result sent back to the agent.
+///
+/// Return `nil` to send a default success message. A thrown error is sent to the agent as an
+/// error result.
+public typealias ClientToolHandler = @Sendable (ClientToolCallEvent) async throws -> String?
+
 public struct ConversationOptions: Sendable {
     /// Determines how microphone setup failures are handled during connection
     public enum MicrophoneFailureHandling: Sendable {
@@ -81,7 +87,12 @@ public struct ConversationOptions: Sendable {
     /// Called when the client should enable/disable feedback UI.
     public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
 
-    /// Called when an unhandled client tool call is received.
+    /// Client tool handlers keyed by tool name. The SDK runs the matching handler for each
+    /// client tool call and sends its result to the agent.
+    public var clientTools: [String: ClientToolHandler]
+
+    /// Called when a client tool call is received that no handler in `clientTools` handles.
+    /// The call is also added to `Conversation.pendingToolCalls`.
     public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
     /// When provided, agent state is computed from VAD scores and protocol events
@@ -120,6 +131,7 @@ public struct ConversationOptions: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
+        clientTools: [String: ClientToolHandler] = [:],
         onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
         agentStateConfiguration: AgentStateConfiguration? = nil,
         onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
@@ -152,6 +164,7 @@ public struct ConversationOptions: Sendable {
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
         self.onCanSendFeedbackChange = onCanSendFeedbackChange
+        self.clientTools = clientTools
         self.onUnhandledClientToolCall = onUnhandledClientToolCall
         self.agentStateConfiguration = agentStateConfiguration
         self.onAgentStateChange = onAgentStateChange

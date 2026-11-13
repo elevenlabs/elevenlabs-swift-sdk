@@ -194,6 +194,22 @@ let conversation = try await ElevenLabs.startConversation(signedWebSocketURL: si
 
 You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**.
 
+Register a handler per tool name, and the SDK runs it for each call and sends its result back to the agent. A thrown error is sent as an error result:
+
+```swift
+let config = ConversationConfig(
+    clientTools: [
+        "get_weather": { call in
+            let params = try call.getParameters()
+            return await fetchWeather(city: params["city"] as? String)
+        }
+    ]
+)
+let conversation = try await ElevenLabs.startConversation(agentId: "your-agent-id", config: config)
+```
+
+Calls to tools without a registered handler are published on `pendingToolCalls`, for you to answer with `sendToolResult`:
+
 ```swift
 // Observe requested tool calls with async/await
 Task {

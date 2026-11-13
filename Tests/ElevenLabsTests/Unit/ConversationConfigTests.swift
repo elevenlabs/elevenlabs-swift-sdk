@@ -60,6 +60,12 @@ final class ConversationConfigTests: XCTestCase {
         XCTAssertEqual(overrides.textOnly, true)
     }
 
+    func testClientToolsAreForwardedToConversationOptions() {
+        let config = ConversationConfig(clientTools: ["get_weather": { _ in "Sunny" }])
+
+        XCTAssertEqual(Array(config.toConversationOptions().clientTools.keys), ["get_weather"])
+    }
+
     func testLanguageEnum() {
         XCTAssertEqual(Language.english.rawValue, "en")
         XCTAssertEqual(Language.spanish.rawValue, "es")
