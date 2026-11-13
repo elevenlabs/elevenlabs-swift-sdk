@@ -527,6 +527,25 @@ final class Conversation: ObservableObject {
         // The app may have answered the call itself while the handler ran.
         guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
         guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
+        await send(result, for: call)
+    }
+
+    /// Nothing in the app answers the call, so the agent gets an error now instead of
+    /// waiting out the tool's timeout.
+    private func answerWithoutHandler(_ call: ClientToolCallEvent) async {
+        logger.warning("No client tool handler is set", context: ["tool": call.toolName])
+        guard call.expectsResponse else { return }
+        await send(
+            ClientToolResultEvent(
+                toolCallId: call.toolCallId,
+                result: "No client tool handler is configured in the app.",
+                isError: true
+            ),
+            for: call
+        )
+    }
+
+    private func send(_ result: ClientToolResultEvent, for call: ClientToolCallEvent) async {
         do {
             try await sendToolResult(result)
         } catch {
@@ -588,9 +607,11 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            pendingToolCalls.append(toolCall)
             if let handler = callbacks.onClientToolCall {
+                pendingToolCalls.append(toolCall)
                 runClientTool(toolCall, handler: handler)
+            } else {
+                await answerWithoutHandler(toolCall)
             }
 
         case let .vadScore(vad):
