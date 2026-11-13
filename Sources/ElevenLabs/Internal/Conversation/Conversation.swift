@@ -295,11 +295,13 @@ final class Conversation: ObservableObject {
     func sendToolResult(_ result: ClientToolResultEvent) async throws {
         guard state.isConnected || state.isConnecting else { throw ConversationError.notConnected }
         try await publish(.clientToolResult(result))
-        pendingToolCalls.removeAll { $0.toolCallId == result.toolCallId }
+        markToolCallCompleted(result.toolCallId)
     }
 
     /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
     func markToolCallCompleted(_ toolCallId: String) {
+        // `@Published` publishes on every write, also on one that removes nothing.
+        guard pendingToolCalls.contains(where: { $0.toolCallId == toolCallId }) else { return }
         pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
     }
 
