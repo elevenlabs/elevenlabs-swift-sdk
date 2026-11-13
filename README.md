@@ -233,7 +233,7 @@ If the handler returns `.pending`, the call stays in `client.pendingToolCalls` u
 try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
 ```
 
-Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.onClientToolCall = { _ in .pending }`.
+Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.onClientToolCall = { _ in .pending }`.
 
 The agent waits for a result only as long as the tool's response timeout in the agent settings, so give a tool that waits for the user a longer timeout.
 

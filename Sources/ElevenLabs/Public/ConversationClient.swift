@@ -37,8 +37,9 @@ public final class ConversationClient: ObservableObject {
     /// Answers each client tool call. Return `.pending` to answer later with `sendToolResult`.
     /// A thrown error is sent to the agent as an error result.
     ///
-    /// Without a handler, every call gets an error result. Set `{ _ in .pending }` to answer
-    /// every call through `pendingToolCalls`. A new value applies to calls that arrive after it.
+    /// Without a handler, every call that expects a response gets an error result. Set
+    /// `{ _ in .pending }` to answer every call through `pendingToolCalls`. A new value applies
+    /// to calls that arrive after it.
     public var onClientToolCall: ClientToolHandler? {
         didSet { session?.onClientToolCall = onClientToolCall }
     }

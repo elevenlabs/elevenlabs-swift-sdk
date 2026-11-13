@@ -514,7 +514,11 @@ final class Conversation: ObservableObject {
                 logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
                 await answer(call, with: Self.errorResult(error, for: call))
             case let .failure(error):
-                logger.warning("A client tool handler failed", context: ["tool": call.toolName, "error": "\(error)"])
+                // Like the error result, the log leaves out an `NSError`'s user info.
+                logger.warning(
+                    "A client tool handler failed",
+                    context: ["tool": call.toolName, "error": error.localizedDescription]
+                )
                 await answer(call, with: Self.errorResult(error, for: call))
             }
         }
@@ -529,11 +533,10 @@ final class Conversation: ObservableObject {
                 errorType: error.errorType
             )
         }
-        // Not `String(describing:)`: for an `NSError`, that includes the user info, such as URLs with tokens.
-        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        // `String(describing:)` would add an `NSError`'s user info, which can hold a URL with a token.
         return ClientToolResultEvent(
             toolCallId: call.toolCallId,
-            result: "Client tool execution failed: \(message)",
+            result: "Client tool execution failed: \(error.localizedDescription)",
             isError: true
         )
     }
@@ -616,12 +619,6 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            // A repeated call is already running, or waiting for the app.
-            let id = toolCall.toolCallId
-            guard clientToolTasks[id] == nil, !pendingToolCalls.contains(where: { $0.toolCallId == id }) else {
-                logger.warning("Ignored a repeated client tool call", context: ["tool": toolCall.toolName])
-                break
-            }
             guard let handler = onClientToolCall else {
                 await answerWithoutHandler(toolCall)
                 break

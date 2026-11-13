@@ -338,7 +338,7 @@ final class ChatWidgetViewModel: ObservableObject {
 
     // MARK: - Client tools
 
-    /// Without a host handler, the client answers every call with its own error result.
+    /// Without a host handler, the client answers each call that expects a response with its own error result.
     private func passToolHandlerToClient() {
         guard let handler = onClientToolCall else {
             client.onClientToolCall = nil
