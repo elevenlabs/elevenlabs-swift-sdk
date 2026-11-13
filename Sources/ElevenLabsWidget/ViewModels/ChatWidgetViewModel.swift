@@ -29,14 +29,10 @@ final class ChatWidgetViewModel: ObservableObject {
         let reason: EndReason
     }
 
-    /// All four mirror what the host passes to ``ChatWidget``, so changes land
+    /// All three mirror what the host passes to ``ChatWidget``, so changes land
     /// on the live view model instead of needing a new conversation.
     var mode: WidgetConversationMode
     var conversationConfig: ConversationConfig
-    var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)? {
-        didSet { passToolHandlerToClient() }
-    }
-
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
     let audioLevels = OrbAudioLevels()
@@ -61,7 +57,6 @@ final class ChatWidgetViewModel: ObservableObject {
         self.widgetConfig = widgetConfig
         self.client = client
         self.conversationConfig = conversationConfig
-        self.onClientToolCall = onClientToolCall
 
         // The client is durable across sessions, so every subscription and
         // observer is wired once.
@@ -77,7 +72,7 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$chatHistory
             .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
-        passToolHandlerToClient()
+        setClientToolHandler(onClientToolCall)
         // Only a finished session clears the kind: the client rebinds to a fresh
         // conversation on every start, and that publishes `.idle` before it
         // connects, which would wipe the kind of the session just requested.
@@ -338,9 +333,10 @@ final class ChatWidgetViewModel: ObservableObject {
 
     // MARK: - Client tools
 
-    /// Without a host handler, the client answers each call that expects a response with its own error result.
-    private func passToolHandlerToClient() {
-        guard let handler = onClientToolCall else {
+    /// Passes the host's handler to the client. Without one, the client answers each call that
+    /// expects a response with its own error result.
+    func setClientToolHandler(_ handler: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?) {
+        guard let handler else {
             client.onClientToolCall = nil
             return
         }
