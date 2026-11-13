@@ -78,7 +78,12 @@ public struct ConversationConfig: Sendable {
     /// Called when feedback availability changes.
     public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
 
+    /// Client tool handlers keyed by tool name. The SDK runs the matching handler for each
+    /// client tool call and sends its result to the agent.
+    public var clientTools: [String: ClientToolHandler]
+
     /// Called when a client tool call is received without a registered handler.
+    /// The call is also added to `Conversation.pendingToolCalls`.
     public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
 
     /// When provided, agent state is computed from VAD scores and protocol events
@@ -116,6 +121,7 @@ public struct ConversationConfig: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
+        clientTools: [String: ClientToolHandler] = [:],
         onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
         agentStateConfiguration: AgentStateConfiguration? = nil,
         onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
@@ -147,6 +153,7 @@ public struct ConversationConfig: Sendable {
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
         self.onCanSendFeedbackChange = onCanSendFeedbackChange
+        self.clientTools = clientTools
         self.onUnhandledClientToolCall = onUnhandledClientToolCall
         self.agentStateConfiguration = agentStateConfiguration
         self.onAgentStateChange = onAgentStateChange
@@ -237,6 +244,7 @@ extension ConversationConfig {
             onVadScore: onVadScore,
             onAudioAlignment: onAudioAlignment,
             onCanSendFeedbackChange: onCanSendFeedbackChange,
+            clientTools: clientTools,
             onUnhandledClientToolCall: onUnhandledClientToolCall,
             agentStateConfiguration: agentStateConfiguration,
             onAgentStateChange: onAgentStateChange

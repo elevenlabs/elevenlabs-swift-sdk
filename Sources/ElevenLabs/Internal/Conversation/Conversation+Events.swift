@@ -69,9 +69,13 @@ extension Conversation {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            // Add to pending tool calls for the app to handle
-            options.onUnhandledClientToolCall?(toolCall)
-            pendingToolCalls.append(toolCall)
+            if let handler = options.clientTools[toolCall.toolName] {
+                await runClientTool(toolCall, handler: handler)
+            } else {
+                // Add to pending tool calls for the app to handle
+                options.onUnhandledClientToolCall?(toolCall)
+                pendingToolCalls.append(toolCall)
+            }
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))
@@ -112,6 +116,33 @@ extension Conversation {
         case let .error(errorEvent):
             logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")
             options.onError?(.serverError(errorEvent))
+        }
+    }
+
+    private func runClientTool(_ toolCall: ClientToolCallEvent, handler: ClientToolHandler) async {
+        let toolResult: ClientToolResultEvent
+        do {
+            let result = try await handler(toolCall)
+            toolResult = ClientToolResultEvent(
+                toolCallId: toolCall.toolCallId,
+                result: result ?? "Client tool execution successful."
+            )
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            logger.error("Client tool execution failed", context: ["tool": toolCall.toolName, "error": message])
+            toolResult = ClientToolResultEvent(
+                toolCallId: toolCall.toolCallId,
+                result: "Client tool execution failed: \(message)",
+                isError: true
+            )
+        }
+
+        // The handler may finish after the conversation ended; there is nobody to answer then.
+        guard toolCall.expectsResponse, state.isActive else { return }
+        do {
+            try await publish(.clientToolResult(toolResult))
+        } catch {
+            logger.warning("Failed to send client tool result", context: ["tool": toolCall.toolName, "error": "\(error)"])
         }
     }
 
