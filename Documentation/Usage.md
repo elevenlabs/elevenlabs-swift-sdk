@@ -297,6 +297,24 @@ A thrown error reaches the agent as an error result. To control what the agent s
 
 If a tool doesn't expect a response, the SDK runs the handler and sends nothing.
 
+#### Register tools by name
+
+`ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
+
+```swift
+let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.handler([
+    "get_weather": { call in
+        let location = try call.getParameters()["location"] as? String ?? ""
+        return .result(await weather(for: location))
+    },
+    "open_settings": { _ in
+        router.show(.settings)
+        return .result("Opened the settings screen.")
+    },
+    "cancel_order": { _ in .pending }
+])))
+```
+
 #### Answer calls later
 
 If the handler returns `.pending`, the call stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:

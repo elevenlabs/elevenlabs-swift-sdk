@@ -206,23 +206,23 @@ try await client.sendMessage("Hello!")
 
 ## Empower Your Agent with Tools
 
-You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**. Pass a handler when you create the client. It runs once for each tool call, and the SDK sends what it returns to the agent:
+You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**. Pass a handler for each tool when you create the client. A handler runs once for each call of its tool, and the SDK sends what it returns to the agent:
 
 ```swift
-let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
-    let params = try call.getParameters()
-    switch call.toolName {
-    case "get_weather":
-        return .result(await weather(for: params["city"] as? String ?? ""))
-    case "get_order":
-        return try .json(await orders.order(id: params["order_id"] as? String ?? "")) // any Encodable
-    case "cancel_order":
-        return .pending // the app answers it later, after the user confirms
-    default:
-        throw ClientToolError("This app version doesn't support \(call.toolName).")
-    }
-}))
+let client = ConversationClient(callbacks: .init(onClientToolCall: ClientTools.handler([
+    "get_weather": { call in
+        let city = try call.getParameters()["city"] as? String ?? ""
+        return .result(await weather(for: city))
+    },
+    "get_order": { call in
+        let id = try call.getParameters()["order_id"] as? String ?? ""
+        return try .json(await orders.order(id: id)) // any Encodable
+    },
+    "cancel_order": { _ in .pending } // the app answers it later, after the user confirms
+])))
 ```
+
+A call for a tool that isn't in the map gets an error result. To route calls yourself, pass your own closure as `onClientToolCall` instead.
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
