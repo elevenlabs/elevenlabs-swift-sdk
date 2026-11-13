@@ -353,20 +353,20 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         #if os(macOS)
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            return true
+            true
         case .notDetermined:
-            return await AVCaptureDevice.requestAccess(for: .audio)
+            await AVCaptureDevice.requestAccess(for: .audio)
         case .denied, .restricted:
-            return false
+            false
         @unknown default:
-            return false
+            false
         }
         #elseif os(visionOS)
-        return await AVAudioApplication.requestRecordPermission()
+        await AVAudioApplication.requestRecordPermission()
         #elseif os(tvOS)
-        return false
+        false
         #else
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 continuation.resume(returning: granted)
             }

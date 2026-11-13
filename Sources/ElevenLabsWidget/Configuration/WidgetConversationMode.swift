@@ -46,7 +46,9 @@ extension WidgetConversationMode {
     var showsTranscript: Bool {
         if case let .voiceOnly(_, showsTranscript) = self {
             showsTranscript
-        } else { true }
+        } else {
+            true
+        }
     }
 
     /// The call button, and the host's `startConversation()`, open this kind of session.
