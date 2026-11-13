@@ -217,7 +217,7 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
     case "get_order":
         return try .json(await orders.order(id: params["order_id"] as? String ?? "")) // any Encodable
     case "cancel_order":
-        return .later // the app answers it later, after the user confirms
+        return .pending // the app answers it later, after the user confirms
     default:
         throw ClientToolError("This app version doesn't support \(call.toolName).")
     }
@@ -226,7 +226,7 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
-A call that the handler leaves for `.later` stays in `client.pendingToolCalls` until you answer it, from anywhere in your app:
+If the handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it, from anywhere in your app:
 
 ```swift
 try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))

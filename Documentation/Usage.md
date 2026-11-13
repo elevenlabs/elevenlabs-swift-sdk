@@ -272,7 +272,7 @@ Pass `onClientToolCall` when you create the client. The SDK runs it once for eac
 
 - `.result(text)` sends the text to the agent.
 - `.json(value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
-- `.later` leaves the call in `pendingToolCalls`, for the app to answer later.
+- `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
 
 ```swift
 let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
@@ -286,7 +286,7 @@ let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
         router.show(.settings)
         return .result("Opened the settings screen.")
     case "cancel_order":
-        return .later // the confirmation UI below answers it
+        return .pending // the confirmation UI below answers it
     default:
         throw ClientToolError("This app version doesn't support \(call.toolName).")
     }
@@ -299,7 +299,7 @@ If a tool doesn't expect a response, the SDK runs the handler and sends nothing.
 
 #### Answer calls later
 
-A call that the handler leaves for `.later` stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:
+If the handler returns `.pending`, the call stays in `pendingToolCalls` until the app answers it with `sendToolResult`, or with `markToolCallCompleted` when the tool expects no response. This suits answers that arrive from outside the handler, such as a confirmation from the user, a coordinator or another screen:
 
 ```swift
 struct CancelOrderPrompt: View {

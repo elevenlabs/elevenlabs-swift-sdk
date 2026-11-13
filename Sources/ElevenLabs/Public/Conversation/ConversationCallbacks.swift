@@ -47,7 +47,7 @@ public struct ConversationCallbacks: Sendable {
 
     /// Called once for each client tool call, while the call is in `pendingToolCalls`.
     ///
-    /// Return `.result` to answer the agent now, or `.later` to answer it later with
+    /// Return `.result` to answer the agent now, or `.pending` to answer it later with
     /// `sendToolResult`. A thrown error is sent to the agent as an error result, and a
     /// `ClientToolError` keeps its message and `errorType`. Without a handler, every
     /// call waits in `pendingToolCalls`. When the conversation ends, a running handler

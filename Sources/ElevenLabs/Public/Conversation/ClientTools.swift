@@ -10,7 +10,7 @@ public enum ClientToolReply: Sendable, Equatable {
 
     /// Leaves the call in `ConversationClient.pendingToolCalls`, for the app to answer later
     /// with `sendToolResult` or `markToolCallCompleted`.
-    case later
+    case pending
 
     /// Sends `value` to the agent as JSON. Dates are encoded in ISO 8601.
     public static func json(_ value: some Encodable) throws -> ClientToolReply {

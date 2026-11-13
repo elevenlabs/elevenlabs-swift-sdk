@@ -877,11 +877,11 @@ final class ConversationTests: XCTestCase {
         XCTAssertNil(result["error_type"])
     }
 
-    func testLaterLeavesTheCallForTheApp() async throws {
+    func testPendingLeavesTheCallForTheApp() async throws {
         let handled = expectation(description: "handler ran")
         let conversation = makeConversation { _ in
             handled.fulfill()
-            return .later
+            return .pending
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
