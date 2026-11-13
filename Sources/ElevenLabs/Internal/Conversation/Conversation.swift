@@ -496,7 +496,7 @@ final class Conversation: ObservableObject {
                 switch try await handler(call) {
                 case let .result(text):
                     result = ClientToolResultEvent(toolCallId: call.toolCallId, result: text)
-                case .later:
+                case .pending:
                     result = nil
                 }
             } catch let error as ClientToolError {

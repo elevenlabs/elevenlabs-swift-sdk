@@ -21,7 +21,7 @@ public final class ConversationClient: ObservableObject {
     @Published public private(set) var isAgentMuted: Bool = false
 
     /// Client tool calls without an answer yet: calls that `onClientToolCall` is running
-    /// or left for `.later`, and every call when there is no handler. Answer one with
+    /// or left `.pending`, and every call when there is no handler. Answer one with
     /// `sendToolResult` or `markToolCallCompleted`. Cleared when the conversation ends.
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
