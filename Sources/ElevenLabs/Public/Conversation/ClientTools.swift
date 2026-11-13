@@ -27,7 +27,7 @@ public enum ClientToolReply: Sendable, Equatable {
     case pending
 
     /// Sends `value` to the agent as JSON. Dates are encoded in ISO 8601.
-    public static func json(_ value: some Encodable) throws -> ClientToolReply {
+    public static func result(json value: some Encodable) throws -> ClientToolReply {
         try .result(ClientToolResultEvent.json(value))
     }
 }

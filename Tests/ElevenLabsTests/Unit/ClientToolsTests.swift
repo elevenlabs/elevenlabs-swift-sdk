@@ -11,7 +11,7 @@ final class ClientToolsTests: XCTestCase {
         let shipment = Shipment(shippedAt: Date(timeIntervalSince1970: 0.123))
         let json = #"{"shippedAt":"1970-01-01T00:00:00.123Z"}"#
 
-        XCTAssertEqual(try ClientToolReply.json(shipment), .result(json))
+        XCTAssertEqual(try ClientToolReply.result(json: shipment), .result(json))
         XCTAssertEqual(try ClientToolResultEvent(toolCallId: "call_1", result: shipment).result, json)
     }
 
