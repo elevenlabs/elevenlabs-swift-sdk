@@ -902,6 +902,26 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.map { $0["result"] as? String }, ["From the app"])
     }
 
+    func testPendingLeavesTheCallForTheApp() async throws {
+        let handled = expectation(description: "handler ran")
+        let conversation = makeConversation { _ in
+            handled.fulfill()
+            return .pending
+        }
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+        await fulfillment(of: [handled], timeout: 1)
+
+        XCTAssertEqual(conversation.pendingToolCalls.map(\.toolCallId), ["call_1"])
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
+
+        try await conversation.sendToolResult(.init(toolCallId: "call_1", result: "Cancelled"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.map { $0["result"] as? String }, ["Cancelled"])
+        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
+    }
+
     func testCallWithoutResponseRunsTheHandlerAndSendsNothing() async throws {
         let handled = expectation(description: "handler ran")
         let conversation = makeConversation { _ in

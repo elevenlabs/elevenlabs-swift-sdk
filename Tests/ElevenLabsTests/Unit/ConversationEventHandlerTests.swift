@@ -280,4 +280,11 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)
         XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
     }
+
+    func testClientToolCallWithoutHandlerIsNotQueued() async {
+        // The conversation isn't connected, so the error result fails to send and can't remove a listed call.
+        await conversation.handleIncomingEvent(.clientToolCall(.fixture(id: "call_1")))
+
+        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
+    }
 }
