@@ -95,33 +95,22 @@ public struct ClientToolResultEvent: Sendable {
         )
     }
 
-    /// The agent's model reads the result as text, so dates are ISO 8601, not
-    /// `JSONEncoder`'s default of seconds since 2001. Milliseconds are kept,
-    /// which `.iso8601` would drop.
+    /// The agent's model reads the result as text, so dates are ISO 8601 with milliseconds,
+    /// not `JSONEncoder`'s default of seconds since 2001. `.iso8601` would drop the milliseconds.
     static func json(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .custom { date, encoder in
-            var container = encoder.singleValueContainer()
-            try container.encode(ISO8601Dates.shared.string(from: date))
-        }
+        encoder.dateEncodingStrategy = .formatted(iso8601WithMilliseconds)
         return try String(decoding: encoder.encode(value), as: UTF8.self)
     }
-}
 
-/// One formatter for all tool results, because creating one is expensive.
-/// `ISO8601DateFormatter` is thread-safe, so sharing it is safe.
-private final class ISO8601Dates: @unchecked Sendable {
-    static let shared = ISO8601Dates()
-
-    private let formatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    /// `DateFormatter` is thread-safe, so all tool results share one.
+    private static let iso8601WithMilliseconds: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
         return formatter
     }()
-
-    func string(from date: Date) -> String {
-        formatter.string(from: date)
-    }
 }
 
 /// Contextual update to the conversation

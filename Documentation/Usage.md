@@ -337,7 +337,14 @@ struct CancelOrderPrompt: View {
                 .init(toolCallId: call.toolCallId, result: "The user kept the order.", errorType: .userRejected)
             )
         }
-        try await orders.cancel(call.getParameters()["order_id"] as? String ?? "")
+        do {
+            try await orders.cancel(call.getParameters()["order_id"] as? String ?? "")
+        } catch {
+            // Without a result, the agent waits until the tool's timeout.
+            return try await client.sendToolResult(
+                .init(toolCallId: call.toolCallId, result: "The order couldn't be cancelled.", isError: true)
+            )
+        }
         try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
     }
 }
@@ -345,7 +352,7 @@ struct CancelOrderPrompt: View {
 
 The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
 
-To answer every call this way, set `client.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it.
+To answer every call this way, set `client.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it.
 
 #### Timeouts and the end of a conversation
 
