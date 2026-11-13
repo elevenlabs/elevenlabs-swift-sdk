@@ -33,10 +33,14 @@ final class ChatWidgetViewModel: ObservableObject {
     /// on the live view model instead of needing a new conversation.
     var mode: WidgetConversationMode
     var conversationConfig: ConversationConfig
-    var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?
+    var onClientToolCall: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)? {
+        didSet { passToolHandlerToClient() }
+    }
+
     @Published var widgetConfig: ChatWidgetConfig
     let client: ConversationClient
     let audioLevels = OrbAudioLevels()
+
     /// The in-flight startup, so overlapping callers join it instead of racing.
     private var startTask: (kind: WidgetSessionKind, task: Task<Void, Error>)?
     /// Bumped per start, so work outliving a session can tell it went stale.
@@ -73,15 +77,7 @@ final class ChatWidgetViewModel: ObservableObject {
         client.$chatHistory
             .map { $0.compactMap(\.message).filter { !$0.content.isEmpty }.map(ChatMessage.init) }
             .assign(to: &$messages)
-        // Reads the host's handler on each call, because the host passes it again on every update.
-        client.onClientToolCall = { [weak self] call in
-            guard let handler = self?.onClientToolCall else {
-                throw ClientToolError("No client tool handler is configured in the app.")
-            }
-            let result = await handler(call)
-            guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
-            return .result(result.result)
-        }
+        passToolHandlerToClient()
         // Only a finished session clears the kind: the client rebinds to a fresh
         // conversation on every start, and that publishes `.idle` before it
         // connects, which would wipe the kind of the session just requested.
@@ -338,6 +334,21 @@ final class ChatWidgetViewModel: ObservableObject {
     func openSettings() {
         dismissBanner()
         MicrophonePermission.openSettings()
+    }
+
+    // MARK: - Client tools
+
+    /// Without a host handler, the client answers every call with its own error result.
+    private func passToolHandlerToClient() {
+        guard let handler = onClientToolCall else {
+            client.onClientToolCall = nil
+            return
+        }
+        client.onClientToolCall = { call in
+            let result = await handler(call)
+            guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
+            return .result(result.result)
+        }
     }
 }
 

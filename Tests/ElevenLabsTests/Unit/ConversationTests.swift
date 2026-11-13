@@ -938,6 +938,21 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
     }
 
+    func testCallBeforeTheConversationIsConnectedIsAnswered() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+        let conversation = makeConversation { _ in .result("Shipped") }
+        let startTask = Task { _ = try await conversation.startVoiceConversation(.publicAgent(id: "test")) }
+        await mockWebRTCConnectionManager.waitUntilWaitingForAgent()
+        XCTAssertTrue(conversation.state.isConnecting)
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
+        XCTAssertTrue(sent)
+        mockWebRTCConnectionManager.succeedAgentReady()
+        try await startTask.value
+    }
+
     func testCallWithoutAHandlerGetsAnErrorResult() async throws {
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
