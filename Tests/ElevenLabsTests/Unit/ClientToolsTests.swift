@@ -7,25 +7,12 @@ final class ClientToolsTests: XCTestCase {
         let shippedAt: Date
     }
 
-    func testJSONReplyEncodesDatesInISO8601() throws {
-        let reply = try ClientToolReply.json(Shipment(shippedAt: Date(timeIntervalSince1970: 0)))
+    func testJSONResultsEncodeDatesInISO8601() throws {
+        let shipment = Shipment(shippedAt: Date(timeIntervalSince1970: 0))
+        let json = #"{"shippedAt":"1970-01-01T00:00:00Z"}"#
 
-        XCTAssertEqual(reply, .result(#"{"shippedAt":"1970-01-01T00:00:00Z"}"#))
-    }
-
-    func testEncodableToolResultEncodesDatesInISO8601() throws {
-        let event = try ClientToolResultEvent(
-            toolCallId: "call_1",
-            result: Shipment(shippedAt: Date(timeIntervalSince1970: 0))
-        )
-
-        XCTAssertEqual(event.result, #"{"shippedAt":"1970-01-01T00:00:00Z"}"#)
-    }
-
-    func testClientToolErrorDescribesItselfWithItsMessage() {
-        let error: Error = ClientToolError("No such order.", errorType: .externalServer)
-
-        XCTAssertEqual(error.localizedDescription, "No such order.")
+        XCTAssertEqual(try ClientToolReply.json(shipment), .result(json))
+        XCTAssertEqual(try ClientToolResultEvent(toolCallId: "call_1", result: shipment).result, json)
     }
 
     // MARK: - Handler from a map

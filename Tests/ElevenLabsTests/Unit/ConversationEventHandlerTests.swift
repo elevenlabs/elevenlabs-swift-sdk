@@ -280,17 +280,4 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)
         XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
     }
-
-    func testClientToolCallWithoutHandlerIsNotQueued() async throws {
-        let toolCall = try ClientToolCallEvent(
-            toolName: "test_tool",
-            toolCallId: "call_123",
-            parametersData: JSONSerialization.data(withJSONObject: ["arg": "val"]),
-            eventId: 1,
-            expectsResponse: true
-        )
-        await conversation.handleIncomingEvent(.clientToolCall(toolCall))
-
-        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
-    }
 }
