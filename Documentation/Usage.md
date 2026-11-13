@@ -271,7 +271,7 @@ Client tools allow your agent to execute logic within your app. You must registe
 Set `client.callbacks.onClientToolCall` to answer the calls, or pass `onClientToolCall` in the `ConversationCallbacks` that you give the client. A new value applies to the calls that arrive after it. The SDK runs the handler once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
 
 - `.result(text)` sends the text to the agent.
-- `.json(value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
+- `.result(json: value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
 - `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
 
 `ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
@@ -284,7 +284,7 @@ client.callbacks.onClientToolCall = ClientTools.handler([
     },
     "get_order": { call in
         let id = try call.getParameters()["order_id"] as? String ?? ""
-        return try .json(await orders.order(id: id))
+        return try .result(json: await orders.order(id: id))
     },
     "open_settings": { _ in
         router.show(.settings)

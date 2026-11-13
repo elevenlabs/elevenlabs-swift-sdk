@@ -217,7 +217,7 @@ client.callbacks.onClientToolCall = ClientTools.handler([
     },
     "get_order": { call in
         let id = try call.getParameters()["order_id"] as? String ?? ""
-        return try .json(await orders.order(id: id)) // any Encodable
+        return try .result(json: await orders.order(id: id)) // any Encodable
     },
     "confirm_cancellation": { _ in .pending } // the app answers it after the user decides
 ])
