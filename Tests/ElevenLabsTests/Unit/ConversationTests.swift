@@ -772,6 +772,7 @@ final class ConversationTests: XCTestCase {
     }
 
     func testToolCallLifecycle() async throws {
+        let conversation = makeConversation { _ in .pending }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
         let toolCall = try ClientToolCallEvent(
@@ -911,6 +912,20 @@ final class ConversationTests: XCTestCase {
         let completed = await eventually { conversation.pendingToolCalls.isEmpty }
         XCTAssertTrue(completed)
         XCTAssertTrue(sentToolResults().isEmpty)
+    }
+
+    func testCallWithoutAHandlerGetsAnErrorResult() async throws {
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(makeToolCall(id: "call_1")))
+
+        let sent = await eventually { self.sentToolResults().count == 1 }
+        XCTAssertTrue(sent)
+        let result = try XCTUnwrap(sentToolResults().first)
+        XCTAssertEqual(result["tool_call_id"] as? String, "call_1")
+        XCTAssertEqual(result["result"] as? String, "No client tool handler is configured in the app.")
+        XCTAssertEqual(result["is_error"] as? Bool, true)
+        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
     }
 
     func testEndingTheConversationCancelsARunningHandler() async throws {

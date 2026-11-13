@@ -49,9 +49,12 @@ public struct ConversationCallbacks: Sendable {
     ///
     /// Return `.result` to answer the agent now, or `.pending` to answer it later with
     /// `sendToolResult`. A thrown error is sent to the agent as an error result, and a
-    /// `ClientToolError` keeps its message and `errorType`. Without a handler, every
-    /// call waits in `pendingToolCalls`. When the conversation ends, a running handler
-    /// is cancelled and its reply is not sent.
+    /// `ClientToolError` keeps its message and `errorType`. When the conversation ends,
+    /// a running handler is cancelled and its reply is not sent.
+    ///
+    /// Without a handler, the SDK answers every call with an error result, so the agent
+    /// doesn't wait for it. To answer every call through `pendingToolCalls` instead,
+    /// pass `{ _ in .pending }`.
     public var onClientToolCall: ClientToolHandler?
 
     /// Called whenever the agent state changes (event-based mode only).

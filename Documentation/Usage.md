@@ -345,7 +345,7 @@ struct CancelOrderPrompt: View {
 
 The card goes away when the call is answered, and when the conversation ends, because the SDK then clears `pendingToolCalls`.
 
-Without a handler, every call waits in `pendingToolCalls`, and the app answers each one this way.
+To answer every call this way, pass `onClientToolCall: { _ in .pending }`. Without a handler, the SDK answers every call with an error result, so the agent doesn't wait for it.
 
 #### Timeouts and the end of a conversation
 
