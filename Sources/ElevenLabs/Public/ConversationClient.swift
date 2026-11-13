@@ -20,9 +20,7 @@ public final class ConversationClient: ObservableObject {
     /// Whether the agent's voice is silenced.
     @Published public private(set) var isAgentMuted: Bool = false
 
-    /// Client tool calls without an answer yet: calls that `onClientToolCall` is running
-    /// or left `.pending`. Answer one with `sendToolResult` or `markToolCallCompleted`.
-    /// Cleared when the conversation ends.
+    /// Client tool calls without an answer yet. Cleared when the conversation ends.
     @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
@@ -36,19 +34,11 @@ public final class ConversationClient: ObservableObject {
 
     // MARK: - Client tools
 
-    /// Called once for each client tool call, while the call is in `pendingToolCalls`.
+    /// Answers each client tool call. Return `.pending` to answer later with `sendToolResult`.
+    /// A thrown error is sent to the agent as an error result.
     ///
-    /// Return `.result` to answer the agent now, or `.pending` to answer it later with
-    /// `sendToolResult`. A thrown error is sent to the agent as an error result, and a
-    /// `ClientToolError` keeps its message and `errorType`. When the conversation ends,
-    /// a running handler is cancelled and its reply is not sent.
-    ///
-    /// Without a handler, the SDK answers every call with an error result, so the agent
-    /// doesn't wait for it. To answer every call through `pendingToolCalls` instead,
-    /// set `{ _ in .pending }`.
-    ///
-    /// Set it before you start a conversation. A new value applies to the calls that
-    /// arrive after you set it, in this conversation and the next ones.
+    /// Without a handler, every call gets an error result. Set `{ _ in .pending }` to answer
+    /// every call through `pendingToolCalls`. A new value applies to calls that arrive after it.
     public var onClientToolCall: ClientToolHandler? {
         didSet { session?.onClientToolCall = onClientToolCall }
     }

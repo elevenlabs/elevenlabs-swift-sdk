@@ -843,39 +843,32 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
     }
 
-    func testClientToolErrorIsSentWithItsMessageAndType() async throws {
-        let conversation = makeConversation { _ in
-            throw ClientToolError("The user kept the order.", errorType: .userRejected)
-        }
-        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
-
-        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
-
-        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
-        XCTAssertTrue(sent)
-        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
-        XCTAssertEqual(result["result"] as? String, "The user kept the order.")
-        XCTAssertEqual(result["is_error"] as? Bool, true)
-        XCTAssertEqual(result["error_type"] as? String, "user_rejected")
-    }
-
-    func testOtherHandlerErrorIsSentAsAFailure() async throws {
+    func testHandlerErrorsAreSentAsErrorResults() async throws {
         struct OrderServiceDown: LocalizedError {
             var errorDescription: String? {
                 "The order service is down."
             }
         }
-        let conversation = makeConversation { _ in throw OrderServiceDown() }
+        let conversation = makeConversation { call in
+            guard call.toolCallId == "rejected" else { throw OrderServiceDown() }
+            throw ClientToolError("The user kept the order.", errorType: .userRejected)
+        }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "rejected")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "failed")))
 
-        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 2 }
         XCTAssertTrue(sent)
-        let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
-        XCTAssertEqual(result["result"] as? String, "Client tool execution failed: The order service is down.")
-        XCTAssertEqual(result["is_error"] as? Bool, true)
-        XCTAssertNil(result["error_type"])
+        let results = mockWebRTCConnectionManager.sentToolResults
+        let rejected = try XCTUnwrap(results.first { $0["tool_call_id"] as? String == "rejected" })
+        let failed = try XCTUnwrap(results.first { $0["tool_call_id"] as? String == "failed" })
+        XCTAssertEqual(rejected["result"] as? String, "The user kept the order.")
+        XCTAssertEqual(rejected["is_error"] as? Bool, true)
+        XCTAssertEqual(rejected["error_type"] as? String, "user_rejected")
+        XCTAssertEqual(failed["result"] as? String, "Client tool execution failed: The order service is down.")
+        XCTAssertEqual(failed["is_error"] as? Bool, true)
+        XCTAssertNil(failed["error_type"])
     }
 
     func testPendingLeavesTheCallForTheApp() async throws {
