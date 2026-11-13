@@ -8,7 +8,7 @@ import Foundation
 /// Voice and text-only take different grants. Carrying ``ConversationAuth/Voice``
 /// and ``ConversationAuth/TextOnly`` in the mode means a widget can never be
 /// configured for a session it has no way to authenticate.
-public enum WidgetConversationMode: Sendable {
+@_spi(Experimental) public enum WidgetConversationMode: Sendable {
     /// Typed messages only; the conversation runs without audio.
     case textOnly(ConversationAuth.TextOnly)
     /// A voice call with no composer.

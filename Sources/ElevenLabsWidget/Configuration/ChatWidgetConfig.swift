@@ -2,7 +2,7 @@
 import Foundation
 
 /// Behavior and appearance of ``ChatWidget``.
-public struct ChatWidgetConfig: Equatable, Sendable {
+@_spi(Experimental) public struct ChatWidgetConfig: Equatable, Sendable {
     /// Dim the host UI behind the open drawer.
     public var showBackdrop: Bool
     /// Show the microphone mute button while a conversation is live.

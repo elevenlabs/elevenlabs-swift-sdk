@@ -32,7 +32,10 @@ dependencies: [
 The package provides two libraries:
 
 - **`ElevenLabs`** — the core SDK: start conversations, observe state, build your own UI.
-- **`ElevenLabsWidget`** — an optional drop-in SwiftUI chat widget built on the core SDK (iOS 16+).
+- **`ElevenLabsWidget`** — an optional drop-in SwiftUI chat widget built on the core SDK (iOS 16+). Experimental, see below.
+
+> [!WARNING]
+> `ElevenLabsWidget` is experimental. Semantic versioning does not cover its API, and a minor or patch release can break it. To use it, import it as an experimental SPI: `@_spi(Experimental) import ElevenLabsWidget`. The core `ElevenLabs` library follows semantic versioning.
 
 ### 2. Requirements & Permissions
 
@@ -45,7 +48,7 @@ The package provides two libraries:
 Overlay `ChatWidget` on your UI and you're done — it renders a floating launcher that opens a chat drawer with a voice call, text composer, and live transcript:
 
 ```swift
-import ElevenLabsWidget
+@_spi(Experimental) import ElevenLabsWidget
 import SwiftUI
 
 struct ContentView: View {

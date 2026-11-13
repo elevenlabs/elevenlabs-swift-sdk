@@ -1,5 +1,5 @@
 import ElevenLabs
-import ElevenLabsWidget
+@_spi(Experimental) import ElevenLabsWidget
 import SwiftUI
 
 /// Minimal host for `ChatWidget`.

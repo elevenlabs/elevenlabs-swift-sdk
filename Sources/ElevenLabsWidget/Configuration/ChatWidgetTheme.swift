@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// Visual styling for ``ChatWidget``. Defaults mirror the ElevenLabs web widget.
-public struct ChatWidgetTheme: Equatable, Sendable {
+@_spi(Experimental) public struct ChatWidgetTheme: Equatable, Sendable {
     /// Hairline borders around buttons and the composer.
     public var border: Color
     /// Saturated red used for the end-call glyph.
