@@ -210,7 +210,7 @@ You can allow your agent to perform actions in your app (like opening a screen o
 
 ```swift
 let client = ConversationClient()
-client.onClientToolCall = ClientTools.handler([
+client.callbacks.onClientToolCall = ClientTools.handler([
     "get_weather": { call in
         let city = try call.getParameters()["city"] as? String ?? ""
         return .result(await weather(for: city))
@@ -223,13 +223,13 @@ client.onClientToolCall = ClientTools.handler([
 ])
 ```
 
-A call for a tool that isn't in the map gets an error result. To route calls yourself, set your own closure as `client.onClientToolCall` instead.
+A call for a tool that isn't in the map gets an error result. To route calls yourself, set your own closure as `client.callbacks.onClientToolCall` instead.
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
 If the handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it with `client.sendToolResult`, from anywhere in your app.
 
-Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.onClientToolCall = { _ in .pending }`.
+Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it. To answer every call yourself through `pendingToolCalls`, set `client.callbacks.onClientToolCall = { _ in .pending }`.
 
 If you use `ChatWidget`, pass a handler instead and the widget wires this up for you:
 
@@ -264,6 +264,8 @@ let callbacks = ConversationCallbacks(
 
 let client = ConversationClient(callbacks: callbacks)
 ```
+
+To change a callback later, set its field on `client.callbacks`, for example `client.callbacks.onAgentResponse = { ... }`. The change applies at once, also during a conversation.
 
 ### Muting
 

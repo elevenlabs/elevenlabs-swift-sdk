@@ -88,7 +88,7 @@ This affects state sharing and object lifetimes — do not assume, ask before pr
 
 ## Move callbacks to `ConversationCallbacks`
 
-v3 accepted callbacks on `ConversationConfig` and as `startConversation` parameters. In v4 all event callbacks live in a `ConversationCallbacks` struct passed once at client creation; they apply to every conversation the client starts.
+v3 accepted callbacks on `ConversationConfig` and as `startConversation` parameters. In v4, all event callbacks live in a `ConversationCallbacks` struct that the app passes when it creates the client. They apply to every conversation the client starts. To change a callback later, set its field on `client.callbacks`. The change applies at once, also during a conversation.
 
 **Before:**
 
@@ -118,7 +118,7 @@ When migrating:
 
 - `onDisconnect` now receives an `EndReason` (`.userEnded`, `.agentEnded`, `.remoteDisconnected`) instead of `DisconnectionReason`. The agent invoking its `end_call` tool reports as `.agentEnded`.
 - `onStartupStateChange` is gone — startup stages arrive through `state == .connecting(stage)`.
-- Callback closures are typed `@Sendable` and are not actor-isolated. The SDK delivers them on the main thread, but under Swift 6 strict concurrency the compiler still requires a hop (`Task { @MainActor in ... }` or `MainActor.assumeIsolated`) before touching main-actor state inside them. In Swift 5 mode, existing v3 callback bodies work unchanged.
+- Callback closures are typed `@Sendable` and are not actor-isolated. The SDK delivers them on the main thread, but under Swift 6 strict concurrency the compiler still requires a hop (`Task { @MainActor in ... }` or `MainActor.assumeIsolated`) before touching main-actor state inside them. In Swift 5 mode, existing v3 callback bodies work unchanged. `onClientToolCall` is the exception: it runs on the main actor.
 - Argument order in the `ConversationCallbacks` initializer follows its declaration order (`onAgentReady`, `onDisconnect`, `onError`, `onSpeechDetectedWhileMuted`, `onAgentResponse`, ..., `onUserTranscript`, ...); reorder call sites accordingly.
 
 ## Update state and transcript observation
@@ -211,7 +211,7 @@ try await client.sendToolResult(
 
 `result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). v4 encodes a `Date` in an `Encodable` result as an ISO 8601 string, where v3 sent seconds since 2001. Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
 
-v3's `onUnhandledClientToolCall` notification becomes the `ConversationClient.onClientToolCall` property, which answers the call: it returns `.result(_:)`, `.json(_:)` or `.pending`, and a thrown error reaches the agent as an error result. Without a handler, v4 answers every call that expects a response with an error result, and the call doesn't enter `pendingToolCalls`. So a v3 app that answers calls through `pendingToolCalls` must set `client.onClientToolCall = { _ in .pending }`: the calls stay in `pendingToolCalls`, and the app answers them with `sendToolResult` as before. If the app used `onUnhandledClientToolCall` only to observe calls, move that code into the handler. Observing `pendingToolCalls` doesn't replace it. Suggest moving tools that compute their answer into the handler, and throwing `ClientToolError` for failures. `ClientTools.handler(["tool_name": { call in ... }])` builds the handler from one closure for each tool name.
+v3's `onUnhandledClientToolCall` notification becomes `ConversationCallbacks.onClientToolCall`, which answers the call: it returns `.result(_:)`, `.json(_:)` or `.pending`, and a thrown error reaches the agent as an error result. Without a handler, v4 answers every call that expects a response with an error result, and the call doesn't enter `pendingToolCalls`. So a v3 app that answers calls through `pendingToolCalls` must set `client.callbacks.onClientToolCall = { _ in .pending }`: the calls stay in `pendingToolCalls`, and the app answers them with `sendToolResult` as before. If the app used `onUnhandledClientToolCall` only to observe calls, move that code into the handler. Observing `pendingToolCalls` doesn't replace it. Suggest moving tools that compute their answer into the handler, and throwing `ClientToolError` for failures. `ClientTools.handler(["tool_name": { call in ... }])` builds the handler from one closure for each tool name.
 
 ## Replace LiveKit track access with audio observers
 

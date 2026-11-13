@@ -337,10 +337,10 @@ final class ChatWidgetViewModel: ObservableObject {
     /// expects a response with its own error result.
     func setClientToolHandler(_ handler: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?) {
         guard let handler else {
-            client.onClientToolCall = nil
+            client.callbacks.onClientToolCall = nil
             return
         }
-        client.onClientToolCall = { call in
+        client.callbacks.onClientToolCall = { call in
             let result = await handler(call)
             guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
             return .result(result.result)

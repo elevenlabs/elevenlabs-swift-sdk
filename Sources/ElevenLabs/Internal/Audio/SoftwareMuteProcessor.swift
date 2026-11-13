@@ -31,12 +31,12 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
     private var consecutiveBelowCount: Int = 0
     private var hangoverLatched: Bool = false
 
-    private let onSpeechDetectedWhileMuted: (@Sendable () -> Void)?
+    private let onSpeechDetectedWhileMuted: (@MainActor @Sendable () -> Void)?
     private let mutedSpeechThresholdInDb: Float
     private let mutedSpeechThrottleInSeconds: TimeInterval
 
     init(
-        onSpeechDetectedWhileMuted: (@Sendable () -> Void)?,
+        onSpeechDetectedWhileMuted: (@MainActor @Sendable () -> Void)?,
         mutedSpeechThresholdInDb: Float = -35,
         mutedSpeechThrottleInSeconds: TimeInterval = 3.0
     ) {
@@ -111,7 +111,7 @@ final class SoftwareMuteProcessor: NSObject, @unchecked Sendable, AudioCustomPro
         os_unfair_lock_unlock(lock)
 
         if shouldFire {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.onSpeechDetectedWhileMuted?()
             }
         }
