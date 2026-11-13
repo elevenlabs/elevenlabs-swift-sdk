@@ -70,8 +70,9 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
             let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
         } catch {
+            let startupError = Self.startupError(for: error, from: task)
             tearDownTask(task)
-            throw error
+            throw error is CancellationError ? error : startupError
         }
 
         // Socket is up and the init message is sent. Start consuming responses.
@@ -167,9 +168,41 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     }
 
     private func handleReceiveFailure(_ error: Error) async {
+        let startupError = task.map { Self.startupError(for: error, from: $0) }
         task = nil
         errorHandler?(error)
+        // Still starting: fail the start with what went wrong rather than reporting a drop.
+        if let startupError, let waiter = initiationMetadataWaiter, await waiter.fail(startupError) { return }
         await onDisconnected?()
+    }
+
+    private nonisolated static func startupError(for error: Error, from task: URLSessionWebSocketTask) -> ConversationError {
+        startupError(
+            for: error,
+            httpStatus: (task.response as? HTTPURLResponse)?.statusCode,
+            closeCode: task.closeCode.rawValue,
+            closeReason: task.closeReason.flatMap { String(data: $0, encoding: .utf8) }
+        )
+    }
+
+    /// Refused unless the server is busy or failing, going by the handshake's HTTP status or the server's close frame.
+    nonisolated static func startupError(
+        for error: Error, httpStatus: Int?, closeCode: Int, closeReason: String?
+    ) -> ConversationError {
+        if let httpStatus, httpStatus >= 400 {
+            let message = "The server rejected the conversation with HTTP \(httpStatus)"
+            return httpStatus == 429 || httpStatus >= 500
+                ? .connectionFailed(.initializationFailed, message) : .authenticationFailed(message)
+        }
+        switch closeCode {
+        case 0, 1005, 1006: // No close frame: the network failed.
+            return .connectionFailed(.initializationFailed, error.localizedDescription)
+        case let code:
+            // The server can accept the socket and close it straight away, saying why.
+            let message = "The server closed the conversation (\(code)): \(closeReason ?? "no reason given")"
+            let retryable = [1001, 1011, 1013].contains(code) // going away, internal error, try again later
+            return retryable ? .connectionFailed(.initializationFailed, message) : .authenticationFailed(message)
+        }
     }
 
     static func websocketUrl(

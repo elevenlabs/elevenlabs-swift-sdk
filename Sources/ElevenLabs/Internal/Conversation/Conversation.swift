@@ -195,6 +195,12 @@ final class Conversation: ObservableObject {
               let connectionManager = activeConnectionManager
         else { return }
         state = .ended(reason: reason)
+        // A drop is worth seeing at the default log level; a normal end isn't.
+        if reason == .remoteDisconnected {
+            logger.warning("Conversation ended: the connection dropped")
+        } else {
+            logger.info("Conversation ended", context: ["reason": "\(reason)"])
+        }
 
         tearDownActiveSession()
         let ending = Task {
@@ -244,6 +250,7 @@ final class Conversation: ObservableObject {
             } catch WebRTCConnectionManagerError.roomUnavailable {
                 throw ConversationError.notConnected
             } catch {
+                logger.error("Failed to toggle microphone", context: ["error": "\(error)"])
                 throw ConversationError.microphoneFailed(error.localizedDescription)
             }
         } else if state == .idle || state.isConnecting {
@@ -341,10 +348,12 @@ final class Conversation: ObservableObject {
         } catch {
             // Cancelled, ended or superseded meanwhile: whatever the transport threw is a side effect.
             if Task.isCancelled || !state.isConnecting {
+                logger.info("Conversation start cancelled")
                 await handleStartupCancellation(disconnecting: manager)
                 throw CancellationError()
             }
             let conversationError = dropFailure ?? startupError(from: error)
+            logger.error("Conversation failed to start", context: ["error": "\(conversationError)"])
             await handleStartupFailure(conversationError, disconnecting: manager)
             throw conversationError
         }
