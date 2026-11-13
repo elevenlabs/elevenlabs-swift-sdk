@@ -101,12 +101,26 @@ public struct ClientToolResultEvent: Sendable {
     static func json(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             var container = encoder.singleValueContainer()
-            try container.encode(formatter.string(from: date))
+            try container.encode(ISO8601Dates.shared.string(from: date))
         }
         return try String(decoding: encoder.encode(value), as: UTF8.self)
+    }
+}
+
+/// One formatter for all tool results, because creating one is expensive.
+/// `ISO8601DateFormatter` is thread-safe, so sharing it is safe.
+private final class ISO8601Dates: @unchecked Sendable {
+    static let shared = ISO8601Dates()
+
+    private let formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    func string(from date: Date) -> String {
+        formatter.string(from: date)
     }
 }
 

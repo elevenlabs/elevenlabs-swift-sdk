@@ -286,7 +286,8 @@ public final class ConversationClient: ObservableObject {
         try await requireSession().sendMCPToolApproval(toolCallId: toolCallId, isApproved: isApproved)
     }
 
-    /// Send the result of a client tool call back to the agent.
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
     public func sendToolResult(_ result: ClientToolResultEvent) async throws {
         try await requireSession().sendToolResult(result)
     }

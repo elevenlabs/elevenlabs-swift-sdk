@@ -290,9 +290,10 @@ final class Conversation: ObservableObject {
         try await publish(.mcpToolApprovalResult(approval))
     }
 
-    /// Send the result of a client tool call back to the agent.
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
     func sendToolResult(_ result: ClientToolResultEvent) async throws {
-        guard state.isConnected else { throw ConversationError.notConnected }
+        guard state.isConnected || state.isConnecting else { throw ConversationError.notConnected }
         try await publish(.clientToolResult(result))
         pendingToolCalls.removeAll { $0.toolCallId == result.toolCallId }
     }
@@ -492,11 +493,6 @@ final class Conversation: ObservableObject {
 
     // MARK: - Client tools
 
-    /// Without a handler, a call gets an error result at once instead of waiting out the tool's timeout.
-    private static let missingClientToolHandler: ClientToolHandler = { _ in
-        throw ClientToolError("No client tool handler is configured in the app.")
-    }
-
     private func runClientTool(_ call: ClientToolCallEvent, handler: @escaping ClientToolHandler) {
         clientToolTasks[call.toolCallId] = Task { [weak self] in
             let reply: Result<ClientToolReply, Error>
@@ -513,6 +509,10 @@ final class Conversation: ObservableObject {
                 return
             case let .success(.result(text)):
                 await answer(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+            case let .failure(error as ClientToolError):
+                // The handler chose this answer, for example because the user declined.
+                logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
+                await answer(call, with: Self.errorResult(error, for: call))
             case let .failure(error):
                 logger.warning("A client tool handler failed", context: ["tool": call.toolName, "error": "\(error)"])
                 await answer(call, with: Self.errorResult(error, for: call))
@@ -542,6 +542,19 @@ final class Conversation: ObservableObject {
         // The app may have answered the call itself while the handler ran.
         guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
         guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
+        await send(result, for: call)
+    }
+
+    /// Without a handler, the app never sees the call, so the agent gets an error now
+    /// instead of waiting out the tool's timeout.
+    private func answerWithoutHandler(_ call: ClientToolCallEvent) async {
+        logger.warning("No client tool handler is set", context: ["tool": call.toolName])
+        guard call.expectsResponse else { return }
+        let error = ClientToolError("No client tool handler is configured in the app.")
+        await send(Self.errorResult(error, for: call), for: call)
+    }
+
+    private func send(_ result: ClientToolResultEvent, for call: ClientToolCallEvent) async {
         do {
             try await sendToolResult(result)
         } catch {
@@ -604,12 +617,17 @@ final class Conversation: ObservableObject {
 
         case let .clientToolCall(toolCall):
             // A repeated call is already running, or waiting for the app.
-            guard !pendingToolCalls.contains(where: { $0.toolCallId == toolCall.toolCallId }) else {
+            let id = toolCall.toolCallId
+            guard clientToolTasks[id] == nil, !pendingToolCalls.contains(where: { $0.toolCallId == id }) else {
                 logger.warning("Ignored a repeated client tool call", context: ["tool": toolCall.toolName])
                 break
             }
+            guard let handler = onClientToolCall else {
+                await answerWithoutHandler(toolCall)
+                break
+            }
             pendingToolCalls.append(toolCall)
-            runClientTool(toolCall, handler: onClientToolCall ?? Self.missingClientToolHandler)
+            runClientTool(toolCall, handler: handler)
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))
