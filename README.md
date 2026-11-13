@@ -206,27 +206,33 @@ try await client.sendMessage("Hello!")
 
 ## Empower Your Agent with Tools
 
-You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**:
+You can allow your agent to perform actions in your app (like opening a screen or fetching local data) using **Client Tools**. Pass a handler when you create the client. It runs once for each tool call, and the SDK sends what it returns to the agent:
 
 ```swift
-// Observe requested tool calls with async/await
-Task {
-    for await calls in client.$pendingToolCalls.values {
-        for call in calls {
-            // 1. Parse parameters
-            let params = (try? call.getParameters()) ?? [:]
-
-            // 2. Perform your local logic
-            let result = await myAppAction(params)
-
-            // 3. Send the result back to the agent
-            try? await client.sendToolResult(
-                .init(toolCallId: call.toolCallId, result: result)
-            )
-        }
+let client = ConversationClient(callbacks: .init(onClientToolCall: { call in
+    let params = try call.getParameters()
+    switch call.toolName {
+    case "get_weather":
+        return .result(await weather(for: params["city"] as? String ?? ""))
+    case "get_order":
+        return try .json(await orders.order(id: params["order_id"] as? String ?? "")) // any Encodable
+    case "cancel_order":
+        return .later // the app answers it later, after the user confirms
+    default:
+        throw ClientToolError("This app version doesn't support \(call.toolName).")
     }
-}
+}))
 ```
+
+A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
+
+A call that the handler leaves for `.later` stays in `client.pendingToolCalls` until you answer it, from anywhere in your app:
+
+```swift
+try await client.sendToolResult(.init(toolCallId: call.toolCallId, result: "The order is cancelled."))
+```
+
+Without a handler, every call waits in `pendingToolCalls`. The agent waits for a result only as long as the tool's response timeout in the agent settings, so give a tool that waits for the user a longer timeout.
 
 If you use `ChatWidget`, pass a handler instead and the widget wires this up for you:
 

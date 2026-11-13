@@ -16,7 +16,7 @@ final class Conversation: ObservableObject {
     @Published var chatHistory: [any ChatHistoryItem] = []
     @Published var agentState: AgentState = .listening
 
-    /// Stream of client tool calls that need to be executed by the app
+    /// Client tool calls without an answer yet
     @Published var pendingToolCalls: [ClientToolCallEvent] = []
 
     /// Conversation metadata including conversation ID, received when the conversation is initialized
@@ -67,6 +67,8 @@ final class Conversation: ObservableObject {
     }
 
     private var speakingTimer: Task<Void, Never>?
+    /// Running `onClientToolCall` handlers, by tool call id.
+    private var clientToolTasks: [String: Task<Void, Never>] = [:]
     /// The in-flight teardown; later `endConversation()` calls wait for it instead of returning early.
     private var ending: Task<Void, Never>?
 
@@ -451,6 +453,10 @@ final class Conversation: ObservableObject {
         isTearingDown = true
         speakingTimer?.cancel()
         speakingTimer = nil
+        for task in clientToolTasks.values {
+            task.cancel()
+        }
+        clientToolTasks.removeAll()
         pendingMuteState = nil
         agentState = .listening
 
@@ -479,6 +485,56 @@ final class Conversation: ObservableObject {
         }
 
         try await connectionManager.send(event: event)
+    }
+
+    // MARK: - Client tools
+
+    private func runClientTool(_ call: ClientToolCallEvent, handler: @escaping ClientToolHandler) {
+        clientToolTasks[call.toolCallId] = Task { [weak self] in
+            let result: ClientToolResultEvent?
+            do {
+                switch try await handler(call) {
+                case let .result(text):
+                    result = ClientToolResultEvent(toolCallId: call.toolCallId, result: text)
+                case .later:
+                    result = nil
+                }
+            } catch let error as ClientToolError {
+                result = ClientToolResultEvent(
+                    toolCallId: call.toolCallId,
+                    result: error.message,
+                    isError: true,
+                    errorType: error.errorType
+                )
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+                result = ClientToolResultEvent(
+                    toolCallId: call.toolCallId,
+                    result: "Client tool execution failed: \(message)",
+                    isError: true
+                )
+            }
+            // A cancelled handler belongs to a session that ended.
+            guard let self, !Task.isCancelled else { return }
+            clientToolTasks[call.toolCallId] = nil
+            if let result {
+                await answer(call, with: result)
+            }
+        }
+    }
+
+    private func answer(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
+        // The app may have answered the call itself while the handler ran.
+        guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
+        guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
+        do {
+            try await sendToolResult(result)
+        } catch {
+            logger.warning(
+                "Failed to send a client tool result",
+                context: ["tool": call.toolName, "error": "\(error)"]
+            )
+        }
     }
 
     // MARK: - Event Handling
@@ -532,8 +588,10 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            callbacks.onClientToolCall?(toolCall)
             pendingToolCalls.append(toolCall)
+            if let handler = callbacks.onClientToolCall {
+                runClientTool(toolCall, handler: handler)
+            }
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))

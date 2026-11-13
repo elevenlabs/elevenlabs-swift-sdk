@@ -209,7 +209,9 @@ try await client.sendToolResult(
 )
 ```
 
-`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
+`result` accepts a `String` directly or any `Encodable` (JSON-encoded, throwing initializer). v4 encodes a `Date` in an `Encodable` result as an ISO 8601 string, where v3 sent seconds since 2001. Where the app distinguishes kinds of tool failure, suggest the new `errorType:` parameter (`.userRejected`, `.clientTimeout`, `.externalServer`, ...) so the agent orchestrator can react to the category, not just a generic error. `sendMessage`, `interruptAgent`, `updateContext`, `sendFeedback`, `sendMCPToolApproval`, and `markToolCallCompleted` are unchanged apart from living on the client.
+
+v3's `onUnhandledClientToolCall` notification becomes `ConversationCallbacks.onClientToolCall`, which answers the call: it returns `.result(_:)`, `.json(_:)` or `.later`, and a thrown error reaches the agent as an error result. To keep a v3 app's flow unchanged, return `.later`: the call stays in `pendingToolCalls`, and the app answers it with `sendToolResult` as before. If the app used `onUnhandledClientToolCall` only to observe calls, observe `pendingToolCalls` instead. Suggest moving tools that compute their answer into the handler, and throwing `ClientToolError` for failures.
 
 ## Replace LiveKit track access with audio observers
 
