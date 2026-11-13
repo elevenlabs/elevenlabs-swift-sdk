@@ -492,63 +492,56 @@ final class Conversation: ObservableObject {
 
     // MARK: - Client tools
 
+    /// Without a handler, a call gets an error result at once instead of waiting out the tool's timeout.
+    private static let missingClientToolHandler: ClientToolHandler = { _ in
+        throw ClientToolError("No client tool handler is configured in the app.")
+    }
+
     private func runClientTool(_ call: ClientToolCallEvent, handler: @escaping ClientToolHandler) {
         clientToolTasks[call.toolCallId] = Task { [weak self] in
-            let result: ClientToolResultEvent?
+            let reply: Result<ClientToolReply, Error>
             do {
-                switch try await handler(call) {
-                case let .result(text):
-                    result = ClientToolResultEvent(toolCallId: call.toolCallId, result: text)
-                case .pending:
-                    result = nil
-                }
-            } catch let error as ClientToolError {
-                result = ClientToolResultEvent(
-                    toolCallId: call.toolCallId,
-                    result: error.message,
-                    isError: true,
-                    errorType: error.errorType
-                )
+                reply = try await .success(handler(call))
             } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                result = ClientToolResultEvent(
-                    toolCallId: call.toolCallId,
-                    result: "Client tool execution failed: \(message)",
-                    isError: true
-                )
+                reply = .failure(error)
             }
             // A cancelled handler belongs to a session that ended.
             guard let self, !Task.isCancelled else { return }
             clientToolTasks[call.toolCallId] = nil
-            if let result {
-                await answer(call, with: result)
+            switch reply {
+            case .success(.pending):
+                return
+            case let .success(.result(text)):
+                await answer(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+            case let .failure(error):
+                logger.warning("A client tool handler failed", context: ["tool": call.toolName, "error": "\(error)"])
+                await answer(call, with: Self.errorResult(error, for: call))
             }
         }
+    }
+
+    private static func errorResult(_ error: Error, for call: ClientToolCallEvent) -> ClientToolResultEvent {
+        if let error = error as? ClientToolError {
+            return ClientToolResultEvent(
+                toolCallId: call.toolCallId,
+                result: error.message,
+                isError: true,
+                errorType: error.errorType
+            )
+        }
+        // Not `String(describing:)`: for an `NSError`, that includes the user info, such as URLs with tokens.
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        return ClientToolResultEvent(
+            toolCallId: call.toolCallId,
+            result: "Client tool execution failed: \(message)",
+            isError: true
+        )
     }
 
     private func answer(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
         // The app may have answered the call itself while the handler ran.
         guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
         guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
-        await send(result, for: call)
-    }
-
-    /// Nothing in the app answers the call, so the agent gets an error now instead of
-    /// waiting out the tool's timeout.
-    private func answerWithoutHandler(_ call: ClientToolCallEvent) async {
-        logger.warning("No client tool handler is set", context: ["tool": call.toolName])
-        guard call.expectsResponse else { return }
-        await send(
-            ClientToolResultEvent(
-                toolCallId: call.toolCallId,
-                result: "No client tool handler is configured in the app.",
-                isError: true
-            ),
-            for: call
-        )
-    }
-
-    private func send(_ result: ClientToolResultEvent, for call: ClientToolCallEvent) async {
         do {
             try await sendToolResult(result)
         } catch {
@@ -610,12 +603,13 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            if let handler = onClientToolCall {
-                pendingToolCalls.append(toolCall)
-                runClientTool(toolCall, handler: handler)
-            } else {
-                await answerWithoutHandler(toolCall)
+            // A repeated call is already running, or waiting for the app.
+            guard !pendingToolCalls.contains(where: { $0.toolCallId == toolCall.toolCallId }) else {
+                logger.warning("Ignored a repeated client tool call", context: ["tool": toolCall.toolName])
+                break
             }
+            pendingToolCalls.append(toolCall)
+            runClientTool(toolCall, handler: onClientToolCall ?? Self.missingClientToolHandler)
 
         case let .vadScore(vad):
             agentStateManager?.processSignal(.vadScore(vad.vadScore))

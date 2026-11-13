@@ -280,4 +280,18 @@ final class ConversationEventHandlerTests: XCTestCase {
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)
         XCTAssertEqual(conversation.pendingToolCalls.first?.toolCallId, "call_123")
     }
+
+    func testRepeatedClientToolCallIsIgnored() async {
+        let handled = expectation(description: "handler ran once")
+        conversation.onClientToolCall = { _ in
+            handled.fulfill()
+            return .pending
+        }
+
+        await conversation.handleIncomingEvent(.clientToolCall(.fixture(id: "call_1")))
+        await conversation.handleIncomingEvent(.clientToolCall(.fixture(id: "call_1")))
+
+        XCTAssertEqual(conversation.pendingToolCalls.map(\.toolCallId), ["call_1"])
+        await fulfillment(of: [handled], timeout: 1)
+    }
 }

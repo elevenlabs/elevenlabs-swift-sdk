@@ -849,26 +849,57 @@ final class ConversationTests: XCTestCase {
                 "The order service is down."
             }
         }
+        let offline = URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: "https://orders.test/?token=SECRET"])
         let conversation = makeConversation { call in
-            guard call.toolCallId == "rejected" else { throw OrderServiceDown() }
-            throw ClientToolError("The user kept the order.", errorType: .userRejected)
+            switch call.toolCallId {
+            case "rejected": throw ClientToolError("The user kept the order.", errorType: .userRejected)
+            case "offline": throw offline
+            default: throw OrderServiceDown()
+            }
         }
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "rejected")))
-        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "failed")))
+        for id in ["rejected", "failed", "offline"] {
+            mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: id)))
+        }
 
-        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 2 }
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 3 }
         XCTAssertTrue(sent)
         let results = mockWebRTCConnectionManager.sentToolResults
         let rejected = try XCTUnwrap(results.first { $0["tool_call_id"] as? String == "rejected" })
         let failed = try XCTUnwrap(results.first { $0["tool_call_id"] as? String == "failed" })
+        let offlineResult = try XCTUnwrap(results.first { $0["tool_call_id"] as? String == "offline" })
         XCTAssertEqual(rejected["result"] as? String, "The user kept the order.")
         XCTAssertEqual(rejected["is_error"] as? Bool, true)
         XCTAssertEqual(rejected["error_type"] as? String, "user_rejected")
         XCTAssertEqual(failed["result"] as? String, "Client tool execution failed: The order service is down.")
         XCTAssertEqual(failed["is_error"] as? Bool, true)
         XCTAssertNil(failed["error_type"])
+        // The user info, with its URL and token, stays in the app.
+        XCTAssertEqual(offlineResult["result"] as? String, "Client tool execution failed: \(offline.localizedDescription)")
+    }
+
+    func testHandlerReplyIsDroppedWhenTheAppAnsweredFirst() async throws {
+        let started = expectation(description: "handler started")
+        let finished = expectation(description: "handler finished")
+        let (release, releaseHandler) = AsyncStream<Void>.makeStream()
+        let conversation = makeConversation { _ in
+            started.fulfill()
+            for await _ in release {
+                break
+            }
+            finished.fulfill()
+            return .result("From the handler")
+        }
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+        await fulfillment(of: [started], timeout: 1)
+        try await conversation.sendToolResult(.init(toolCallId: "call_1", result: "From the app"))
+        releaseHandler.yield()
+        await fulfillment(of: [finished], timeout: 1)
+
+        XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.map { $0["result"] as? String }, ["From the app"])
     }
 
     func testPendingLeavesTheCallForTheApp() async throws {

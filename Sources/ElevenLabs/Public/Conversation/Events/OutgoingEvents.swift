@@ -96,10 +96,16 @@ public struct ClientToolResultEvent: Sendable {
     }
 
     /// The agent's model reads the result as text, so dates are ISO 8601, not
-    /// `JSONEncoder`'s default of seconds since 2001.
+    /// `JSONEncoder`'s default of seconds since 2001. Milliseconds are kept,
+    /// which `.iso8601` would drop.
     static func json(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
         return try String(decoding: encoder.encode(value), as: UTF8.self)
     }
 }
