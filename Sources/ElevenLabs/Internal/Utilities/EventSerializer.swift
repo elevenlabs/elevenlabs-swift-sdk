@@ -92,15 +92,9 @@ enum EventSerializer {
             }
         }
 
-        // Conversation overrides
-        let conversationOverrides = config.conversationOverrides
-        var conversation: [String: Any] = [:]
-        if conversationOverrides.textOnly {
-            conversation["text_only"] = true
-        }
-        if !conversation.isEmpty {
-            configOverride["conversation"] = conversation
-        }
+        // Conversation overrides. `text_only` is sent for voice too, because without it
+        // an agent in chat mode runs a voice session as text only.
+        configOverride["conversation"] = ["text_only": config.conversationOverrides.textOnly]
 
         if !configOverride.isEmpty {
             json["conversation_config_override"] = configOverride

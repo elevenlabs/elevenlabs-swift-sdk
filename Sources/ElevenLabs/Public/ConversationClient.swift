@@ -88,6 +88,10 @@ public final class ConversationClient: ObservableObject {
 
     /// Start a voice conversation. Any previously-started session still running
     /// is ended first, then a fresh single-use session is created and connected.
+    ///
+    /// If the agent has chat mode on, its security settings must allow clients to
+    /// override "Text only". Otherwise the start fails with
+    /// `ConversationError.connectionFailed(.initializationFailed, _)`.
     public func startVoiceConversation(
         _ auth: ConversationAuth.Voice,
         config: ConversationConfig = .init()

@@ -104,7 +104,8 @@ public struct TTSOverrides: Sendable {
 
 /// Conversation behavior overrides
 public struct ConversationOverrides: Sendable {
-    /// Set when starting a text conversation. Sent as `text_only` on conversation init.
+    /// Set by the start call: `true` for a text conversation, `false` for voice.
+    /// Sent as `text_only` on conversation init in both cases.
     var textOnly = false
 
     public init() {}
