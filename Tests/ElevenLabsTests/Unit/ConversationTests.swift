@@ -115,6 +115,16 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(errorsAfterSuccess.isEmpty)
     }
 
+    func testStartVoiceConversationAsksForVoice() async throws {
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent-id"))
+
+        let initPayload = try XCTUnwrap(mockWebRTCConnectionManager.publishedPayloads.first {
+            (try? sentEventType(from: $0)) == "conversation_initiation_client_data"
+        })
+        // Without an explicit `false`, an agent in chat mode runs the session as text only.
+        XCTAssertEqual(try conversationInitTextOnly(from: initPayload), false)
+    }
+
     func testConversationCanOnlyStartOnce() async throws {
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "first-agent"))
         await conversation.endConversation()
