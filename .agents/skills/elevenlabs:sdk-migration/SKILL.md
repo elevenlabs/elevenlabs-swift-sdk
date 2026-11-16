@@ -307,7 +307,7 @@ v4 adds an `ElevenLabsWidget` library (iOS 16+) with `ChatWidget`: a floating la
 If the app hand-rolls conversation UI (transcript list, mic button, connection indicator), tell the user `ChatWidget` could replace that code and ask whether they want to adopt it — do not replace working custom UI unprompted:
 
 ```swift
-import ElevenLabsWidget
+@_spi(Experimental) import ElevenLabsWidget
 
 ZStack {
     YourAppContent()

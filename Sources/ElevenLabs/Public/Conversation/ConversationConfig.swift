@@ -10,8 +10,9 @@ public struct ConversationConfig: Sendable {
     /// Values for the agent's dynamic variables, sent with their native JSON types.
     public var dynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
-    /// Workspace environment (`production` if nil). Applied to the public-agent
-    /// token request, signed WebSocket URL, and conversation init.
+    /// Workspace environment (`production` if nil). Applies only to public-agent
+    /// starts. For a signed WebSocket URL or a conversation token, pass
+    /// `environment` to the endpoint that mints it on your server.
     public var environment: String?
 
     /// How to handle microphone setup failures during connection.
