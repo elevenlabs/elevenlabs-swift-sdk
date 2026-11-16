@@ -15,4 +15,4 @@ jobs:
         run: brew install swiftformat
 
       - name: Run SwiftFormat in Strict Mode
-        run: swiftformat . --strict
+        run: swiftformat . --lint --strict --reporter github-actions-log
