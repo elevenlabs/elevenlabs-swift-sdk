@@ -24,15 +24,13 @@ Follow these steps in sequence — each builds on the previous one.
 
 ## Installation
 
-While v4 is in prerelease, pin the exact version — SwiftPM's `from:` ranges do not resolve prerelease tags:
+Add v4 with Swift Package Manager:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", exact: "4.0.0-alpha.2")
+    .package(url: "https://github.com/elevenlabs/elevenlabs-swift-sdk.git", from: "4.0.0")
 ]
 ```
-
-Once a stable `4.0.0` tag exists, use `from: "4.0.0"` instead.
 
 ## Replace `ElevenLabs.startConversation` with `ConversationClient`
 
