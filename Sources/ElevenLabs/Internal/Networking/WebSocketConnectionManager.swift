@@ -179,12 +179,15 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         receiveError: Error
     ) -> EndReason {
         switch closeCode {
-        case .normalClosure:
-            .agentEnded()
         case .invalid:
             .error(EndReason.Details(message: receiveError.localizedDescription))
+        case .normalClosure:
+            .agentEnded(EndReason.Details(closeCode: closeCode.rawValue))
         default:
-            .error(EndReason.Details(message: "The connection was closed by the server."))
+            .error(EndReason.Details(
+                message: "The connection was closed by the server.",
+                closeCode: closeCode.rawValue
+            ))
         }
     }
 

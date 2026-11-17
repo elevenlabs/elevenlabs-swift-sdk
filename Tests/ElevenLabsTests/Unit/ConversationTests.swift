@@ -1110,11 +1110,13 @@ final class ConversationTests: XCTestCase {
         )
         _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent-id"))
 
-        await mockWebSocketConnectionManager.onDisconnected?(.agentEnded())
+        let serverClose = EndReason.error(EndReason.Details(message: "Closed", closeCode: 1011))
+        await mockWebSocketConnectionManager.onDisconnected?(serverClose)
 
         let values = await waitForValues(reasons, count: 1)
-        XCTAssertEqual(values, [.agentEnded()])
-        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded()))
+        XCTAssertEqual(values, [serverClose])
+        XCTAssertEqual(values.first?.details?.closeCode, 1011)
+        XCTAssertEqual(conversation.state, .ended(reason: serverClose))
     }
 }
 

@@ -23,8 +23,13 @@ public enum EndReason: Equatable, Sendable {
         /// A description of what ended the conversation, for logs. Not meant to be matched on.
         public var message: String?
 
-        public init(message: String? = nil) {
+        /// The close code the server sent when it closed the WebSocket of a text-only conversation.
+        /// `nil` when the connection ended without one, and for voice conversations.
+        public var closeCode: Int?
+
+        public init(message: String? = nil, closeCode: Int? = nil) {
             self.message = message
+            self.closeCode = closeCode
         }
     }
 }

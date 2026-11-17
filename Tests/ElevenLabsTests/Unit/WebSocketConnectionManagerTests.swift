@@ -7,22 +7,21 @@ final class WebSocketConnectionManagerTests: XCTestCase {
 
     func testNormalCloseIsTheAgentEnding() {
         let reason = WebSocketConnectionManager.endReason(closeCode: .normalClosure, receiveError: receiveError)
-        XCTAssertEqual(reason, .agentEnded())
+        XCTAssertEqual(reason, .agentEnded(EndReason.Details(closeCode: 1000)))
     }
 
-    func testOtherCloseCodesAreErrors() {
+    func testOtherCloseCodesAreErrorsWithTheCode() {
         for closeCode in [URLSessionWebSocketTask.CloseCode.goingAway, .policyViolation, .internalServerError] {
             let reason = WebSocketConnectionManager.endReason(closeCode: closeCode, receiveError: receiveError)
-            XCTAssertEqual(
-                reason,
-                .error(EndReason.Details(message: "The connection was closed by the server.")),
-                "\(closeCode.rawValue)"
-            )
+            guard case let .error(details) = reason else { return XCTFail("Expected .error, got \(reason)") }
+            XCTAssertEqual(details.closeCode, closeCode.rawValue)
+            XCTAssertEqual(details.message, "The connection was closed by the server.")
         }
     }
 
-    func testSocketFailureWithoutCloseFrameIsAnError() {
+    func testSocketFailureWithoutCloseFrameIsAnErrorWithoutACode() {
         let reason = WebSocketConnectionManager.endReason(closeCode: .invalid, receiveError: receiveError)
         XCTAssertEqual(reason, .error(EndReason.Details(message: receiveError.localizedDescription)))
+        XCTAssertNil(reason.details?.closeCode)
     }
 }
