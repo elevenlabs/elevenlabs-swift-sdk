@@ -34,7 +34,7 @@ struct ChatTranscriptView: View {
         let message = switch ended.reason {
         case .userEnded: strings.userEndedConversation
         case .agentEnded: strings.agentEndedConversation
-        case .remoteDisconnected: strings.connectionLost
+        case .error: strings.connectionLost
         }
         return VStack(spacing: 2) {
             Text(message)

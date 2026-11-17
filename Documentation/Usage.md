@@ -88,6 +88,27 @@ client.$state
     .store(in: &cancellables)
 ```
 
+The `EndReason` in `.ended`, which `onDisconnect` also receives, says what ended the conversation:
+
+| `EndReason` | What ended it |
+| --- | --- |
+| `.userEnded` | The app called `endConversation()` |
+| `.agentEnded` | The agent: it called its `end_call` tool, left the room, or the server closed the connection normally |
+| `.error` | A failure: the connection dropped, or the server ended the conversation with an error |
+
+`.agentEnded` and `.error` carry `EndReason.Details` with what the SDK knows about the end; `reason.details?.message` describes it for logs.
+
+```swift
+switch reason {
+case .userEnded:
+    break
+case .agentEnded:
+    showSummary()
+case let .error(details):
+    showRetry(details.message)
+}
+```
+
 ### Handling Errors
 
 Every failure is a `ConversationError`. Each case needs a different response; a connection failure also says what broke:
@@ -600,7 +621,7 @@ final class ReconnectionManager: ObservableObject {
                 guard let self else { return }
 
                 switch state {
-                case .ended(reason: .remoteDisconnected), .error(.connectionFailed):
+                case .ended(reason: .error), .error(.connectionFailed):
                     self.showReconnectButton = true
                 case .connected:
                     self.showReconnectButton = false
@@ -787,7 +808,7 @@ do {
 
 ### 4. Handling Connection Drops
 
-Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
+Listen to the `$state` property. If you see `.ended(reason: .error)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
 
 ### 5. Privacy
 

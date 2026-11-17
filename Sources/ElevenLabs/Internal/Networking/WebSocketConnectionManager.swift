@@ -4,8 +4,8 @@ import Foundation
 ///
 /// Opens a single `URLSessionWebSocketTask` to the text conversation endpoint,
 /// sends `conversationInit` once the socket is open, then runs a receive loop
-/// that forwards incoming events and waits for initiation metadata. On runtime
-/// socket error, fires `onDisconnected` once.
+/// that forwards incoming events and waits for initiation metadata. When the
+/// socket closes or fails, fires `onDisconnected` once with what ended it.
 ///
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
@@ -85,8 +85,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 onEvent: { [weak self] event in
                     self?.deliver(event)
                 },
-                onFailure: { [weak self] error in
-                    await self?.handleReceiveFailure(error)
+                onFailure: { [weak self] error, reason in
+                    await self?.handleReceiveFailure(error, reason: reason)
                 }
             )
         }
@@ -136,7 +136,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         metadataWaiter: ConversationInitiationMetadataWaiter,
         logger: any Logging,
         onEvent: @escaping @MainActor @Sendable (IncomingEvent) -> Void,
-        onFailure: @escaping @Sendable (Error) async -> Void
+        onFailure: @escaping @Sendable (Error, EndReason) async -> Void
     ) async {
         while !Task.isCancelled {
             do {
@@ -156,7 +156,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                await onFailure(error)
+                await onFailure(error, endReason(closeCode: task.closeCode, receiveError: error))
                 return
             }
         }
@@ -166,10 +166,26 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         onEventReceived?(event)
     }
 
-    private func handleReceiveFailure(_ error: Error) async {
+    private func handleReceiveFailure(_ error: Error, reason: EndReason) async {
         task = nil
         errorHandler?(error)
-        await onDisconnected?(.remoteDisconnected)
+        await onDisconnected?(reason)
+    }
+
+    /// A normal close (1000) is the agent ending the conversation; any other close, or a failure
+    /// without a close frame (`closeCode` is `.invalid`), is an error.
+    nonisolated static func endReason(
+        closeCode: URLSessionWebSocketTask.CloseCode,
+        receiveError: Error
+    ) -> EndReason {
+        switch closeCode {
+        case .normalClosure:
+            .agentEnded()
+        case .invalid:
+            .error(EndReason.Details(message: receiveError.localizedDescription))
+        default:
+            .error(EndReason.Details(message: "The connection was closed by the server."))
+        }
     }
 
     static func websocketUrl(

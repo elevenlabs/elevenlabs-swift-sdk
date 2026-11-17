@@ -672,7 +672,7 @@ final class ConversationTests: XCTestCase {
         }
         await mock.waitUntilWaitingForAgent()
 
-        await mock.onDisconnected?(.remoteDisconnected)
+        await mock.onDisconnected?(.error())
 
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
@@ -691,7 +691,7 @@ final class ConversationTests: XCTestCase {
     func testDropRacingASuccessfulConnectStillFailsTheStart() async throws {
         let mock = try XCTUnwrap(mockWebRTCConnectionManager)
         mock.onConnectCompleted = {
-            await mock.onDisconnected?(.remoteDisconnected)
+            await mock.onDisconnected?(.error())
         }
 
         await XCTAssertThrowsErrorAsync {
@@ -1059,7 +1059,7 @@ final class ConversationTests: XCTestCase {
         let config = makeConfig()
         let callbacks = makeCallbacks(configure: { callbacks in
             callbacks.onDisconnect = { reason in
-                XCTAssertEqual(reason, .remoteDisconnected)
+                XCTAssertEqual(reason, .agentEnded())
                 gotDisconnect.fulfill()
             }
         })
@@ -1069,7 +1069,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.state.isConnected)
         let disconnectsBefore = mockWebRTCConnectionManager.disconnectCallCount
 
-        await mockWebRTCConnectionManager.onDisconnected?(.remoteDisconnected)
+        await mockWebRTCConnectionManager.onDisconnected?(.agentEnded())
 
         XCTAssertEqual(
             mockWebRTCConnectionManager.disconnectCallCount,
@@ -1077,7 +1077,27 @@ final class ConversationTests: XCTestCase {
             "Agent disconnect should trigger webRTCConnectionManager.disconnect()"
         )
         await fulfillment(of: [gotDisconnect], timeout: 1.0)
-        XCTAssertEqual(conversation.state, .ended(reason: .remoteDisconnected))
+        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded()))
+    }
+
+    func testErrorThatEndsTheConversationIsReportedAsAnError() async throws {
+        let reasons = ValueRecorder<EndReason>()
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onDisconnect = { reason in Task { await reasons.append(reason) } }
+        })
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks
+        )
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent-id"))
+
+        let failure = EndReason.error(EndReason.Details(message: "LiveKit room disconnected: Server shutdown"))
+        let onDisconnected = try XCTUnwrap(mockWebRTCConnectionManager.onDisconnected)
+        await onDisconnected(failure)
+        await onDisconnected(.agentEnded())
+
+        let values = await waitForValues(reasons, count: 1)
+        XCTAssertEqual(values, [failure])
+        XCTAssertEqual(conversation.state, .ended(reason: failure), "A later end must not replace the error")
     }
 
     func testTransportEndReasonReachesOnDisconnect() async throws {
@@ -1085,14 +1105,16 @@ final class ConversationTests: XCTestCase {
         let callbacks = makeCallbacks(configure: { callbacks in
             callbacks.onDisconnect = { reason in Task { await reasons.append(reason) } }
         })
-        let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks
+        )
         _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent-id"))
 
-        await mockWebSocketConnectionManager.onDisconnected?(.agentEnded)
+        await mockWebSocketConnectionManager.onDisconnected?(.agentEnded())
 
         let values = await waitForValues(reasons, count: 1)
-        XCTAssertEqual(values, [.agentEnded])
-        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded))
+        XCTAssertEqual(values, [.agentEnded()])
+        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded()))
     }
 }
 
