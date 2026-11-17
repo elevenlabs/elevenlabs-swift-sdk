@@ -1058,8 +1058,8 @@ final class ConversationTests: XCTestCase {
         let gotDisconnect = expectation(description: "agent disconnect")
         let config = makeConfig()
         let callbacks = makeCallbacks(configure: { callbacks in
-            callbacks.onDisconnect = { reason in
-                XCTAssertEqual(reason, .remoteDisconnected)
+            callbacks.onDisconnect = { details in
+                XCTAssertEqual(details, DisconnectionDetails(reason: .remoteDisconnected))
                 gotDisconnect.fulfill()
             }
         })
@@ -1080,25 +1080,24 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(conversation.state, .ended(reason: .remoteDisconnected))
     }
 
-    func testOnDisconnectDetailsIsCalledWithOnDisconnect() async throws {
-        let calls = ValueRecorder<String>()
+    func testUserEndReportsNoCloseDetails() async throws {
+        let disconnects = ValueRecorder<DisconnectionDetails>()
         let callbacks = makeCallbacks(configure: { callbacks in
-            callbacks.onDisconnect = { reason in Task { await calls.append("onDisconnect \(reason)") } }
-            callbacks.onDisconnectDetails = { details in Task { await calls.append("onDisconnectDetails \(details.reason)") } }
+            callbacks.onDisconnect = { details in Task { await disconnects.append(details) } }
         })
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent-id"))
 
         await conversation.endConversation()
 
-        let values = await waitForValues(calls, count: 2)
-        XCTAssertEqual(Set(values), ["onDisconnect userEnded", "onDisconnectDetails userEnded"])
+        let values = await waitForValues(disconnects, count: 1)
+        XCTAssertEqual(values, [DisconnectionDetails(reason: .userEnded)])
     }
 
-    func testServerCloseCodeAndReasonReachOnDisconnectDetails() async throws {
+    func testServerCloseCodeAndReasonReachOnDisconnect() async throws {
         let disconnects = ValueRecorder<DisconnectionDetails>()
         let callbacks = makeCallbacks(configure: { callbacks in
-            callbacks.onDisconnectDetails = { details in Task { await disconnects.append(details) } }
+            callbacks.onDisconnect = { details in Task { await disconnects.append(details) } }
         })
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
         _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent-id"))

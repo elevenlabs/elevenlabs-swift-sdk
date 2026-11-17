@@ -1,8 +1,8 @@
 import Foundation
 
-/// How a conversation ended, delivered to `onDisconnectDetails`.
+/// How a conversation ended, delivered to `onDisconnect`.
 public struct DisconnectionDetails: Equatable, Sendable {
-    /// Why the conversation ended; the same value `onDisconnect` receives.
+    /// Why the conversation ended; the same value as `ConversationState.ended(reason:)`.
     public var reason: EndReason
 
     /// The close code the server sent when it closed the WebSocket of a text-only conversation.

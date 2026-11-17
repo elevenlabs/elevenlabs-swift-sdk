@@ -108,7 +108,7 @@ let conversation = try await ElevenLabs.startConversation(
 
 ```swift
 let client = ConversationClient(callbacks: ConversationCallbacks(
-    onDisconnect: { reason in print("Ended: \(reason)") },
+    onDisconnect: { details in print("Ended: \(details.reason)") },
     onAgentResponse: { text, _ in print("Agent: \(text)") },
     onUserTranscript: { text, _ in print("User: \(text)") }
 ))
@@ -116,7 +116,7 @@ let client = ConversationClient(callbacks: ConversationCallbacks(
 
 When migrating:
 
-- `onDisconnect` now receives an `EndReason` (`.userEnded`, `.agentEnded`, `.remoteDisconnected`) instead of `DisconnectionReason`. The agent invoking its `end_call` tool reports as `.agentEnded`.
+- `onDisconnect` now receives a `DisconnectionDetails` instead of a `DisconnectionReason`. Its `reason` is an `EndReason` (`.userEnded`, `.agentEnded`, `.remoteDisconnected`); the agent invoking its `end_call` tool reports as `.agentEnded`. Read `details.reason` where v3 code switched on the reason. For a text-only conversation the server closed, `closeCode` and `closeReason` carry what the server sent.
 - `onStartupStateChange` is gone — startup stages arrive through `state == .connecting(stage)`.
 - Callback closures are typed `@Sendable` and are not actor-isolated. The SDK delivers them on the main thread, but under Swift 6 strict concurrency the compiler still requires a hop (`Task { @MainActor in ... }` or `MainActor.assumeIsolated`) before touching main-actor state inside them. In Swift 5 mode, existing v3 callback bodies work unchanged. `onClientToolCall` is the exception: it runs on the main actor.
 - Argument order in the `ConversationCallbacks` initializer follows its declaration order (`onAgentReady`, `onDisconnect`, `onError`, `onSpeechDetectedWhileMuted`, `onAgentResponse`, ..., `onUserTranscript`, ...); reorder call sites accordingly.

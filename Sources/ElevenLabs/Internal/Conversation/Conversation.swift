@@ -211,8 +211,7 @@ final class Conversation: ObservableObject {
         tearDownActiveSession()
         let ending = Task {
             await connectionManager.disconnect()
-            callbacks.onDisconnect?(reason)
-            callbacks.onDisconnectDetails?(details)
+            callbacks.onDisconnect?(details)
         }
         self.ending = ending
         await ending.value

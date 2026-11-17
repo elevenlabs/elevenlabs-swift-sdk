@@ -789,11 +789,11 @@ do {
 
 Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
 
-For text-only conversations, `onDisconnectDetails` receives the same `EndReason` plus the close code and reason the server sent when it closed the WebSocket:
+`onDisconnect` receives a `DisconnectionDetails`: the same `EndReason` as the state, plus, for a text-only conversation, the close code and reason the server sent when it closed the WebSocket:
 
 ```swift
 let callbacks = ConversationCallbacks(
-    onDisconnectDetails: { details in
+    onDisconnect: { details in
         if let closeCode = details.closeCode {
             print("Server closed the conversation: \(closeCode) \(details.closeReason ?? "")")
         }

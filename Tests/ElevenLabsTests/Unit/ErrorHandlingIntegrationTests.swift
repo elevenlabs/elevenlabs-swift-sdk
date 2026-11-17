@@ -406,9 +406,9 @@ extension ErrorHandlingIntegrationTests {
                 let timestamp = Self.formatTimestamp()
                 print("✅ [\(timestamp)] AGENT READY")
             },
-            onDisconnect: { reason in
+            onDisconnect: { details in
                 let timestamp = Self.formatTimestamp()
-                print("🔌 [\(timestamp)] DISCONNECTED (reason: \(reason))")
+                print("🔌 [\(timestamp)] DISCONNECTED (reason: \(details.reason))")
             },
             onError: { error in
                 let timestamp = Self.formatTimestamp()

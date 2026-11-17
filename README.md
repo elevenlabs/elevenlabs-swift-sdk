@@ -256,7 +256,7 @@ Want to handle events without Combine? Pass `ConversationCallbacks` when creatin
 
 ```swift
 let callbacks = ConversationCallbacks(
-    onDisconnect: { reason in print("Ended: \(reason)") },
+    onDisconnect: { details in print("Ended: \(details.reason)") },
     onAgentResponse: { text, _ in print("Agent said: \(text)") },
     onUserTranscript: { text, _ in print("User said: \(text)") },
     onVadScore: { score in print("Voice intensity: \(score)") }

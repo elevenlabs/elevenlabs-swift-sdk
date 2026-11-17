@@ -5,11 +5,9 @@ public struct ConversationCallbacks: Sendable {
     /// Called when the agent is ready and the conversation can begin
     public var onAgentReady: (@Sendable () -> Void)?
 
-    /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable (EndReason) -> Void)?
-
-    /// Called with the details of how the conversation ended, right after `onDisconnect`
-    public var onDisconnectDetails: (@Sendable (DisconnectionDetails) -> Void)?
+    /// Called when the agent disconnects or the conversation ends, with why it ended and, for a
+    /// text-only conversation the server closed, the close code and reason it sent
+    public var onDisconnect: (@Sendable (DisconnectionDetails) -> Void)?
 
     /// Called when a startup-related error occurs
     public var onError: (@Sendable (ConversationError) -> Void)?
@@ -60,8 +58,7 @@ public struct ConversationCallbacks: Sendable {
 
     public init(
         onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (EndReason) -> Void)? = nil,
-        onDisconnectDetails: (@Sendable (DisconnectionDetails) -> Void)? = nil,
+        onDisconnect: (@Sendable (DisconnectionDetails) -> Void)? = nil,
         onError: (@Sendable (ConversationError) -> Void)? = nil,
         onSpeechDetectedWhileMuted: (@Sendable () -> Void)? = nil,
         onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
@@ -79,7 +76,6 @@ public struct ConversationCallbacks: Sendable {
     ) {
         self.onAgentReady = onAgentReady
         self.onDisconnect = onDisconnect
-        self.onDisconnectDetails = onDisconnectDetails
         self.onError = onError
         self.onSpeechDetectedWhileMuted = onSpeechDetectedWhileMuted
         self.onAgentResponse = onAgentResponse
