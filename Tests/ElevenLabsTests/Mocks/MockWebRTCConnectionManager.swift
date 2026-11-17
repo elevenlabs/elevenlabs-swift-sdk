@@ -15,7 +15,7 @@ final class MockWebRTCConnectionManager: WebRTCConnectionManaging {
         }
     }
 
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((EndReason) async -> Void)?
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? {
         didSet {
             if onEventReceived != nil {

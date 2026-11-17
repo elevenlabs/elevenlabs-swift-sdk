@@ -337,10 +337,15 @@ final class Conversation: ObservableObject {
         }
         // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
         var dropFailure: ConversationError?
-        manager.onDisconnected = { [weak self, weak manager] in
+        manager.onDisconnected = { [weak self, weak manager] reason in
             guard let self else { return }
-            guard state.isConnecting else { return await endConversation(reason: .remoteDisconnected) }
-            dropFailure = startupError(from: ConversationError.notConnected)
+            guard state.isConnecting else { return await endConversation(reason: reason) }
+            let failure = startupError(from: ConversationError.notConnected)
+            if case let .connectionFailed(stage, _) = failure, let closeReason = reason.details?.closeReason {
+                dropFailure = .connectionFailed(stage, closeReason)
+            } else {
+                dropFailure = failure
+            }
             await manager?.disconnect()
         }
 
@@ -630,7 +635,7 @@ final class Conversation: ObservableObject {
             applyStateSignal(.agentToolResponse, fallback: .listening)
 
             if toolResponse.toolName == "end_call" {
-                await endConversation(reason: .agentEnded)
+                await endConversation(reason: .agentEnded())
             }
             callbacks.onAgentToolResponse?(toolResponse)
 

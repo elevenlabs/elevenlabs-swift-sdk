@@ -27,7 +27,7 @@ enum WebRTCConnectionManagerError: Error {
 @MainActor
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((EndReason) async -> Void)?
 
     /// Fired when LiveKit receives and parses a protocol event from the room.
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
@@ -248,8 +248,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                     self?.onRemoteSpeakingChanged?(isSpeaking)
                 }
             },
-            onRemoteDisconnect: { [weak self] in
-                await self?.handleRemoteDisconnect()
+            onRemoteDisconnect: { [weak self] reason in
+                await self?.handleRemoteDisconnect(reason)
             },
             onTracksChanged: { [weak self] in
                 Task { @MainActor in self?.onTracksChanged?() }
@@ -330,8 +330,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         eventDelegate = nil
     }
 
-    private func handleRemoteDisconnect() async {
-        await onDisconnected?()
+    private func handleRemoteDisconnect(_ reason: EndReason) async {
+        await onDisconnected?(reason)
     }
 
     // MARK: – Private helpers
@@ -384,16 +384,21 @@ private func isAgentParticipant(_ participant: Participant) -> Bool {
 
 /// `RoomDelegate` that forwards data, remote speaking, remote-disconnect, and
 /// audio track availability events to manager-supplied closures.
-final class LiveKitRoomEventDelegate: RoomDelegate {
+final class LiveKitRoomEventDelegate: RoomDelegate, @unchecked Sendable {
     private let onData: @Sendable (Data) -> Void
     private let onRemoteSpeaking: @Sendable (Bool) -> Void
-    private let onRemoteDisconnect: @Sendable () async -> Void
+    private let onRemoteDisconnect: @Sendable (EndReason) async -> Void
     private let onTracksChanged: @Sendable () -> Void
+
+    /// LiveKit calls the delegate in order on one queue, so the first end is picked here: the
+    /// tasks that forward it could run out of order.
+    private let endLock = NSLock()
+    private var endReported = false
 
     init(
         onData: @escaping @Sendable (Data) -> Void,
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void,
-        onRemoteDisconnect: @escaping @Sendable () async -> Void,
+        onRemoteDisconnect: @escaping @Sendable (EndReason) async -> Void,
         onTracksChanged: @escaping @Sendable () -> Void = {}
     ) {
         self.onData = onData
@@ -415,16 +420,57 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
     }
 
     nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
-        guard isAgentParticipant(participant) || room.remoteParticipants.isEmpty else { return }
-        Task { [onRemoteDisconnect] in
-            await onRemoteDisconnect()
+        guard Self.leaveEndsConversation(
+            isAgent: isAgentParticipant(participant),
+            isStillListed: room.remoteParticipants.values.contains { $0 === participant },
+            othersRemain: !room.remoteParticipants.isEmpty,
+            roomState: room.connectionState
+        ) else { return }
+        reportEnd(.agentEnded())
+    }
+
+    /// Whether a participant leaving is the agent ending the conversation. LiveKit reports every
+    /// participant, still listed, before a room teardown or full reconnect drops it; that isn't a
+    /// leave, and `didDisconnectWithError` reports the end if the room goes down.
+    static func leaveEndsConversation(
+        isAgent: Bool,
+        isStillListed: Bool,
+        othersRemain: Bool,
+        roomState: ConnectionState
+    ) -> Bool {
+        roomState == .connected && !isStillListed && (isAgent || !othersRemain)
+    }
+
+    nonisolated func room(_: Room, didDisconnectWithError error: LiveKitError?) {
+        reportEnd(Self.endReason(for: error))
+    }
+
+    /// The server closing the room, or removing this participant from it, is the agent ending the
+    /// conversation; any other disconnect is an error.
+    static func endReason(for error: LiveKitError?) -> EndReason {
+        guard let error else {
+            return .error(EndReason.Details(message: "LiveKit room disconnected"))
+        }
+        let details = EndReason.Details(
+            message: "LiveKit room disconnected: \(error.localizedDescription)",
+            roomDisconnectReason: EndReason.RoomDisconnectReason(error.type)
+        )
+        switch error.type {
+        case .cancelled, .participantRemoved, .roomDeleted:
+            return .agentEnded(details)
+        default:
+            return .error(details)
         }
     }
 
-    nonisolated func room(_: Room, didUpdateConnectionState state: ConnectionState, from _: ConnectionState) {
-        guard state == .disconnected else { return }
+    private func reportEnd(_ reason: EndReason) {
+        endLock.lock()
+        let isFirst = !endReported
+        endReported = true
+        endLock.unlock()
+        guard isFirst else { return }
         Task { [onRemoteDisconnect] in
-            await onRemoteDisconnect()
+            await onRemoteDisconnect(reason)
         }
     }
 
@@ -447,6 +493,25 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
     nonisolated func room(_: Room, participant _: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
         guard publication.kind == .audio else { return }
         onTracksChanged()
+    }
+}
+
+extension EndReason.RoomDisconnectReason {
+    /// LiveKit's Swift SDK keeps the server's `DisconnectReason` internal and turns it into the error
+    /// type below, folding every reason it doesn't name into `.unknown`. `nil` for an error type that
+    /// no `DisconnectReason` maps to, such as a network failure.
+    init?(_ type: LiveKitErrorType) {
+        switch type {
+        case .cancelled: self = .clientInitiated
+        case .duplicateIdentity: self = .duplicateIdentity
+        case .serverShutdown: self = .serverShutdown
+        case .participantRemoved: self = .participantRemoved
+        case .roomDeleted: self = .roomDeleted
+        case .stateMismatch: self = .stateMismatch
+        case .joinFailure: self = .joinFailure
+        case .unknown: self = .unknown
+        default: return nil
+        }
     }
 }
 

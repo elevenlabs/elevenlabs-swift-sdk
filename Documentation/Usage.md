@@ -88,6 +88,27 @@ client.$state
     .store(in: &cancellables)
 ```
 
+The `EndReason` in `.ended`, which `onDisconnect` also receives, says what ended the conversation:
+
+| `EndReason` | What ended it |
+| --- | --- |
+| `.userEnded` | The app called `endConversation()` |
+| `.agentEnded` | The agent: it called its `end_call` tool, left the room, or the server closed the connection normally |
+| `.error` | A failure: the connection dropped, or the server ended the conversation with an error |
+
+`.agentEnded` and `.error` carry `EndReason.Details` with what the SDK knows about the end; `reason.details?.message` describes it for logs. When the server ends a voice conversation's room, `details.roomDisconnectReason` is the reason it gave, such as `.roomDeleted` (`.agentEnded`) or `.serverShutdown` (`.error`). LiveKit's Swift SDK names seven reasons and reports the rest, including `ROOM_CLOSED`, as `.unknown`, which the SDK treats as an error. For text-only conversations, see the close code and reason under [Text-Only Conversations](#text-only).
+
+```swift
+switch reason {
+case .userEnded:
+    break
+case .agentEnded:
+    showSummary()
+case let .error(details):
+    showRetry(details.message)
+}
+```
+
 ### Handling Errors
 
 Every failure is a `ConversationError`. Each case needs a different response; a connection failure also says what broke:
@@ -143,6 +164,18 @@ client.$chatHistory
 ```
 
 For private agents, authenticate with a signed WebSocket URL minted by your backend — see [Advanced Authentication](#advanced-authentication).
+
+When the server closes the WebSocket, `onDisconnect` receives `.agentEnded` for a normal close (1000) and `.error` for any other close code, with the code and reason the server sent in `details.closeCode` and `details.closeReason`:
+
+```swift
+let callbacks = ConversationCallbacks(
+    onDisconnect: { reason in
+        if let closeCode = reason.details?.closeCode {
+            print("Server closed the conversation: \(closeCode) \(reason.details?.closeReason ?? "")")
+        }
+    }
+)
+```
 
 ---
 
@@ -600,7 +633,7 @@ final class ReconnectionManager: ObservableObject {
                 guard let self else { return }
 
                 switch state {
-                case .ended(reason: .remoteDisconnected), .error(.connectionFailed):
+                case .ended(reason: .error), .error(.connectionFailed):
                     self.showReconnectButton = true
                 case .connected:
                     self.showReconnectButton = false
@@ -787,7 +820,7 @@ do {
 
 ### 4. Handling Connection Drops
 
-Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
+Listen to the `$state` property. If you see `.ended(reason: .error)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead, carrying the server's close reason as its message when the server sent one.
 
 ### 5. Privacy
 
