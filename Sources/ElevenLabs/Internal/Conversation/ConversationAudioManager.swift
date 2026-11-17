@@ -8,68 +8,53 @@ import LiveKit
 /// Encapsulates all AudioManager interactions to keep Conversation class focused on conversation logic.
 @MainActor
 final class ConversationAudioManager {
-    private(set) var audioDevices: [AudioDevice] = []
-    private(set) var selectedAudioDeviceID: String = ""
     private(set) var softwareMuteProcessor: SoftwareMuteProcessor?
 
-    private let audioManager = AudioManager.shared
     private var previousSpeechActivityHandler: AudioManager.OnSpeechActivity?
     private var audioSpeechHandlerInstalled = false
     private let logger: any Logging
 
-    /// Callback when audio devices list changes
-    var onDevicesChanged: (([AudioDevice]) -> Void)?
-
-    /// Callback when selected device changes
-    var onSelectedDeviceChanged: ((String) -> Void)?
-
     init(logger: any Logging) {
         self.logger = logger
-        audioDevices = audioManager.inputDevices
-        selectedAudioDeviceID = audioManager.inputDevice.deviceId
-        setupInitialConfiguration()
+    }
+
+    static func setRecordingAlwaysPreparedMode(_ enabled: Bool) async throws {
+        try await AudioManager.shared.setRecordingAlwaysPreparedMode(enabled)
     }
 
     deinit {
-        // Reset callbacks directly since we can't call MainActor methods from deinit
-        audioManager.onDeviceUpdate = nil
         if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
         }
     }
 
     // MARK: - Configuration
 
-    /// Apply audio pipeline configuration from conversation options.
-    func configure(with options: ConversationOptions) async {
-        let config = options.audioConfiguration
+    /// Apply audio pipeline configuration from conversation config. In the mute modes that
+    /// detect speech while muted, `onSpeechDetectedWhileMuted` runs for each detection.
+    func configure(
+        with config: ConversationConfig,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) async {
+        let audioConfig = config.audioConfiguration
+        let muteMode = audioConfig?.microphoneMuteMode ?? .inputMixer
 
-        if let mode = config?.microphoneMuteMode {
-            do {
-                try audioManager.set(microphoneMuteMode: mode)
-            } catch {
-                logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
-            }
+        do {
+            try AudioManager.shared.set(microphoneMuteMode: muteMode.toLiveKit())
+        } catch {
+            logger.warning("Failed to set microphone mute mode", context: ["error": "\(error)"])
         }
 
-        if let bypass = config?.voiceProcessingBypassed {
-            audioManager.isVoiceProcessingBypassed = bypass
+        if let bypass = audioConfig?.voiceProcessingBypassed {
+            AudioManager.shared.isVoiceProcessingBypassed = bypass
         }
 
-        if let agc = config?.voiceProcessingAGCEnabled {
-            audioManager.isVoiceProcessingAGCEnabled = agc
+        if let agc = audioConfig?.voiceProcessingAGCEnabled {
+            AudioManager.shared.isVoiceProcessingAGCEnabled = agc
         }
 
-        if let prepared = config?.recordingAlwaysPrepared {
-            do {
-                try await audioManager.setRecordingAlwaysPreparedMode(prepared)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-
-        configureSpeechHandler(options: options)
-        configureSoftwareMuteProcessor(options: options)
+        configureSpeechHandler(muteMode: muteMode, onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted)
+        configureSoftwareMuteProcessor(muteMode: muteMode, onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted)
     }
 
     /// Cleanup audio state when conversation ends.
@@ -80,52 +65,22 @@ final class ConversationAudioManager {
 
     // MARK: - Private
 
-    private func setupInitialConfiguration() {
-        // Set initial microphone mute mode
-        do {
-            try audioManager.set(microphoneMuteMode: .inputMixer)
-        } catch {
-            logger.warning("Failed to set initial microphone mute mode", context: ["error": "\(error)"])
-        }
-
-        // Set recording always prepared mode asynchronously
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await audioManager.setRecordingAlwaysPreparedMode(true)
-            } catch {
-                logger.warning("Failed to set recording always prepared mode", context: ["error": "\(error)"])
-            }
-        }
-
-        // Setup device change observer
-        audioManager.onDeviceUpdate = { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.audioDevices = self.audioManager.inputDevices
-                self.selectedAudioDeviceID = self.audioManager.defaultInputDevice.deviceId
-                self.onDevicesChanged?(self.audioDevices)
-                self.onSelectedDeviceChanged?(self.selectedAudioDeviceID)
-            }
-        }
-    }
-
-    private func configureSpeechHandler(options: ConversationOptions) {
-        let config = options.audioConfiguration
-        let needsSpeechHandler = (config?.onSpeechActivity != nil) || (options.onSpeechActivity != nil)
-
-        if needsSpeechHandler {
+    private func configureSpeechHandler(
+        muteMode: MicrophoneMuteMode,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) {
+        if muteMode == .voiceProcessing {
             if !audioSpeechHandlerInstalled {
-                previousSpeechActivityHandler = audioManager.onMutedSpeechActivity
+                previousSpeechActivityHandler = AudioManager.shared.onMutedSpeechActivity
                 audioSpeechHandlerInstalled = true
             }
-            audioManager.onMutedSpeechActivity = { _, event in
-                // Handlers are @Sendable, they manage their own synchronization
-                if let handler = config?.onSpeechActivity {
-                    handler(event)
-                }
-                if let handler = options.onSpeechActivity {
-                    handler(event)
+            // A handler that the app set on LiveKit itself keeps getting the events.
+            let previousHandler = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = { manager, event in
+                previousHandler?(manager, event)
+                guard event == .started else { return }
+                Task { @MainActor in
+                    onSpeechDetectedWhileMuted()
                 }
             }
         } else if audioSpeechHandlerInstalled {
@@ -133,23 +88,28 @@ final class ConversationAudioManager {
         }
     }
 
-    private func configureSoftwareMuteProcessor(options: ConversationOptions) {
-        guard options.audioConfiguration?.useSoftwareMute == true else {
+    private func configureSoftwareMuteProcessor(
+        muteMode: MicrophoneMuteMode,
+        onSpeechDetectedWhileMuted: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard case let .software(speechThreshold, notificationThrottle) = muteMode else {
+            if softwareMuteProcessor != nil {
+                cleanupSoftwareMuteProcessor()
+            }
             return
         }
 
-        let audioConfig = options.audioConfiguration
         softwareMuteProcessor = SoftwareMuteProcessor(
-            onMutedSpeech: audioConfig?.onMutedSpeech,
-            mutedSpeechThresholdInDb: audioConfig?.mutedSpeechThreshold ?? -35,
-            mutedSpeechThrottleInSeconds: 3.0
+            onSpeechDetectedWhileMuted: onSpeechDetectedWhileMuted,
+            mutedSpeechThresholdInDb: speechThreshold,
+            mutedSpeechThrottleInSeconds: notificationThrottle
         )
         AudioManager.shared.capturePostProcessingDelegate = softwareMuteProcessor
     }
 
     private func cleanupSpeechHandler() {
         if audioSpeechHandlerInstalled {
-            audioManager.onMutedSpeechActivity = previousSpeechActivityHandler
+            AudioManager.shared.onMutedSpeechActivity = previousSpeechActivityHandler
             previousSpeechActivityHandler = nil
             audioSpeechHandlerInstalled = false
         }
@@ -158,5 +118,18 @@ final class ConversationAudioManager {
     private func cleanupSoftwareMuteProcessor() {
         AudioManager.shared.capturePostProcessingDelegate = nil
         softwareMuteProcessor = nil
+    }
+}
+
+extension MicrophoneMuteMode {
+    fileprivate func toLiveKit() -> LiveKit.MicrophoneMuteMode {
+        switch self {
+        case .inputMixer, .software:
+            .inputMixer
+        case .restart:
+            .restart
+        case .voiceProcessing:
+            .voiceProcessing
+        }
     }
 }

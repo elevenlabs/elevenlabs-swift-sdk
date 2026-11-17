@@ -16,6 +16,10 @@ let package = Package(
         .library(
             name: "ElevenLabs",
             targets: ["ElevenLabs"]
+        ),
+        .library(
+            name: "ElevenLabsWidget",
+            targets: ["ElevenLabsWidget"]
         )
     ],
     dependencies: [
@@ -27,14 +31,26 @@ let package = Package(
             dependencies: [
                 .product(name: "LiveKit", package: "client-sdk-swift")
             ],
-            // TODO: Re-enable StrictConcurrency once LiveKit depends on a JWTKit
-            // release where Sendable annotations are available (4.13.x patch or 5.x).
-            // Tracking: https://github.com/livekit/client-sdk-swift/issues/846
             exclude: [
                 "Internal/Protocol/schemas/agent.asyncapi.yaml"
             ],
             resources: [
                 .process("PrivacyInfo.xcprivacy")
+            ]
+        ),
+        .target(
+            name: "ElevenLabsWidget",
+            dependencies: [
+                "ElevenLabs"
+            ],
+            resources: [
+                .process("Resources/OrbShader.metal")
+            ]
+        ),
+        .testTarget(
+            name: "ElevenLabsWidgetTests",
+            dependencies: [
+                "ElevenLabsWidget"
             ]
         ),
         .testTarget(
@@ -49,5 +65,5 @@ let package = Package(
             ]
         )
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

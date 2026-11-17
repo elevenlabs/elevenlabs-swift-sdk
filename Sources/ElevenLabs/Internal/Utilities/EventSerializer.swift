@@ -92,44 +92,35 @@ enum EventSerializer {
             }
         }
 
-        // Conversation overrides
-        if let conversationOverrides = config.conversationOverrides {
-            var conversation: [String: Any] = [:]
-            if conversationOverrides.textOnly {
-                conversation["text_only"] = true
-            }
-            if let clientEvents = conversationOverrides.clientEvents {
-                conversation["client_events"] = clientEvents
-            }
-            if !conversation.isEmpty {
-                configOverride["conversation"] = conversation
-            }
-        }
+        // Conversation overrides. `text_only` is sent for voice too, because without it
+        // an agent in chat mode runs a voice session as text only.
+        configOverride["conversation"] = ["text_only": config.conversationOverrides.textOnly]
 
         if !configOverride.isEmpty {
             json["conversation_config_override"] = configOverride
         }
 
         if let customBody = config.customLlmExtraBody {
-            json["custom_llm_extra_body"] = customBody
+            json["custom_llm_extra_body"] = customBody.mapValues(\.jsonObject)
         }
 
-        if config.dynamicVariables != nil || config.typedDynamicVariables != nil {
-            var dynamicVars: [String: Any] = config.dynamicVariables ?? [:]
-            // Add typed values on top; on a key clash the typed value wins.
-            dynamicVars.merge(config.typedDynamicVariables?.mapValues(\.jsonObject) ?? [:]) { _, typed in typed }
-            json["dynamic_variables"] = dynamicVars
+        if let dynamicVars = config.dynamicVariables {
+            json["dynamic_variables"] = dynamicVars.mapValues(\.jsonObject)
         }
 
         // Add source_info (equivalent to client in React Native)
         var sourceInfo: [String: Any] = [:]
         sourceInfo["source"] = "swift_sdk"
-        sourceInfo["version"] = SDKVersion.version
+        sourceInfo["version"] = version
         json["source_info"] = sourceInfo
 
         // Add user_id if provided
         if let userId = config.userId {
             json["user_id"] = userId
+        }
+
+        if let environment = config.environment {
+            json["environment"] = environment
         }
 
         return json

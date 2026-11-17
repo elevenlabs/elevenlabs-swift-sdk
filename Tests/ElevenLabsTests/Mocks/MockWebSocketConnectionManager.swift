@@ -5,9 +5,12 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
     var errorHandler: ((Swift.Error?) -> Void)?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
     var connectError: Error?
     var sendError: Error?
+    var autoDeliverInitiationMetadata = true
+    var initiationMetadataConversationId = "test-conversation-id"
 
     private(set) var connectCallCount = 0
     private(set) var disconnectCallCount = 0
@@ -15,42 +18,70 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     private(set) var sentPayloads: [Data] = []
     private(set) var isConnected = false
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
+    @MainActor
+    func connect(
+        auth: ConversationAuth.TextOnly,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> ConversationStartResult {
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
         connectCallCount += 1
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
+        let resolved: (url: URL, agentId: String)
         do {
-            lastConnectedURL = try WebSocketConnectionManager.url(for: auth)
+            resolved = try await WebSocketConnectionManager.websocketUrl(
+                for: auth,
+                endpoints: config.endpoints,
+                environment: config.environment
+            )
+            lastConnectedURL = resolved.url
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
 
+        // Like the real transport, a handshake failure surfaces while sending the init.
+        onStartupStateChange(.sendingConversationInit)
         if let connectError {
             errorHandler?(connectError)
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = connectError as? ConversationError ?? .connectionFailed(connectError)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw connectError
         }
 
         isConnected = true
-
         do {
-            let initEvent = ConversationInitEvent(config: options.toConversationConfig())
+            let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw error
         }
 
-        metrics.conversationInitAttempts = 1
-        metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        if autoDeliverInitiationMetadata {
+            let metadata = makeInitiationMetadata()
+            await waiter.observe(metadata)
+            onEventReceived?(.conversationMetadata(metadata))
+        }
+
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: resolved.agentId, conversationId: metadata.conversationId),
+            metrics: metrics
+        )
     }
 
     func disconnect() async {
@@ -59,6 +90,8 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
         isConnected = false
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
     }
 
     func send(data: Data) async throws {
@@ -72,7 +105,26 @@ final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
         sentPayloads.append(data)
     }
 
-    func receive(data: Data) {
-        handleIncomingData(data, logger: SDKLogger(logLevel: .error))
+    @MainActor
+    func receive(data: Data) async {
+        guard let initiationMetadataWaiter else {
+            preconditionFailure("Cannot receive data before connecting")
+        }
+        await Self.handleIncomingData(
+            data,
+            metadataWaiter: initiationMetadataWaiter,
+            logger: SDKLogger(logLevel: .error),
+            onEvent: { [weak self] event in
+                self?.onEventReceived?(event)
+            }
+        )
+    }
+
+    private func makeInitiationMetadata() -> ConversationMetadataEvent {
+        ConversationMetadataEvent(
+            conversationId: initiationMetadataConversationId,
+            agentOutputAudioFormat: "pcm_16000",
+            userInputAudioFormat: "pcm_16000"
+        )
     }
 }

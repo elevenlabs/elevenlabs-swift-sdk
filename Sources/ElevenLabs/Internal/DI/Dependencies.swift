@@ -14,15 +14,14 @@ final class Dependencies: ConversationDependencyProvider {
     let webRTCConnectionManager: any WebRTCConnectionManaging
     let webSocketConnectionManager: any WebSocketConnectionManaging
 
-    init() {
-        let globalConfig = ElevenLabs.Global.shared.configuration
-        let tokenService = TokenService(configuration: TokenService.Configuration(
-            apiEndpoint: globalConfig.apiEndpoint?.absoluteString,
-            websocketURL: globalConfig.websocketUrl
-        ))
-        let logger = SDKLogger(logLevel: globalConfig.logLevel)
+    init(logLevel: LogLevel = .warning, endpoints: Endpoints = .production) {
+        let logger = SDKLogger(logLevel: logLevel)
         self.logger = logger
-        webRTCConnectionManager = WebRTCConnectionManager(logger: logger, tokenService: tokenService)
-        webSocketConnectionManager = WebSocketConnectionManager(logger: logger)
+        webRTCConnectionManager = WebRTCConnectionManager(
+            logger: logger,
+            tokenService: TokenService(endpoints: endpoints),
+            endpoints: endpoints
+        )
+        webSocketConnectionManager = WebSocketConnectionManager(logger: logger, endpoints: endpoints)
     }
 }

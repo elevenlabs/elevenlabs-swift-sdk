@@ -1,34 +1,23 @@
 import Foundation
-import LiveKit
-
-/// Reason for the conversation disconnection
-public enum DisconnectionReason: Sendable {
-    case agent
-    case user
-    case error
-}
 
 /// Main configuration for a conversation session
 public struct ConversationConfig: Sendable {
     public var agentOverrides: AgentOverrides?
     public var ttsOverrides: TTSOverrides?
-    public var conversationOverrides: ConversationOverrides?
-    public var customLlmExtraBody: [String: String]? // Simplified to be Sendable
-    public var dynamicVariables: [String: String]? // Simplified to be Sendable
-    /// Dynamic variables sent with their native JSON types, merged over `dynamicVariables`.
-    public var typedDynamicVariables: [String: DynamicVariableValue]?
+    public var conversationOverrides: ConversationOverrides
+    /// Extra fields passed to a custom LLM with each request.
+    public var customLlmExtraBody: [String: JSONValue]?
+    /// Values for the agent's dynamic variables, sent with their native JSON types.
+    public var dynamicVariables: [String: DynamicVariableValue]?
     public var userId: String?
-    /// Optional environment for the agent (defaults to production when nil)
+    /// Workspace environment (`production` if nil). Applies only to public-agent
+    /// starts. For a signed WebSocket URL or a conversation token, pass
+    /// `environment` to the endpoint that mints it on your server.
     public var environment: String?
 
-    /// Called when the agent is ready and the conversation can begin
-    public var onAgentReady: (@Sendable () -> Void)?
-
-    /// Called when the agent disconnects or the conversation ends
-    public var onDisconnect: (@Sendable (DisconnectionReason) -> Void)?
-
-    /// Called whenever the startup state transitions
-    public var onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)?
+    /// How to handle microphone setup failures during connection.
+    /// When `false` (default), a microphone failure throws. When `true`, startup continues without a microphone.
+    public var continueWithoutMicrophoneOnFailure: Bool
 
     /// Controls timings and retry behavior for the initialization handshake
     public var startupConfiguration: ConversationStartupConfiguration
@@ -36,120 +25,44 @@ public struct ConversationConfig: Sendable {
     /// Controls microphone pipeline behaviour and VAD callbacks.
     public var audioConfiguration: AudioPipelineConfiguration?
 
-    /// Controls LiveKit peer connection behaviour, including ICE policies.
-    public var networkConfiguration: LiveKitNetworkConfiguration
-
-    /// Called when a startup-related error occurs
-    public var onError: (@Sendable (ConversationError) -> Void)?
-
-    /// Called when LiveKit detects speech activity while muted.
-    public var onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)?
-
-    /// Called for each agent response with the associated event identifier.
-    public var onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
-
-    /// Called when an agent response correction is received.
-    public var onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)?
-
-    /// Called when agent response metadata is received.
-    public var onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)?
-
-    /// Called for each user transcript event.
-    public var onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)?
-
-    /// Called when conversation metadata arrives.
-    public var onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)?
-
-    /// Called when the agent emits a tool response event.
-    public var onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)?
-
-    /// Called when the agent requests a tool execution.
-    public var onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)?
-
-    /// Called when the agent detects an interruption.
-    public var onInterruption: (@Sendable (_ eventId: Int) -> Void)?
-
-    /// Called whenever a VAD score is emitted.
-    public var onVadScore: (@Sendable (_ score: Double) -> Void)?
-
-    /// Called when audio alignment metadata is emitted.
-    public var onAudioAlignment: (@Sendable (AudioAlignment) -> Void)?
-
-    /// Called when feedback availability changes.
-    public var onCanSendFeedbackChange: (@Sendable (Bool) -> Void)?
-
-    /// Called when a client tool call is received without a registered handler.
-    public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
+    /// Controls WebRTC connection behaviour, including ICE policies.
+    public var networkConfiguration: WebRTCConfiguration
 
     /// When provided, agent state is computed from VAD scores and protocol events
     /// instead of relying on LiveKit's isSpeaking detection.
     public var agentStateConfiguration: AgentStateConfiguration?
 
-    /// Called whenever the agent state changes (event-based mode only).
-    public var onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)?
+    /// Network endpoints to connect to. Override for proxies, regional hosts, or staging.
+    public var endpoints: Endpoints
 
     public init(
         agentOverrides: AgentOverrides? = nil,
         ttsOverrides: TTSOverrides? = nil,
-        conversationOverrides: ConversationOverrides? = nil,
-        customLlmExtraBody: [String: String]? = nil,
-        dynamicVariables: [String: String]? = nil,
-        typedDynamicVariables: [String: DynamicVariableValue]? = nil,
+        conversationOverrides: ConversationOverrides = .init(),
+        customLlmExtraBody: [String: JSONValue]? = nil,
+        dynamicVariables: [String: DynamicVariableValue]? = nil,
         userId: String? = nil,
         environment: String? = nil,
-        onAgentReady: (@Sendable () -> Void)? = nil,
-        onDisconnect: (@Sendable (DisconnectionReason) -> Void)? = nil,
-        onStartupStateChange: (@Sendable (ConversationStartupState) -> Void)? = nil,
+        continueWithoutMicrophoneOnFailure: Bool = false,
         startupConfiguration: ConversationStartupConfiguration = .default,
         audioConfiguration: AudioPipelineConfiguration? = nil,
-        networkConfiguration: LiveKitNetworkConfiguration = .default,
-        onError: (@Sendable (ConversationError) -> Void)? = nil,
-        onSpeechActivity: (@Sendable (SpeechActivityEvent) -> Void)? = nil,
-        onAgentResponse: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
-        onAgentResponseCorrection: (@Sendable (_ original: String, _ corrected: String, _ eventId: Int) -> Void)? = nil,
-        onAgentResponseMetadata: (@Sendable (_ metadataData: Data, _ eventId: Int) -> Void)? = nil,
-        onUserTranscript: (@Sendable (_ text: String, _ eventId: Int) -> Void)? = nil,
-        onConversationMetadata: (@Sendable (ConversationMetadataEvent) -> Void)? = nil,
-        onAgentToolResponse: (@Sendable (AgentToolResponseEvent) -> Void)? = nil,
-        onAgentToolRequest: (@Sendable (AgentToolRequestEvent) -> Void)? = nil,
-        onInterruption: (@Sendable (_ eventId: Int) -> Void)? = nil,
-        onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
-        onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
-        onCanSendFeedbackChange: (@Sendable (Bool) -> Void)? = nil,
-        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
+        networkConfiguration: WebRTCConfiguration = .default,
         agentStateConfiguration: AgentStateConfiguration? = nil,
-        onAgentStateChange: (@Sendable (ElevenLabs.AgentState) -> Void)? = nil
+        endpoints: Endpoints = .production
     ) {
         self.agentOverrides = agentOverrides
         self.ttsOverrides = ttsOverrides
         self.conversationOverrides = conversationOverrides
         self.customLlmExtraBody = customLlmExtraBody
         self.dynamicVariables = dynamicVariables
-        self.typedDynamicVariables = typedDynamicVariables
         self.userId = userId
         self.environment = environment
-        self.onAgentReady = onAgentReady
-        self.onDisconnect = onDisconnect
-        self.onStartupStateChange = onStartupStateChange
+        self.continueWithoutMicrophoneOnFailure = continueWithoutMicrophoneOnFailure
         self.startupConfiguration = startupConfiguration
         self.audioConfiguration = audioConfiguration
         self.networkConfiguration = networkConfiguration
-        self.onError = onError
-        self.onSpeechActivity = onSpeechActivity
-        self.onAgentResponse = onAgentResponse
-        self.onAgentResponseCorrection = onAgentResponseCorrection
-        self.onAgentResponseMetadata = onAgentResponseMetadata
-        self.onUserTranscript = onUserTranscript
-        self.onConversationMetadata = onConversationMetadata
-        self.onAgentToolResponse = onAgentToolResponse
-        self.onAgentToolRequest = onAgentToolRequest
-        self.onInterruption = onInterruption
-        self.onVadScore = onVadScore
-        self.onAudioAlignment = onAudioAlignment
-        self.onCanSendFeedbackChange = onCanSendFeedbackChange
-        self.onUnhandledClientToolCall = onUnhandledClientToolCall
         self.agentStateConfiguration = agentStateConfiguration
-        self.onAgentStateChange = onAgentStateChange
+        self.endpoints = endpoints
     }
 }
 
@@ -192,54 +105,158 @@ public struct TTSOverrides: Sendable {
 
 /// Conversation behavior overrides
 public struct ConversationOverrides: Sendable {
-    public var textOnly: Bool
-    public var clientEvents: [String]?
+    /// Set by the start call: `true` for a text conversation, `false` for voice.
+    /// Sent as `text_only` on conversation init in both cases.
+    var textOnly = false
+
+    public init() {}
+}
+
+/// The network endpoints the SDK talks to. Defaults to ``production``.
+///
+/// Override for proxies, regional hosts, or staging. Credentials follow these
+/// endpoints — conversation tokens are sent to whichever `apiBase` is configured.
+public struct Endpoints: Sendable, Equatable {
+    /// Base URL for the HTTP API. Request paths are appended to it.
+    public var apiBase: URL
+    /// WebSocket endpoint for voice conversations.
+    public var voiceWebSocket: URL
+    /// WebSocket endpoint for text-only conversations.
+    public var textWebSocket: URL
 
     public init(
-        textOnly: Bool = false,
-        clientEvents: [String]? = nil
+        apiBase: URL = Endpoints.production.apiBase,
+        voiceWebSocket: URL = Endpoints.production.voiceWebSocket,
+        textWebSocket: URL = Endpoints.production.textWebSocket
     ) {
-        self.textOnly = textOnly
-        self.clientEvents = clientEvents
+        self.apiBase = apiBase
+        self.voiceWebSocket = voiceWebSocket
+        self.textWebSocket = textWebSocket
+    }
+
+    public static let production = Endpoints(
+        apiBase: URL(string: "https://api.elevenlabs.io")!,
+        voiceWebSocket: URL(string: "wss://livekit.rtc.elevenlabs.io")!,
+        textWebSocket: URL(string: "wss://api.elevenlabs.io/v1/convai/conversation")!
+    )
+
+    var conversationToken: URL {
+        apiBase.appendingPathComponent("v1/convai/conversation/token")
     }
 }
 
-// MARK: - Conversion Extension
+public struct ConversationStartupConfiguration: Sendable, Equatable {
+    public var agentReadyTimeout: TimeInterval
+    public var initiationMetadataTimeout: TimeInterval
 
-extension ConversationConfig {
-    /// Convert ConversationConfig to ConversationOptions for internal use
-    func toConversationOptions() -> ConversationOptions {
-        ConversationOptions(
-            conversationOverrides: conversationOverrides ?? ConversationOverrides(),
-            agentOverrides: agentOverrides,
-            ttsOverrides: ttsOverrides,
-            customLlmExtraBody: customLlmExtraBody,
-            dynamicVariables: dynamicVariables,
-            typedDynamicVariables: typedDynamicVariables,
-            userId: userId,
-            environment: environment,
-            onAgentReady: onAgentReady,
-            onDisconnect: onDisconnect,
-            onStartupStateChange: onStartupStateChange,
-            startupConfiguration: startupConfiguration,
-            audioConfiguration: audioConfiguration,
-            networkConfiguration: networkConfiguration,
-            onError: onError,
-            onSpeechActivity: onSpeechActivity,
-            onAgentResponse: onAgentResponse,
-            onAgentResponseCorrection: onAgentResponseCorrection,
-            onAgentResponseMetadata: onAgentResponseMetadata,
-            onUserTranscript: onUserTranscript,
-            onConversationMetadata: onConversationMetadata,
-            onAgentToolResponse: onAgentToolResponse,
-            onAgentToolRequest: onAgentToolRequest,
-            onInterruption: onInterruption,
-            onVadScore: onVadScore,
-            onAudioAlignment: onAudioAlignment,
-            onCanSendFeedbackChange: onCanSendFeedbackChange,
-            onUnhandledClientToolCall: onUnhandledClientToolCall,
-            agentStateConfiguration: agentStateConfiguration,
-            onAgentStateChange: onAgentStateChange
-        )
+    public init(
+        agentReadyTimeout: TimeInterval = 3.0,
+        initiationMetadataTimeout: TimeInterval = 5.0
+    ) {
+        self.agentReadyTimeout = agentReadyTimeout
+        self.initiationMetadataTimeout = initiationMetadataTimeout
     }
+
+    public static let `default` = ConversationStartupConfiguration()
+}
+
+/// Controls how the SDK establishes WebRTC connections.
+///
+/// The default configuration gathers all ICE candidate types. Use ``Strategy/relayOnly``
+/// to restrict connections to TURN relays.
+public struct WebRTCConfiguration: Sendable {
+    /// Describes how ICE transport candidates should be gathered.
+    public enum Strategy: Sendable, Equatable {
+        /// Gather all candidate types.
+        case automatic
+        /// Force TURN relay candidates only.
+        case relayOnly
+    }
+
+    /// The strategy to use for ICE gathering. Defaults to ``Strategy/automatic``.
+    public var strategy: Strategy
+
+    public init(strategy: Strategy = .automatic) {
+        self.strategy = strategy
+    }
+
+    /// Default configuration using automatic ICE candidate gathering.
+    public static let `default` = WebRTCConfiguration()
+}
+
+/// Configuration for event-based agent state management using VAD and client events.
+/// Pass `nil` to use the default LiveKit-based behaviour.
+public struct AgentStateConfiguration: Sendable {
+    public var vadSpeakingThreshold: Double
+    public var minSpeechDuration: TimeInterval
+    public var minSilenceDuration: TimeInterval
+    public var speakingToListeningDelay: TimeInterval
+
+    public init(
+        vadSpeakingThreshold: Double = 0.5,
+        minSpeechDuration: TimeInterval = 0.15,
+        minSilenceDuration: TimeInterval = 0.05,
+        speakingToListeningDelay: TimeInterval = 0.5
+    ) {
+        self.vadSpeakingThreshold = vadSpeakingThreshold
+        self.minSpeechDuration = minSpeechDuration
+        self.minSilenceDuration = minSilenceDuration
+        self.speakingToListeningDelay = speakingToListeningDelay
+    }
+
+    public static let `default` = AgentStateConfiguration()
+}
+
+/// Configures microphone pipeline and voice activity reporting exposed by the SDK.
+public struct AudioPipelineConfiguration: Sendable {
+    /// Override the microphone mute strategy. Defaults to `.inputMixer` to match previous SDK behaviour.
+    public var microphoneMuteMode: MicrophoneMuteMode?
+
+    /// Prepare the mic while a voice conversation is starting or live so it publishes faster; released when it ends. Defaults to `true`.
+    public var preparesMicrophone: Bool
+
+    /// Bypass WebRTC voice processing (AEC/NS/VAD). Process-wide; `nil` leaves the current value, which an earlier call may have set.
+    public var voiceProcessingBypassed: Bool?
+
+    /// Toggle Auto Gain Control. Process-wide; `nil` leaves the current value, which an earlier call may have set.
+    public var voiceProcessingAGCEnabled: Bool?
+
+    public init(
+        microphoneMuteMode: MicrophoneMuteMode? = .inputMixer,
+        preparesMicrophone: Bool = true,
+        voiceProcessingBypassed: Bool? = nil,
+        voiceProcessingAGCEnabled: Bool? = nil
+    ) {
+        self.microphoneMuteMode = microphoneMuteMode
+        self.preparesMicrophone = preparesMicrophone
+        self.voiceProcessingBypassed = voiceProcessingBypassed
+        self.voiceProcessingAGCEnabled = voiceProcessingAGCEnabled
+    }
+
+    public static let `default` = AudioPipelineConfiguration()
+}
+
+/// Strategy used when muting the local microphone. Exactly one strategy is active
+/// at a time.
+public enum MicrophoneMuteMode: Sendable, Equatable {
+    /// Mutes instantly by silencing the input mixer. The mic stays open and the
+    /// audio session remains active. Recommended default.
+    case inputMixer
+
+    /// Mutes by restarting the engine without mic input. Releases the mic, but
+    /// mute/unmute is slower and speech detection is unavailable.
+    case restart
+
+    /// Mutes the voice-processing input. Fast, supports
+    /// ``ConversationCallbacks/onSpeechDetectedWhileMuted``, and keeps the audio
+    /// session active.
+    case voiceProcessing
+
+    /// Mutes in software by zeroing captured audio before it leaves the device.
+    /// Supports ``ConversationCallbacks/onSpeechDetectedWhileMuted``.
+    ///
+    /// - Parameters:
+    ///   - speechThreshold: dB threshold for muted-speech detection.
+    ///   - notificationThrottle: Minimum interval between muted-speech callbacks.
+    case software(speechThreshold: Float = -35, notificationThrottle: TimeInterval = 3.0)
 }

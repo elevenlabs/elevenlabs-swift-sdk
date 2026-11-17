@@ -15,8 +15,8 @@ private typealias TimerTask = Task<Void, Never>
 
 @MainActor
 final class AgentStateManager {
-    private(set) var currentState: ElevenLabs.AgentState = .listening
-    var onStateChange: ((ElevenLabs.AgentState) -> Void)?
+    private(set) var currentState: AgentState = .listening
+    var onStateChange: ((AgentState) -> Void)?
 
     private let configuration: AgentStateConfiguration
 
@@ -53,9 +53,7 @@ final class AgentStateManager {
             transitionTo(.speaking)
 
         case .userTranscript:
-            if currentState != .speaking {
-                transitionTo(.thinking)
-            }
+            if currentState != .speaking { transitionTo(.thinking) }
 
         case .interruption:
             cancelAllTimers()
@@ -92,7 +90,7 @@ final class AgentStateManager {
         }
     }
 
-    private func transitionTo(_ newState: ElevenLabs.AgentState) {
+    private func transitionTo(_ newState: AgentState) {
         guard newState != currentState else { return }
         currentState = newState
         onStateChange?(newState)

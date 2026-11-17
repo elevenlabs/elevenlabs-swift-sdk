@@ -13,7 +13,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -28,7 +28,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -43,7 +43,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         let expectation = expectation(description: "should fire")
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -61,7 +61,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -77,7 +77,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         expectation.isInverted = true
 
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in
+            onSpeechDetectedWhileMuted: {
                 expectation.fulfill()
             },
             mutedSpeechThrottleInSeconds: 0
@@ -92,8 +92,7 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testDoesNotChangeBufferedDataIfUnmuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
 
         let buffer = try loadBuffer(named: "spoken-audio")
@@ -113,9 +112,23 @@ final class SoftwareMuteProcessorTests: XCTestCase {
 
     func testZerosBufferedDataIfMuted() throws {
         let processor = SoftwareMuteProcessor(
-            onMutedSpeech: { _ in },
-            mutedSpeechThrottleInSeconds: 0
+            onSpeechDetectedWhileMuted: {}
         )
+
+        let buffer = try loadBuffer(named: "spoken-audio")
+        processor.setMuted(true)
+        processor.audioProcessingProcess(audioBuffer: buffer)
+
+        for ch in 0 ..< buffer.channels {
+            let ptr1 = buffer.rawBuffer(forChannel: ch)
+            for f in 0 ..< buffer.frames {
+                XCTAssertEqual(ptr1[f], 0, "unzeroed data at channel \(ch), frame \(f)")
+            }
+        }
+    }
+
+    func testZerosBufferedDataIfMutedWithoutSpeechDetectionCallback() throws {
+        let processor = SoftwareMuteProcessor(onSpeechDetectedWhileMuted: nil)
 
         let buffer = try loadBuffer(named: "spoken-audio")
         processor.setMuted(true)
@@ -136,57 +149,22 @@ final class SoftwareMuteProcessorTests: XCTestCase {
         )
         let file = try AVAudioFile(forReading: url)
         let fileFormat = file.processingFormat
-        let targetSampleRate: Double = 48000
-
-        guard let float32Format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: targetSampleRate,
-            channels: fileFormat.channelCount,
-            interleaved: false
-        ) else {
+        guard fileFormat.commonFormat == .pcmFormatFloat32, !fileFormat.isInterleaved else {
             throw NSError(domain: "Test", code: 1)
         }
 
         let frameCount = AVAudioFrameCount(file.length)
-        guard let readBuffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: frameCount) else {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: fileFormat, frameCapacity: frameCount) else {
             throw NSError(domain: "Test", code: 2)
         }
-        try file.read(into: readBuffer)
+        try file.read(into: buffer)
 
-        let outputBuffer: AVAudioPCMBuffer
-        if fileFormat.sampleRate != targetSampleRate || fileFormat.commonFormat != .pcmFormatFloat32 {
-            guard let converter = AVAudioConverter(from: fileFormat, to: float32Format),
-                  let converted = AVAudioPCMBuffer(
-                      pcmFormat: float32Format,
-                      frameCapacity: AVAudioFrameCount(Double(frameCount) * targetSampleRate / fileFormat
-                          .sampleRate)
-                  )
-            else {
-                throw NSError(domain: "Test", code: 3)
-            }
-            var isDone = false
-            let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-                if isDone {
-                    outStatus.pointee = .noDataNow; return nil
-                }
-                outStatus.pointee = .haveData; isDone = true; return readBuffer
-            }
-            var error: NSError?
-            converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
-            if let error {
-                throw error
-            }
-            outputBuffer = converted
-        } else {
-            outputBuffer = readBuffer
+        guard let floatData = buffer.floatChannelData else {
+            throw NSError(domain: "Test", code: 3)
         }
 
-        guard let floatData = outputBuffer.floatChannelData else {
-            throw NSError(domain: "Test", code: 4)
-        }
-
-        let channels = Int(float32Format.channelCount)
-        let frames = Int(outputBuffer.frameLength)
+        let channels = Int(fileFormat.channelCount)
+        let frames = Int(buffer.frameLength)
 
         var scale: Float = 32768.0
         var pointers: [UnsafeMutablePointer<Float>] = []

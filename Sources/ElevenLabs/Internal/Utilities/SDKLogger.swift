@@ -37,12 +37,12 @@ extension Logging {
 struct SDKLogger: Logging {
     private let subsystem: String
     private let category: String
-    private let logLevel: ElevenLabs.LogLevel
+    private let logLevel: LogLevel
 
     init(
         subsystem: String = "com.elevenlabs.sdk",
         category: String = "ElevenLabs",
-        logLevel: ElevenLabs.LogLevel = .info
+        logLevel: LogLevel = .info
     ) {
         self.subsystem = subsystem
         self.category = category

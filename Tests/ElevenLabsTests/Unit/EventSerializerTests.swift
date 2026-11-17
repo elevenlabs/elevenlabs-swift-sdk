@@ -83,25 +83,20 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "conversation_initiation_client_data")
     }
 
-    func testConversationInitSendsTypedDynamicVariables() throws {
+    func testConversationInitSendsTypedValues() throws {
         let config = ConversationConfig(
-            dynamicVariables: ["name": "John", "plan": "free"],
-            typedDynamicVariables: [
-                "plan": "pro", "age": 42, "balance": 5000.5, "is_premium": true,
+            customLlmExtraBody: ["temperature": 0.5, "max_tokens": 150, "response_format": ["type": "json_object"]],
+            dynamicVariables: [
+                "name": "John", "user_id": 12345, "balance": 5000.5, "is_premium": true,
                 "tags": ["a", 1], "address": ["city": "Paris", "zip": 75001], "missing": .null
             ]
         )
-        // Round-trip through ConversationOptions, as the connection managers do.
-        let event = OutgoingEvent.conversationInit(
-            ConversationInitEvent(config: config.toConversationOptions().toConversationConfig())
-        )
-        let data = try EventSerializer.serializeOutgoingEvent(event)
+        let data = try EventSerializer.serializeOutgoingEvent(.conversationInit(ConversationInitEvent(config: config)))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         let variables = try XCTUnwrap(json["dynamic_variables"] as? [String: Any])
         XCTAssertEqual(variables["name"] as? String, "John")
-        XCTAssertEqual(variables["plan"] as? String, "pro")
-        XCTAssertEqual(variables["age"] as? Int, 42)
+        XCTAssertEqual(variables["user_id"] as? Int, 12345)
         XCTAssertEqual(variables["balance"] as? Double, 5000.5)
         XCTAssertEqual(variables["is_premium"] as? Bool, true)
         XCTAssertEqual(variables["tags"] as? [AnyHashable], ["a", 1])
@@ -109,10 +104,15 @@ final class EventSerializerTests: XCTestCase {
         XCTAssertEqual(address["city"] as? String, "Paris")
         XCTAssertEqual(address["zip"] as? Int, 75001)
         XCTAssertTrue(variables["missing"] is NSNull)
+
+        let body = try XCTUnwrap(json["custom_llm_extra_body"] as? [String: Any])
+        XCTAssertEqual(body["temperature"] as? Double, 0.5)
+        XCTAssertEqual(body["max_tokens"] as? Int, 150)
+        XCTAssertEqual((body["response_format"] as? [String: Any])?["type"] as? String, "json_object")
     }
 
-    func testTypedDynamicVariableBooleanIsNotSentAsNumber() throws {
-        let config = ConversationConfig(typedDynamicVariables: ["flag": true, "count": 1])
+    func testDynamicVariableBooleanIsNotSentAsNumber() throws {
+        let config = ConversationConfig(dynamicVariables: ["flag": true, "count": 1])
         let data = try EventSerializer.serializeOutgoingEvent(.conversationInit(ConversationInitEvent(config: config)))
         let text = try XCTUnwrap(String(data: data, encoding: .utf8))
 

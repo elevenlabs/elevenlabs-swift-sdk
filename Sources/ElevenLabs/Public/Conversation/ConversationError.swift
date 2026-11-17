@@ -1,36 +1,41 @@
 import Foundation
 
+/// Why a conversation failed. Each case needs a different response from the app; a connection failure also says what broke.
 public enum ConversationError: LocalizedError, Sendable, Equatable {
-    case notConnected
-    case alreadyActive
-    case connectionFailed(String) // Store error description instead of Error for Equatable
+    /// The credentials were refused; get new ones or fix the configuration.
     case authenticationFailed(String)
-    case agentTimeout
-    case microphoneToggleFailed(String) // Store error description instead of Error for Equatable
-    case localNetworkPermissionRequired
-    case noSoftwareMuteHandlerConfigured
+    /// The conversation couldn't be established; retrying may help.
+    case connectionFailed(ConnectionFailure, String)
+    /// The microphone couldn't be enabled or toggled.
+    case microphoneFailed(String)
+    /// A command was issued with no live conversation.
+    case notConnected
+    /// The server reported an error during the conversation.
     case serverError(ErrorEvent)
 
-    /// Helper methods to create errors with Error types
-    public static func connectionFailed(_ error: Error) -> ConversationError {
-        .connectionFailed(error.localizedDescription)
-    }
-
-    public static func microphoneToggleFailed(_ error: Error) -> ConversationError {
-        .microphoneToggleFailed(error.localizedDescription)
+    /// What broke while establishing a conversation.
+    public enum ConnectionFailure: Sendable, Equatable {
+        /// Couldn't get a token: a network error, request timeout, or malformed response.
+        case tokenRequestFailed
+        /// The token service is busy or failing (429, 5xx).
+        case tokenServiceUnavailable
+        /// Couldn't connect the voice room.
+        case roomConnectionFailed
+        /// The agent didn't join in time.
+        case agentDidNotJoin
+        /// Connected, but couldn't start the conversation; for text, the socket didn't open.
+        case initializationFailed
+        /// The server didn't confirm the conversation in time.
+        case initializationTimedOut
     }
 
     public var errorDescription: String? {
         switch self {
+        case let .authenticationFailed(message): "Authentication failed: \(message)"
+        case let .connectionFailed(_, message): "Connection failed: \(message)"
+        case let .microphoneFailed(message): "Microphone failed: \(message)"
         case .notConnected: "Conversation is not connected."
-        case .alreadyActive: "Conversation is already active."
-        case let .connectionFailed(description): "Connection failed: \(description)"
-        case let .authenticationFailed(msg): "Authentication failed: \(msg)"
-        case .agentTimeout: "Agent did not join in time."
-        case let .microphoneToggleFailed(description): "Failed to toggle microphone: \(description)"
-        case .localNetworkPermissionRequired: "Local Network permission is required."
         case let .serverError(event): "Server error (\(event.code)): \(event.message ?? "unknown")"
-        case .noSoftwareMuteHandlerConfigured: "No software mute handler is configured."
         }
     }
 }

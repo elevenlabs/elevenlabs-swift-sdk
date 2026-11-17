@@ -40,11 +40,6 @@ final class ConversationIntegrationTests: XCTestCase {
             try await conv.sendMessage("Hello")
         }
 
-        // Mute operations also require active state
-        await assertThrowsConversationError(.notConnected) {
-            try await conv.toggleMute()
-        }
-
         await assertThrowsConversationError(.notConnected) {
             try await conv.interruptAgent()
         }
@@ -54,7 +49,7 @@ final class ConversationIntegrationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: Dependencies())
 
         // Test that message streams are empty initially
-        XCTAssertTrue(conversation.messages.isEmpty)
+        XCTAssertTrue(conversation.chatHistory.isEmpty)
 
         // In a real integration test:
         // - Connect to test agent
@@ -63,21 +58,13 @@ final class ConversationIntegrationTests: XCTestCase {
         // - Verify message ordering
     }
 
-    func testAudioIntegration() async {
-        let conversation = Conversation(dependencyProvider: Dependencies())
+    func testAudioIntegration() async throws {
+        let client = ConversationClient()
 
-        // Test initial mute state
-        XCTAssertTrue(conversation.isMuted)
+        XCTAssertFalse(client.isMicMuted)
 
-        // Test mute operations when not connected - should throw
-        do {
-            try await conversation.setMuted(true)
-            XCTFail("Should throw error when not connected")
-        } catch let error as ConversationError {
-            XCTAssertEqual(error, .notConnected)
-        } catch {
-            XCTFail("Unexpected error type")
-        }
+        try await client.setMicMuted(true)
+        XCTAssertTrue(client.isMicMuted)
 
         // In a real integration test:
         // - Test microphone permissions
@@ -93,9 +80,10 @@ final class ConversationIntegrationTests: XCTestCase {
         let conv2 = conversation
         await assertThrowsConversationError(.notConnected) {
             try await conv2.sendToolResult(
-                for: "test-tool-call",
-                result: "Tool executed successfully",
-                isError: false
+                .init(
+                    toolCallId: "test-tool-call",
+                    result: "Tool executed successfully"
+                )
             )
         }
 

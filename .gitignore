@@ -7,3 +7,5 @@ xcuserdata/
 xcshareddata/
 Package.resolved
 *.bak
+DerivedData/
+*.xcuserstate

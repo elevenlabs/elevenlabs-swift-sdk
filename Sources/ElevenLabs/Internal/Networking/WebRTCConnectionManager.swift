@@ -4,7 +4,8 @@ import LiveKit
 
 enum AgentReadyWaitResult: Equatable {
     case success(elapsed: TimeInterval)
-    case timedOut(elapsed: TimeInterval)
+    case timedOut
+    case cancelled
 }
 
 enum WebRTCConnectionManagerError: Error {
@@ -18,13 +19,12 @@ enum WebRTCConnectionManagerError: Error {
 /// remote disconnect) plus an async readiness API.
 ///
 /// LiveKit observation is split across two `RoomDelegate` instances:
-/// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect
+/// - `LiveKitRoomEventDelegate` — data, speaking, remote disconnect, track changes
 /// - `LiveKitReadinessDelegate` — signals when the agent's audio track subscribes
 ///
-/// Note: `Room`, `LocalAudioTrack`, and `RemoteAudioTrack` are intentionally
-/// exposed on the public SDK surface (e.g. `Conversation.inputTrack`), so this
-/// type does not fully hide LiveKit from callers. It does centralize the
-/// dependency in one place.
+/// LiveKit room/track types stay internal to this manager; consumers observe
+/// audio via ``ConversationAudioObserver`` rather than LiveKit track APIs.
+@MainActor
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
     var onDisconnected: (() async -> Void)?
@@ -35,18 +35,22 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when a remote participant starts or stops speaking.
     var onRemoteSpeakingChanged: (@Sendable (Bool) -> Void)?
 
+    /// Fired when an audio track is published/subscribed/unpublished/unsubscribed,
+    /// so callers can (re)attach audio observers to the current tracks.
+    var onTracksChanged: (@Sendable () -> Void)?
+
     var errorHandler: ((Swift.Error?) -> Void)?
 
     // MARK: – Public state accessors
 
     private(set) var room: Room?
 
-    var inputTrack: LocalAudioTrack? {
-        room?.localParticipant.firstAudioPublication?.track as? LocalAudioTrack
+    var inputTrack: (any AudioTrackProtocol)? {
+        room?.localParticipant.firstAudioPublication?.track as? any AudioTrackProtocol
     }
 
-    var agentAudioTrack: RemoteAudioTrack? {
-        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? RemoteAudioTrack
+    var agentAudioTrack: (any AudioTrackProtocol)? {
+        room?.remoteParticipants.values.first?.firstAudioPublication?.track as? any AudioTrackProtocol
     }
 
     var isMicrophoneMuted: Bool {
@@ -58,86 +62,108 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
 
     private var eventDelegate: LiveKitRoomEventDelegate?
     private var readinessDelegate: LiveKitReadinessDelegate?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
+    private var dataTask: Task<Void, Never>?
 
     private static let reliableDataPublishOptions = DataPublishOptions(reliable: true)
 
     private let logger: any Logging
     private let tokenService: any TokenServicing
+    private let endpoints: Endpoints
 
-    init(logger: any Logging, tokenService: any TokenServicing) {
+    init(logger: any Logging, tokenService: any TokenServicing, endpoints: Endpoints) {
         self.logger = logger
         self.tokenService = tokenService
+        self.endpoints = endpoints
     }
 
     // MARK: – Public API
 
     /// Full WebRTC startup sequence: resolve token → request mic permission →
-    /// connect room → wait for agent → send conversation_init (sent once).
+    /// connect room → wait for agent → send init → wait for initiation metadata.
     @MainActor
     func connect(
-        auth: ElevenLabsConfiguration,
-        options: ConversationOptions,
+        auth: ConversationAuth.Voice,
+        config: ConversationConfig,
         onStartupStateChange: @escaping (ConversationStartupState) -> Void
-    ) async throws -> StartupResult {
+    ) async throws -> ConversationStartResult {
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
         logger.info("Starting conversation startup sequence", context: ["agentId": auth.agentId])
 
-        // 1. Resolve token / connection details.
+        // 1. Resolve the conversation token.
         onStartupStateChange(.resolvingToken)
-        let connectionDetails = try await runPhase(
-            timing: \.tokenFetch, metrics: &metrics, startTime: startTime, failure: StartupFailure.token
+        let token = try await runPhase(
+            timing: \.tokenFetch, metrics: &metrics
         ) {
-            try await tokenService.fetchConnectionDetails(configuration: auth)
+            try await tokenService.fetchToken(for: auth, environment: config.environment)
         }
 
         // 2. Request microphone permission (denial doesn't block startup).
         let permissionGranted = await requestMicrophonePermission()
+        try Task.checkCancellation()
 
         // 3. Connect the LiveKit room.
         onStartupStateChange(.connectingRoom)
-        let throwOnMicFailure = options.microphoneFailureHandling == .throwError
+        let throwOnMicFailure = !config.continueWithoutMicrophoneOnFailure
         try await runPhase(
-            timing: \.roomConnect, metrics: &metrics, startTime: startTime, failure: StartupFailure.room
+            timing: \.roomConnect, metrics: &metrics
         ) {
             try await connectToRoom(
-                details: connectionDetails,
+                token: token,
                 enableMic: permissionGranted,
                 throwOnMicrophoneFailure: throwOnMicFailure,
-                networkConfiguration: options.networkConfiguration
+                networkConfiguration: config.networkConfiguration,
+                metadataWaiter: waiter
             )
         }
 
         // 4. Wait for the agent to be ready (fails outright if it doesn't join in time).
-        let agentTimeout = options.startupConfiguration.agentReadyTimeout
+        let agentTimeout = config.startupConfiguration.agentReadyTimeout
         onStartupStateChange(.waitingForAgent(timeout: agentTimeout))
-        guard case let .success(elapsed) = await waitForAgentReady(timeout: agentTimeout) else {
-            metrics.total = Date().timeIntervalSince(startTime)
+        switch await waitForAgentReady(timeout: agentTimeout) {
+        case let .success(elapsed):
+            metrics.agentReady = elapsed
+            onStartupStateChange(.agentReady(elapsed: elapsed))
+        case .timedOut:
             logger.warning("Agent not ready within \(String(format: "%.3f", agentTimeout))s")
-            throw StartupFailure.agentTimeout(metrics)
+            throw ConversationError.connectionFailed(.agentDidNotJoin, "The agent did not join in time.")
+        case .cancelled:
+            throw CancellationError()
         }
-        metrics.agentReady = elapsed
-        onStartupStateChange(.agentReady(ConversationAgentReadyReport(elapsed: elapsed)))
 
         // 5. Send conversation_initiation_client_data (sent once).
-        onStartupStateChange(.sendingConversationInit(attempt: 1))
+        onStartupStateChange(.sendingConversationInit)
         try await runPhase(
-            timing: \.conversationInit, metrics: &metrics, startTime: startTime,
-            failure: StartupFailure.conversationInit
+            timing: \.conversationInit, metrics: &metrics
         ) {
-            try await send(event: .conversationInit(ConversationInitEvent(config: options.toConversationConfig())))
+            try await send(event: .conversationInit(ConversationInitEvent(config: config)))
         }
-        metrics.conversationInitAttempts = 1
 
-        metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: auth.agentId, conversationId: metadata.conversationId),
+            metrics: metrics
+        )
     }
 
     /// Race the delegate's "first remote participant joined" signal against `timeout`.
-    /// A `.timedOut` result makes `connect` fail with `StartupFailure.agentTimeout`.
+    /// `.timedOut` → `ConversationError.connectionFailed(.agentDidNotJoin, _)`; `.cancelled` → `CancellationError`
+    /// (disconnect/release during the wait).
     private func waitForAgentReady(timeout: TimeInterval) async -> AgentReadyWaitResult {
         guard let delegate = readinessDelegate else {
-            return .timedOut(elapsed: 0)
+            return .timedOut
         }
         let start = Date()
         return await withTaskGroup(of: AgentReadyWaitResult.self) { group in
@@ -145,15 +171,20 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 do {
                     try await delegate.awaitRemoteParticipant()
                     return .success(elapsed: Date().timeIntervalSince(start))
+                } catch is CancellationError {
+                    return .cancelled
                 } catch {
-                    return .timedOut(elapsed: Date().timeIntervalSince(start))
+                    return .timedOut
                 }
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return .timedOut(elapsed: Date().timeIntervalSince(start))
+                return .timedOut
             }
             let first = await group.next()!
+            if case .timedOut = first {
+                delegate.release()
+            }
             group.cancelAll()
             return first
         }
@@ -183,54 +214,82 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         }
     }
 
+    func setAgentMuted(_ muted: Bool) {
+        (agentAudioTrack as? RemoteAudioTrack)?.volume = muted ? 0 : 1
+    }
+
     /// Establish the LiveKit room connection (the low-level room/mic primitive
     /// used by `connect`).
     ///
     /// - Parameters:
-    ///   - details: Token-service credentials (URL + participant token).
+    ///   - token: Conversation token to authenticate the room with.
     ///   - enableMic: Whether to enable the local microphone immediately.
     ///   - throwOnMicrophoneFailure: If true, throws error when microphone setup fails.
     ///     If false, logs warning and continues.
     private func connectToRoom(
-        details: TokenService.ConnectionDetails,
+        token: String,
         enableMic: Bool,
         throwOnMicrophoneFailure: Bool,
-        networkConfiguration: LiveKitNetworkConfiguration
+        networkConfiguration: WebRTCConfiguration,
+        metadataWaiter: ConversationInitiationMetadataWaiter
     ) async throws {
-        await readinessDelegate?.release()
+        dataTask?.cancel()
+        readinessDelegate?.release()
 
-        let readinessDelegate = await LiveKitReadinessDelegate(logger: logger)
+        let readinessDelegate = LiveKitReadinessDelegate(logger: logger)
         self.readinessDelegate = readinessDelegate
 
         let logger = logger
+        let (dataStream, dataContinuation) = AsyncStream.makeStream(of: Data.self)
         let eventDelegate = LiveKitRoomEventDelegate(
-            onData: { [weak self] data in self?.handleIncomingData(data, logger: logger) },
-            onRemoteSpeaking: { [weak self] isSpeaking in self?.onRemoteSpeakingChanged?(isSpeaking) },
-            onRemoteDisconnect: { [weak self] in await self?.onDisconnected?() }
+            onData: { dataContinuation.yield($0) },
+            onRemoteSpeaking: { [weak self] isSpeaking in
+                Task { @MainActor [weak self] in
+                    self?.onRemoteSpeakingChanged?(isSpeaking)
+                }
+            },
+            onRemoteDisconnect: { [weak self] in
+                await self?.handleRemoteDisconnect()
+            },
+            onTracksChanged: { [weak self] in
+                Task { @MainActor in self?.onTracksChanged?() }
+            }
         )
         self.eventDelegate = eventDelegate
+        // One consumer preserves packet order while parsing off the main actor.
+        dataTask = Task { [weak self] in
+            for await data in dataStream {
+                await Self.handleIncomingData(
+                    data,
+                    metadataWaiter: metadataWaiter,
+                    logger: logger,
+                    onEvent: { [weak self] event in
+                        self?.onEventReceived?(event)
+                    }
+                )
+            }
+        }
 
         let room = Room(roomOptions: RoomOptions(singlePeerConnection: true))
         self.room = room
         room.delegates.add(delegate: eventDelegate)
         room.delegates.add(delegate: readinessDelegate)
 
-        let connectOptions = await networkConfiguration.makeConnectOptions()
+        let connectOptions = networkConfiguration.strategy == .relayOnly
+            ? ConnectOptions(iceTransportPolicy: .relay)
+            : nil
 
         let connectStart = Date()
         do {
             try await room.connect(
-                url: details.serverUrl,
-                token: details.participantToken,
+                url: endpoints.voiceWebSocket.absoluteString,
+                token: token,
                 connectOptions: connectOptions
             )
             logger.info("LiveKit room.connect completed", context: ["duration": "\(Date().timeIntervalSince(connectStart))"])
         } catch {
             logger.error("LiveKit room.connect failed", context: ["error": "\(error)"])
             errorHandler?(error)
-            if await LocalNetworkPermissionMonitor.shared.shouldSuggestLocalNetworkPermission() {
-                errorHandler?(ConversationError.localNetworkPermissionRequired)
-            }
             throw error
         }
 
@@ -243,7 +302,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                 errorHandler?(error)
 
                 if throwOnMicrophoneFailure {
-                    throw ConversationError.microphoneToggleFailed(error)
+                    throw ConversationError.microphoneFailed(error.localizedDescription)
                 } else {
                     logger.warning("Continuing without microphone due to error handling policy")
                 }
@@ -257,8 +316,13 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
         onRemoteSpeakingChanged = nil
+        onTracksChanged = nil
 
-        await readinessDelegate?.release()
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
+        dataTask?.cancel()
+        dataTask = nil
+        readinessDelegate?.release()
         readinessDelegate = nil
 
         await room?.disconnect()
@@ -266,53 +330,43 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         eventDelegate = nil
     }
 
+    private func handleRemoteDisconnect() async {
+        await onDisconnected?()
+    }
+
     // MARK: – Private helpers
 
-    /// Run one timed startup phase: record its duration into `metrics[keyPath:]`,
-    /// let `CancellationError` propagate unwrapped, and wrap any other error via
-    /// `failure` (stamping `total`).
+    /// Run one startup phase, recording its duration into `metrics[keyPath:]`.
     @MainActor
-    private func runPhase<T>(
+    private func runPhase<T: Sendable>(
         timing keyPath: WritableKeyPath<ConversationStartupMetrics, TimeInterval?>,
         metrics: inout ConversationStartupMetrics,
-        startTime: Date,
-        failure: (ConversationError, ConversationStartupMetrics) -> StartupFailure,
         _ body: () async throws -> T
     ) async throws -> T {
         let start = Date()
-        do {
-            let result = try await body()
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            return result
-        } catch is CancellationError {
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw CancellationError()
-        } catch {
-            metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
-            metrics.total = Date().timeIntervalSince(startTime)
-            throw failure(error as? ConversationError ?? .connectionFailed(error), metrics)
-        }
+        let result = try await body()
+        metrics[keyPath: keyPath] = Date().timeIntervalSince(start)
+        return result
     }
 
     private func requestMicrophonePermission() async -> Bool {
         #if os(macOS)
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
-            return true
+            true
         case .notDetermined:
-            return await AVCaptureDevice.requestAccess(for: .audio)
+            await AVCaptureDevice.requestAccess(for: .audio)
         case .denied, .restricted:
-            return false
+            false
         @unknown default:
-            return false
+            false
         }
         #elseif os(visionOS)
-        return await AVAudioApplication.requestRecordPermission()
+        await AVAudioApplication.requestRecordPermission()
         #elseif os(tvOS)
-        return false
+        false
         #else
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 continuation.resume(returning: granted)
             }
@@ -328,21 +382,24 @@ private func isAgentParticipant(_ participant: Participant) -> Bool {
 
 // MARK: – Room event delegate
 
-/// `RoomDelegate` that forwards data, remote speaking, and remote-disconnect events
-/// (agent leaving or room disconnect) to manager-supplied closures.
+/// `RoomDelegate` that forwards data, remote speaking, remote-disconnect, and
+/// audio track availability events to manager-supplied closures.
 final class LiveKitRoomEventDelegate: RoomDelegate {
     private let onData: @Sendable (Data) -> Void
     private let onRemoteSpeaking: @Sendable (Bool) -> Void
     private let onRemoteDisconnect: @Sendable () async -> Void
+    private let onTracksChanged: @Sendable () -> Void
 
     init(
         onData: @escaping @Sendable (Data) -> Void,
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void,
-        onRemoteDisconnect: @escaping @Sendable () async -> Void
+        onRemoteDisconnect: @escaping @Sendable () async -> Void,
+        onTracksChanged: @escaping @Sendable () -> Void = {}
     ) {
         self.onData = onData
         self.onRemoteSpeaking = onRemoteSpeaking
         self.onRemoteDisconnect = onRemoteDisconnect
+        self.onTracksChanged = onTracksChanged
     }
 
     nonisolated func room(
@@ -370,6 +427,27 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
             await onRemoteDisconnect()
         }
     }
+
+    /// Audio track availability changes — used to (re)attach audio observers.
+    nonisolated func room(_: Room, participant _: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: RemoteParticipant, didUnsubscribeTrack publication: RemoteTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: LocalParticipant, didPublishTrack publication: LocalTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
+
+    nonisolated func room(_: Room, participant _: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
+        guard publication.kind == .audio else { return }
+        onTracksChanged()
+    }
 }
 
 // MARK: – Readiness delegate
@@ -391,9 +469,7 @@ final class LiveKitReadinessDelegate: RoomDelegate {
     /// if the awaiting task is cancelled or `release()` is called (e.g. on disconnect).
     /// Single-caller — there's exactly one `waitForAgentReady` per connection lifetime.
     func awaitRemoteParticipant() async throws {
-        if let outcome {
-            return try outcome.get()
-        }
+        if let outcome { return try outcome.get() }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 if let outcome {
@@ -419,17 +495,13 @@ final class LiveKitReadinessDelegate: RoomDelegate {
 
     nonisolated func roomDidConnect(_ room: Room) {
         Task { @MainActor in
-            if room.remoteParticipants.values.contains(where: isAgentParticipant) {
-                self.markReady()
-            }
+            if room.remoteParticipants.values.contains(where: isAgentParticipant) { self.markReady() }
         }
     }
 
     nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor in
-            if isAgentParticipant(participant) {
-                self.markReady()
-            }
+            if isAgentParticipant(participant) { self.markReady() }
         }
     }
 

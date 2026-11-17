@@ -1,4 +1,5 @@
 // swiftlint:disable file_length type_body_length function_body_length
+import Combine
 @testable import ElevenLabs
 import XCTest
 
@@ -35,11 +36,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Error callback should be called")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions(
-            onStartupStateChange: { state in
-                print("📊 Startup state: \(state)")
-                Task { await collector.addState(state) }
-            },
+        let config = ConversationConfig()
+        let callbacks = ConversationCallbacks(
             onError: { error in
                 print("✅ onError callback received: \(error)")
                 Task { await collector.addError(error) }
@@ -49,16 +47,14 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
         // Use an invalid agent ID to trigger an error
         do {
-            try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent_id_12345"),
-                options: options
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "invalid_agent_id_12345"))
             XCTFail("Should have thrown an error")
         } catch {
             print("❌ Caught error: \(error)")
@@ -89,26 +85,20 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let collector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0, // Increased from default 3.0
-            initRetryDelays: [0, 0.5, 1.0, 2.0], // More retry attempts
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0) // Increased from default 3.0
 
         // Use automatic network strategy for faster test connections (allows all connection types)
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 print("✅ Agent ready!")
                 readyExpectation.fulfill()
             },
-            onStartupStateChange: { state in
-                print("📊 Startup state: \(state)")
-                Task { await collector.addState(state) }
-            },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 print("❌ Unexpected error in success test: \(error)")
                 Task { await collector.addError(error) }
@@ -117,15 +107,13 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
         do {
-            try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options
-            )
+            let result = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
             await fulfillment(of: [readyExpectation], timeout: 15.0)
 
@@ -138,22 +126,19 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
             // Verify no errors were reported
             XCTAssertTrue(capturedErrors.isEmpty, "Error array should be empty")
 
-            // Verify connection is active
-            XCTAssertTrue(conversation.state.isActive, "Conversation should be active")
+            // Verify connection is established
+            XCTAssertTrue(conversation.state.isConnected, "Conversation should be connected")
 
             print("\n📊 Startup states (\(capturedStartupStates.count)):")
             for (index, state) in capturedStartupStates.enumerated() {
                 print("  \(index + 1). \(state)")
             }
 
-            if case let .active(_, metrics) = conversation.startupState {
-                print("\n⏱️ Startup metrics:")
-                print("  Total: \(String(format: "%.3f", metrics.total ?? 0))s")
-                print("  Token fetch: \(String(format: "%.3f", metrics.tokenFetch ?? 0))s")
-                print("  Room connect: \(String(format: "%.3f", metrics.roomConnect ?? 0))s")
-                print("  Agent ready: \(String(format: "%.3f", metrics.agentReady ?? 0))s")
-                print("  Init attempts: \(metrics.conversationInitAttempts)")
-            }
+            print("\n⏱️ Startup metrics:")
+            print("  Total: \(String(format: "%.3f", result.metrics.total ?? 0))s")
+            print("  Token fetch: \(String(format: "%.3f", result.metrics.tokenFetch ?? 0))s")
+            print("  Room connect: \(String(format: "%.3f", result.metrics.roomConnect ?? 0))s")
+            print("  Agent ready: \(String(format: "%.3f", result.metrics.agentReady ?? 0))s")
 
             // Clean disconnect
             await conversation.endConversation()
@@ -169,21 +154,19 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let collector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 readyExpectation.fulfill()
             },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 print("❌ Error reported: \(error)")
                 Task { await collector.addError(error) }
@@ -192,14 +175,12 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
-        try await conversation.startConversation(
-            auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-            options: options
-        )
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
         await fulfillment(of: [readyExpectation], timeout: 15.0)
 
@@ -227,24 +208,19 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         print("\n🧪 Testing rapid connection attempts...")
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
         for attempt in 1 ... 3 {
             print("\n--- Attempt \(attempt) ---")
 
-            let options = ConversationOptions(
-                onStartupStateChange: { state in
-                    print("  📊 State: \(state)")
-                },
+            let config = ConversationConfig(
                 startupConfiguration: startupConfig,
-                networkConfiguration: networkConfig,
+                networkConfiguration: networkConfig
+            )
+            let callbacks = ConversationCallbacks(
                 onError: { error in
                     print("  ❌ Error: \(error)")
                 }
@@ -252,17 +228,15 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
             let conversation = Conversation(
                 dependencyProvider: Dependencies(),
-                options: options
+                config: config,
+                callbacks: callbacks
             )
 
             do {
-                try await conversation.startConversation(
-                    auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                    options: options
-                )
+                _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
                 print("  ✅ Connection \(attempt) successful")
-                XCTAssertTrue(conversation.state.isActive)
+                XCTAssertTrue(conversation.state.isConnected)
 
                 // Brief interaction
                 try? await conversation.sendMessage("Test message \(attempt)")
@@ -278,64 +252,48 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         }
     }
 
-    /// Test that startup state transitions are properly reported including failures
+    /// Test that startup stages are reported and failures land in `.error`.
     func testStartupStateTransitions() async throws {
-        let errorExpectation = expectation(description: "Should receive error state")
-        let collector = ErrorCollector()
+        let errorExpectation = expectation(description: "Should receive error callback")
 
-        let options = ConversationOptions(
-            onStartupStateChange: { state in
-                print("📊 State transition: \(state)")
-                Task { await collector.addState(state) }
-
-                if case .failed = state {
-                    errorExpectation.fulfill()
-                }
-            },
+        let config = ConversationConfig()
+        let callbacks = ConversationCallbacks(
             onError: { error in
                 print("❌ Error: \(error)")
+                errorExpectation.fulfill()
             }
         )
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
+        var observedResolvingToken = false
+        var cancellable: AnyCancellable?
+        cancellable = conversation.$state.sink { state in
+            if case .connecting(.resolvingToken) = state {
+                observedResolvingToken = true
+            }
+        }
+
         // Use invalid agent to trigger failure
         do {
-            try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: "invalid_agent"),
-                options: options
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: "invalid_agent"))
         } catch {
             // Expected
         }
+        cancellable?.cancel()
 
         await fulfillment(of: [errorExpectation], timeout: 5.0)
 
-        let capturedStartupStates = await collector.states
+        XCTAssertTrue(observedResolvingToken, "Should have resolvingToken stage")
 
-        print("\n📊 State transition sequence (\(capturedStartupStates.count) states):")
-        for (index, state) in capturedStartupStates.enumerated() {
-            print("  \(index + 1). \(state)")
+        guard case .error = conversation.state else {
+            return XCTFail("Expected error state after startup failure")
         }
-
-        // Verify we got expected state transitions
-        XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .resolvingToken = state {
-                return true
-            }
-            return false
-        }, "Should have resolvingToken state")
-
-        XCTAssertTrue(capturedStartupStates.contains { state in
-            if case .failed = state {
-                return true
-            }
-            return false
-        }, "Should have failed state")
     }
 
     /// Test custom token provider error handling
@@ -343,7 +301,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         let errorExpectation = expectation(description: "Should receive error")
         let collector = ErrorCollector()
 
-        let options = ConversationOptions(
+        let config = ConversationConfig()
+        let callbacks = ConversationCallbacks(
             onError: { error in
                 print("❌ Token provider error: \(error)")
                 Task { await collector.addError(error) }
@@ -353,20 +312,18 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
         // Provide a token provider that throws an error
         do {
-            try await conversation.startConversation(
-                auth: .customTokenProvider {
-                    throw NSError(domain: "TestError", code: 500, userInfo: [
-                        NSLocalizedDescriptionKey: "Custom token provider failed"
-                    ])
-                },
-                options: options
-            )
+            _ = try await conversation.startVoiceConversation(.conversationToken {
+                throw NSError(domain: "TestError", code: 500, userInfo: [
+                    NSLocalizedDescriptionKey: "Custom token provider failed"
+                ])
+            })
             XCTFail("Should have thrown error")
         } catch {
             print("✅ Caught error: \(error)")
@@ -385,10 +342,8 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
         print("ℹ️ This test verifies error callbacks work for network issues")
 
         let collector = ErrorCollector()
-        let options = ConversationOptions(
-            onStartupStateChange: { state in
-                print("📊 State: \(state)")
-            },
+        let config = ConversationConfig()
+        let callbacks = ConversationCallbacks(
             onError: { error in
                 print("❌ Network error: \(error)")
                 Task { await collector.addError(error) }
@@ -397,16 +352,14 @@ final class ErrorHandlingIntegrationTests: XCTestCase {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
         // Attempt connection - may succeed or fail depending on network
         do {
-            try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
             print("✅ Connection succeeded (network available)")
             await conversation.endConversation()
         } catch {
@@ -439,16 +392,16 @@ extension ErrorHandlingIntegrationTests {
         let errorCollector = ErrorCollector()
 
         // Increase timeout for real network conditions
-        let startupConfig = ConversationStartupConfiguration(
-            agentReadyTimeout: 10.0,
-            initRetryDelays: [0, 0.5, 1.0, 2.0],
-            failIfAgentNotReady: false
-        )
+        let startupConfig = ConversationStartupConfiguration(agentReadyTimeout: 10.0)
 
         // Use automatic network strategy for faster test connections
-        let networkConfig = LiveKitNetworkConfiguration(strategy: .automatic)
+        let networkConfig = WebRTCConfiguration(strategy: .automatic)
 
-        let options = ConversationOptions(
+        let config = ConversationConfig(
+            startupConfiguration: startupConfig,
+            networkConfiguration: networkConfig
+        )
+        let callbacks = ConversationCallbacks(
             onAgentReady: {
                 let timestamp = Self.formatTimestamp()
                 print("✅ [\(timestamp)] AGENT READY")
@@ -457,15 +410,6 @@ extension ErrorHandlingIntegrationTests {
                 let timestamp = Self.formatTimestamp()
                 print("🔌 [\(timestamp)] DISCONNECTED (reason: \(reason))")
             },
-            onStartupStateChange: { state in
-                let timestamp = Self.formatTimestamp()
-                print("📊 [\(timestamp)] STARTUP STATE: \(state)")
-                Task {
-                    await errorCollector.addState(state)
-                }
-            },
-            startupConfiguration: startupConfig,
-            networkConfiguration: networkConfig,
             onError: { error in
                 let timestamp = Self.formatTimestamp()
                 print("\n❌ [\(timestamp)] ERROR CALLBACK INVOKED:")
@@ -480,17 +424,15 @@ extension ErrorHandlingIntegrationTests {
 
         let conversation = Conversation(
             dependencyProvider: Dependencies(),
-            options: options
+            config: config,
+            callbacks: callbacks
         )
         self.conversation = conversation
 
         print("\n🚀 Starting connection...")
 
         do {
-            try await conversation.startConversation(
-                auth: ElevenLabsConfiguration.publicAgent(id: testAgentId),
-                options: options
-            )
+            _ = try await conversation.startVoiceConversation(.publicAgent(id: testAgentId))
 
             print("\n✅ CONNECTION SUCCESSFUL")
             print("   State: \(conversation.state)")

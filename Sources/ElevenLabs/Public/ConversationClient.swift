@@ -1,0 +1,300 @@
+import Combine
+import Foundation
+
+/// The central entry point for the ElevenLabs Conversational AI SDK.
+///
+/// Create one and hold it for the lifetime of your screen (e.g. a SwiftUI
+/// `@StateObject`). It exposes conversation state as `@Published` properties
+/// and controls as methods. Each start call runs a fresh, single-use
+/// session internally; the client itself is reusable — call start again
+/// to start another.
+@MainActor
+public final class ConversationClient: ObservableObject {
+    // MARK: - Public State
+
+    @Published public private(set) var state: ConversationState = .idle
+    @Published public private(set) var chatHistory: [any ChatHistoryItem] = []
+    @Published public private(set) var agentState: AgentState = .listening
+    @Published public private(set) var isMicMuted: Bool = false
+
+    /// Whether the agent's voice is silenced.
+    @Published public private(set) var isAgentMuted: Bool = false
+
+    /// Client tool calls without an answer yet. Cleared when the conversation ends.
+    @Published public private(set) var pendingToolCalls: [ClientToolCallEvent] = []
+
+    /// Conversation metadata including conversation ID, received when the conversation is initialized
+    @Published public private(set) var conversationMetadata: ConversationMetadataEvent?
+
+    /// MCP tool calls from the agent
+    @Published public private(set) var mcpToolCalls: [MCPToolCallEvent] = []
+
+    /// Current MCP connection status for all integrations
+    @Published public private(set) var mcpConnectionStatus: MCPConnectionStatusEvent?
+
+    // MARK: - Callbacks
+
+    /// The callbacks for every conversation this client starts. A change applies at once, also
+    /// during a conversation. A new `ConversationCallbacks` value replaces all of them, so set
+    /// one field, such as `client.callbacks.onClientToolCall`, to change only that callback.
+    public var callbacks: ConversationCallbacks {
+        didSet { session?.callbacks = callbacks }
+    }
+
+    // MARK: - Init
+
+    private let dependencyProvider: (any ConversationDependencyProvider)?
+    private let logLevel: LogLevel
+
+    /// The current single-use session. Internal plumbing — never exposed.
+    private var session: Conversation?
+    /// Subscriptions mirroring the active session's state; reset on each start.
+    private var cancellables = Set<AnyCancellable>()
+
+    /// Durable observers re-attached to every session this client starts.
+    private var agentAudioObservers: [any ConversationAudioObserver] = []
+    private var micAudioObservers: [any ConversationAudioObserver] = []
+
+    /// LiveKit's prepared-recording mode is process-global; only the client toggles it.
+    private let setRecordingAlwaysPreparedMode: @MainActor (Bool) async throws -> Void
+    /// Whether the current session is voice and its config allows prepared recording.
+    private var sessionPrefersPreparedRecording = false
+    /// Last queued change; each change waits for the previous one.
+    private var preparedRecording: Task<Void, Never>?
+    private var preparedRecordingSubscription: AnyCancellable?
+
+    public init(callbacks: ConversationCallbacks = .init(), logLevel: LogLevel = .warning) {
+        self.callbacks = callbacks
+        self.logLevel = logLevel
+        dependencyProvider = nil
+        setRecordingAlwaysPreparedMode = ConversationAudioManager.setRecordingAlwaysPreparedMode
+        observePreparedRecording()
+    }
+
+    /// Test-only initializer that injects transports and the prepared-recording setter.
+    init(
+        callbacks: ConversationCallbacks = .init(),
+        dependencyProvider: any ConversationDependencyProvider,
+        setRecordingAlwaysPreparedMode: @escaping @MainActor (Bool) async throws -> Void = { _ in }
+    ) {
+        self.callbacks = callbacks
+        logLevel = .warning
+        self.dependencyProvider = dependencyProvider
+        self.setRecordingAlwaysPreparedMode = setRecordingAlwaysPreparedMode
+        observePreparedRecording()
+    }
+
+    // MARK: - Lifecycle
+
+    /// Start a voice conversation. Any previously-started session still running
+    /// is ended first, then a fresh single-use session is created and connected.
+    ///
+    /// If the agent has chat mode on, its security settings must allow clients to
+    /// override "Text only". Otherwise the start fails with
+    /// `ConversationError.connectionFailed(.initializationFailed, _)`.
+    public func startVoiceConversation(
+        _ auth: ConversationAuth.Voice,
+        config: ConversationConfig = .init()
+    ) async throws -> ConversationStartResult {
+        try Task.checkCancellation()
+        sessionPrefersPreparedRecording = config.audioConfiguration?.preparesMicrophone ?? true
+        return try await startConversation(config: config) { conversation in
+            try await conversation.startVoiceConversation(auth)
+        }
+    }
+
+    /// Start a text-only conversation. Any previously-started session still running
+    /// is ended first, then a fresh single-use session is created and connected.
+    public func startTextOnlyConversation(
+        _ auth: ConversationAuth.TextOnly,
+        config: ConversationConfig = .init()
+    ) async throws -> ConversationStartResult {
+        try Task.checkCancellation()
+        sessionPrefersPreparedRecording = false
+        return try await startConversation(config: config) { conversation in
+            try await conversation.startTextOnlyConversation(auth)
+        }
+    }
+
+    private func startConversation(
+        config: ConversationConfig,
+        start: (Conversation) async throws -> ConversationStartResult
+    ) async throws -> ConversationStartResult {
+        let previousConversation = session
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider ?? Dependencies(logLevel: logLevel, endpoints: config.endpoints),
+            config: config,
+            callbacks: callbacks,
+            initialMicMuted: isMicMuted,
+            initialAgentMuted: isAgentMuted
+        )
+        bind(conversation)
+
+        await previousConversation?.endConversation()
+        return try await start(conversation)
+    }
+
+    /// End the current conversation, if any. Mirrored state (history, etc.) is kept
+    /// so the UI can still show the last session until `reset()` or a new start.
+    public func endConversation() async {
+        await session?.endConversation()
+        await preparedRecording?.value
+    }
+
+    /// End any live session and clear all mirrored state back to idle defaults.
+    /// Use this when dismissing a screen or starting over with a blank client.
+    public func reset() async {
+        let endingSession = session
+        await endConversation()
+        guard session === endingSession else { return } // a start issued meanwhile takes over
+        cancellables.removeAll()
+        session = nil
+        sessionPrefersPreparedRecording = false
+
+        state = .idle
+        chatHistory = []
+        agentState = .listening
+        isMicMuted = false
+        isAgentMuted = false
+        pendingToolCalls = []
+        conversationMetadata = nil
+        mcpToolCalls = []
+        mcpConnectionStatus = nil
+    }
+
+    /// Mirror the new session's `@Published` state onto this object.
+    private func bind(_ session: Conversation) {
+        cancellables.removeAll()
+        self.session = session
+
+        session.$state.sink { [weak self] in self?.state = $0 }.store(in: &cancellables)
+        session.$chatHistory.sink { [weak self] in self?.chatHistory = $0 }.store(in: &cancellables)
+        session.$agentState.sink { [weak self] in self?.agentState = $0 }.store(in: &cancellables)
+        session.$pendingToolCalls.sink { [weak self] in self?.pendingToolCalls = $0 }.store(in: &cancellables)
+        session.$conversationMetadata.sink { [weak self] in self?.conversationMetadata = $0 }.store(in: &cancellables)
+        session.$mcpToolCalls.sink { [weak self] in self?.mcpToolCalls = $0 }.store(in: &cancellables)
+        session.$mcpConnectionStatus.sink { [weak self] in self?.mcpConnectionStatus = $0 }.store(in: &cancellables)
+
+        // Re-attach durable observers to the new session.
+        agentAudioObservers.forEach(session.addAgentAudioObserver)
+        micAudioObservers.forEach(session.addMicAudioObserver)
+    }
+
+    // MARK: - Prepared recording
+
+    /// On while a voice session is starting or live. A new session's initial
+    /// `.idle` counts, so a restart never passes through "off".
+    private func observePreparedRecording() {
+        preparedRecordingSubscription = $state
+            .map { [weak self] state in
+                guard let self, sessionPrefersPreparedRecording else { return false }
+                return state == .idle || state.isConnecting || state.isConnected
+            }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] in self?.setPreparedRecording($0) }
+    }
+
+    private func setPreparedRecording(_ on: Bool) {
+        preparedRecording = Task { [previous = preparedRecording, set = setRecordingAlwaysPreparedMode] in
+            await previous?.value
+            try? await set(on)
+        }
+    }
+
+    private func requireSession() throws -> Conversation {
+        guard let session else { throw ConversationError.notConnected }
+        return session
+    }
+
+    // MARK: - Messaging
+
+    /// Send a text message to the agent.
+    public func sendMessage(_ text: String) async throws {
+        try await requireSession().sendMessage(text)
+    }
+
+    /// Interrupt the agent while it is speaking.
+    public func interruptAgent() async throws {
+        try await requireSession().interruptAgent()
+    }
+
+    /// Send a silent contextual update to the agent (no user-visible message).
+    public func updateContext(_ context: String) async throws {
+        try await requireSession().updateContext(context)
+    }
+
+    // MARK: - Microphone
+
+    /// Set the microphone mute state for the current or next conversation.
+    public func setMicMuted(_ muted: Bool) async throws {
+        try await session?.setMicMuted(muted)
+        isMicMuted = muted
+    }
+
+    // MARK: - Agent audio
+
+    /// Silence or restore the agent's voice for the current or next conversation.
+    public func setAgentMuted(_ muted: Bool) {
+        session?.setAgentMuted(muted)
+        isAgentMuted = muted
+    }
+
+    // MARK: - Audio observers
+
+    /// Register an observer for the agent's decoded output audio.
+    ///
+    /// The observer is durable: it is re-attached to every session this client
+    /// starts. ``ConversationAudioObserver/didReceive(_:)`` is called off the
+    /// main actor on a time-critical audio callback path.
+    public func addAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        if !agentAudioObservers.contains(where: { $0 === observer }) {
+            agentAudioObservers.append(observer)
+        }
+        session?.addAgentAudioObserver(observer)
+    }
+
+    /// Unregister a previously added agent audio observer.
+    public func removeAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        agentAudioObservers.removeAll { $0 === observer }
+        session?.removeAgentAudioObserver(observer)
+    }
+
+    /// Register a durable observer for the local microphone input.
+    public func addMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        if !micAudioObservers.contains(where: { $0 === observer }) {
+            micAudioObservers.append(observer)
+        }
+        session?.addMicAudioObserver(observer)
+    }
+
+    /// Unregister a previously added mic audio observer.
+    public func removeMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        micAudioObservers.removeAll { $0 === observer }
+        session?.removeMicAudioObserver(observer)
+    }
+
+    // MARK: - Tools & feedback
+
+    /// Send in-conversation feedback (like/dislike) for an agent message.
+    public func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
+        try await requireSession().sendFeedback(score, eventId: eventId)
+    }
+
+    /// Approve or reject an MCP tool-call request from the agent.
+    public func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
+        try await requireSession().sendMCPToolApproval(toolCallId: toolCallId, isApproved: isApproved)
+    }
+
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
+    public func sendToolResult(_ result: ClientToolResultEvent) async throws {
+        try await requireSession().sendToolResult(result)
+    }
+
+    /// Mark a tool call as completed without sending a result. A best-effort
+    /// no-op when there is no live session.
+    public func markToolCallCompleted(_ toolCallId: String) {
+        session?.markToolCallCompleted(toolCallId)
+    }
+}

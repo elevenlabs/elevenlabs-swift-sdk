@@ -48,28 +48,26 @@ final class StartupPerformanceTest: XCTestCase {
         // Monitor state changes - create these before starting conversation
         var hasConnected = false
         var hasReceivedFirstMessage = false
-        var conversation: Conversation!
+        let client = ConversationClient()
 
-        // Start the conversation using the static API
+        // Start the conversation
         print("  [\(String(format: "%.3f", 0.0))s] Starting conversation...")
-        conversation = try await ElevenLabs.startConversation(
-            agentId: "agent_4601k18km8yde6ftyzzwfdk6jvez"
-        )
+        let result = try await client.startVoiceConversation(.publicAgent(id: "agent_4601k18km8yde6ftyzzwfdk6jvez"))
 
-        // Since the static API already handles the startup, just monitor the result
+        // Since starting already handles the startup, just monitor the result
         // Check the current state immediately
         let elapsed = Date().timeIntervalSince(testStart)
         print("  [\(String(format: "%.3f", elapsed))s] Conversation created")
 
-        switch conversation.state {
+        switch client.state {
         case .idle:
             print("  [\(String(format: "%.3f", elapsed))s] State: idle")
-        case .connecting:
-            print("  [\(String(format: "%.3f", elapsed))s] State: connecting")
-        case let .active(info):
+        case let .connecting(stage):
+            print("  [\(String(format: "%.3f", elapsed))s] State: connecting (\(stage))")
+        case let .connected(info):
             hasConnected = true
-            print("  [\(String(format: "%.3f", elapsed))s] State: active (agent: \(info.agentId))")
-            print("  🎯 ACTIVE STATE REACHED in \(String(format: "%.3f", elapsed))s")
+            print("  [\(String(format: "%.3f", elapsed))s] State: connected (agent: \(info.agentId))")
+            print("  🎯 CONNECTED STATE REACHED in \(String(format: "%.3f", elapsed))s")
         case let .ended(reason):
             print("  [\(String(format: "%.3f", elapsed))s] State: ended (reason: \(reason))")
         case let .error(error):
@@ -77,24 +75,22 @@ final class StartupPerformanceTest: XCTestCase {
         }
 
         // Check for existing messages
-        if !conversation.messages.isEmpty {
+        let messages = client.chatHistory.compactMap(\.message)
+        if !messages.isEmpty {
             hasReceivedFirstMessage = true
-            print("  [\(String(format: "%.3f", elapsed))s] Messages already present: \(conversation.messages.count)")
-            if let firstMessage = conversation.messages.first {
+            print("  [\(String(format: "%.3f", elapsed))s] Messages already present: \(messages.count)")
+            if let firstMessage = messages.first {
                 print("  📨 Message: \(firstMessage.content)")
             }
         }
 
-        print("  [\(String(format: "%.3f", elapsed))s] Agent state: \(conversation.agentState)")
+        print("  [\(String(format: "%.3f", elapsed))s] Agent state: \(client.agentState)")
 
-        // The static API should return an already-active conversation
-        // But let's give it a moment and measure the total time when we called the API
         let totalTime = Date().timeIntervalSince(testStart)
 
-        // Mark as connected since the API returned successfully
         if !hasConnected {
             hasConnected = true
-            print("  [\(String(format: "%.3f", totalTime))s] ✅ Conversation returned from API")
+            print("  [\(String(format: "%.3f", totalTime))s] ✅ Conversation returned from startConversation")
         }
 
         // Wait a bit for first message
@@ -105,20 +101,20 @@ final class StartupPerformanceTest: XCTestCase {
 
         // Clean up
         print("  [\(String(format: "%.3f", Date().timeIntervalSince(testStart)))s] Ending conversation...")
-        await conversation.endConversation()
+        await client.endConversation()
 
         // Wait for cleanup
         try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
 
-        // Check if we reached active state
-        let reachedActive = conversation.state.isActive
-        if case .ended(reason: .userEnded) = conversation.state {
+        // Check if we reached connected state
+        let reachedConnected = hasConnected || client.state.isConnected
+        if case .ended(reason: .userEnded) = client.state {
             // This is fine - we ended it ourselves
-        } else if !reachedActive {
-            throw NSError(domain: "StartupTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to reach active state"])
+        } else if !reachedConnected {
+            throw NSError(domain: "StartupTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to reach connected state"])
         }
 
-        return totalTime
+        return try XCTUnwrap(result.metrics.total)
     }
 
     private func printSummary(timings: [TimeInterval]) {
@@ -135,7 +131,7 @@ final class StartupPerformanceTest: XCTestCase {
         let maxTime = timings.max() ?? 0
 
         print("Runs completed: \(timings.count)")
-        print("Average time to active: \(String(format: "%.3f", avgTime))s")
+        print("Average time to connected: \(String(format: "%.3f", avgTime))s")
         print("Fastest time: \(String(format: "%.3f", minTime))s")
         print("Slowest time: \(String(format: "%.3f", maxTime))s")
         print("Range: \(String(format: "%.3f", maxTime - minTime))s")

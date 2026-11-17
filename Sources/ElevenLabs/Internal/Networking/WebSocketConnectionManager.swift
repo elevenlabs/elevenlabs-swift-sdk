@@ -4,12 +4,13 @@ import Foundation
 ///
 /// Opens a single `URLSessionWebSocketTask` to the text conversation endpoint,
 /// sends `conversationInit` once the socket is open, then runs a receive loop
-/// that parses incoming JSON into `IncomingEvent`s and forwards them via
-/// `onEventReceived`. On runtime socket error, fires `onDisconnected` once.
+/// that forwards incoming events and waits for initiation metadata. On runtime
+/// socket error, fires `onDisconnected` once.
 ///
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
 /// without media.
+@MainActor
 final class WebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
     var onDisconnected: (() async -> Void)?
@@ -17,11 +18,14 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
     private let urlSession: URLSession
     private let logger: any Logging
+    private let endpoints: Endpoints
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 
-    init(logger: any Logging) {
+    init(logger: any Logging, endpoints: Endpoints = .production) {
         self.logger = logger
+        self.endpoints = endpoints
         urlSession = URLSession(configuration: .default)
     }
 
@@ -29,18 +33,31 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         urlSession.invalidateAndCancel()
     }
 
-    func connect(auth: ElevenLabsConfiguration, options: ConversationOptions) async throws -> StartupResult {
+    @MainActor
+    func connect(
+        auth: ConversationAuth.TextOnly,
+        config: ConversationConfig,
+        onStartupStateChange: @escaping (ConversationStartupState) -> Void
+    ) async throws -> ConversationStartResult {
+        await initiationMetadataWaiter?.cancel()
+        let waiter = ConversationInitiationMetadataWaiter(
+            timeout: config.startupConfiguration.initiationMetadataTimeout
+        )
+        initiationMetadataWaiter = waiter
         let startTime = Date()
         var metrics = ConversationStartupMetrics()
 
-        let url: URL
+        let resolved: (url: URL, agentId: String)
         do {
-            url = try Self.url(for: auth)
+            resolved = try await Self.websocketUrl(
+                for: auth,
+                endpoints: endpoints,
+                environment: config.environment
+            )
         } catch {
-            metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
-            throw StartupFailure.token(convError, metrics)
+            throw error as? ConversationError ?? .authenticationFailed(error.localizedDescription)
         }
+        let url = resolved.url
 
         let task = urlSession.webSocketTask(with: url)
         self.task = task
@@ -48,28 +65,43 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
 
         // The first send awaits the WebSocket handshake internally —
         // any connection failure surfaces here.
+        onStartupStateChange(.sendingConversationInit)
         do {
-            let initEvent = ConversationInitEvent(config: options.toConversationConfig())
+            let initEvent = ConversationInitEvent(config: config)
             try await send(data: EventSerializer.serializeOutgoingEvent(.conversationInit(initEvent)))
-        } catch is CancellationError {
-            tearDownTask(task)
-            throw CancellationError()
         } catch {
             tearDownTask(task)
-            metrics.total = Date().timeIntervalSince(startTime)
-            let convError = error as? ConversationError ?? .connectionFailed(error)
-            throw StartupFailure.conversationInit(convError, metrics)
+            throw error
         }
 
         // Socket is up and the init message is sent. Start consuming responses.
+        let logger = logger
         receiveTask = Task { [weak self, weak task] in
-            guard let self, let task else { return }
-            await receiveLoop(task: task)
+            guard let task else { return }
+            await Self.receiveLoop(
+                task: task,
+                metadataWaiter: waiter,
+                logger: logger,
+                onEvent: { [weak self] event in
+                    self?.deliver(event)
+                },
+                onFailure: { [weak self] error in
+                    await self?.handleReceiveFailure(error)
+                }
+            )
         }
 
-        metrics.conversationInitAttempts = 1
-        metrics.total = Date().timeIntervalSince(startTime)
-        return StartupResult(agentId: auth.agentId, metrics: metrics)
+        let metadata = try await waitForInitiationMetadata(
+            config: config,
+            metrics: &metrics,
+            startTime: startTime,
+            metadataWaiter: waiter,
+            onStartupStateChange: onStartupStateChange
+        )
+        return ConversationStartResult(
+            callInfo: CallInfo(agentId: resolved.agentId, conversationId: metadata.conversationId),
+            metrics: metrics
+        )
     }
 
     func send(data: Data) async throws {
@@ -84,6 +116,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         onDisconnected = nil
         errorHandler = nil
 
+        await initiationMetadataWaiter?.cancel()
+        initiationMetadataWaiter = nil
         receiveTask?.cancel()
         receiveTask = nil
         task?.cancel(with: .normalClosure, reason: nil)
@@ -97,13 +131,24 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
         }
     }
 
-    private func receiveLoop(task: URLSessionWebSocketTask) async {
+    private nonisolated static func receiveLoop(
+        task: URLSessionWebSocketTask,
+        metadataWaiter: ConversationInitiationMetadataWaiter,
+        logger: any Logging,
+        onEvent: @escaping @MainActor @Sendable (IncomingEvent) -> Void,
+        onFailure: @escaping @Sendable (Error) async -> Void
+    ) async {
         while !Task.isCancelled {
             do {
                 let message = try await task.receive()
                 switch message {
                 case let .string(text):
-                    handleIncomingData(Data(text.utf8), logger: logger)
+                    await Self.handleIncomingData(
+                        Data(text.utf8),
+                        metadataWaiter: metadataWaiter,
+                        logger: logger,
+                        onEvent: onEvent
+                    )
                 case .data:
                     logger.warning("Ignoring binary WebSocket message")
                 @unknown default:
@@ -111,34 +156,54 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                self.task = nil
-                errorHandler?(error)
-                await onDisconnected?()
+                await onFailure(error)
                 return
             }
         }
     }
 
-    static func url(for auth: ElevenLabsConfiguration) throws -> URL {
-        switch auth.authSource {
-        case let .publicAgentId(agentId):
-            var components = URLComponents(string: ConnectionConstants.textConversationUrl)
-            components?.queryItems = [URLQueryItem(name: "agent_id", value: agentId)]
-            guard let url = components?.url else {
+    private func deliver(_ event: IncomingEvent) {
+        onEventReceived?(event)
+    }
+
+    private func handleReceiveFailure(_ error: Error) async {
+        task = nil
+        errorHandler?(error)
+        await onDisconnected?()
+    }
+
+    static func websocketUrl(
+        for auth: ConversationAuth.TextOnly,
+        endpoints: Endpoints,
+        environment: String? = nil
+    ) async throws -> (url: URL, agentId: String) {
+        switch auth {
+        case let .publicAgent(agentId):
+            guard var components = URLComponents(url: endpoints.textWebSocket, resolvingAgainstBaseURL: false) else {
                 throw ConversationError.authenticationFailed("Invalid conversation URL")
             }
-            return url
+            var queryItems = components.queryItems ?? []
+            queryItems.append(URLQueryItem(name: "agent_id", value: agentId))
+            if let environment {
+                queryItems.append(URLQueryItem(name: "environment", value: environment))
+            }
+            components.queryItems = queryItems
+            guard let url = components.url else {
+                throw ConversationError.authenticationFailed("Invalid conversation URL")
+            }
+            return (url, agentId)
 
-        case let .signedWebSocketURL(urlString, _):
+        case let .signedWebSocketURL(mint):
+            let urlString = try await mint()
             guard let url = URL(string: urlString) else {
                 throw ConversationError.authenticationFailed("Invalid signed WebSocket URL")
             }
-            return url
-
-        case .conversationToken, .customTokenProvider:
-            throw ConversationError.authenticationFailed(
-                "Text-only conversations require a public agent ID or signed WebSocket URL."
-            )
+            // Only reported back through `CallInfo`, so absence falls back to the sentinel.
+            let parsedAgentId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first { $0.name == "agent_id" }?
+                .value
+            return (url, parsedAgentId.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown")
         }
     }
 }

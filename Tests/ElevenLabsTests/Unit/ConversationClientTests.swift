@@ -1,0 +1,363 @@
+@testable import ElevenLabs
+import Foundation
+import XCTest
+
+@MainActor
+final class ConversationClientTests: XCTestCase {
+    private var client: ConversationClient!
+    private var mockWebRTCConnectionManager: MockWebRTCConnectionManager!
+    private var mockWebSocketConnectionManager: MockWebSocketConnectionManager!
+    private var dependencyProvider: TestDependencyProvider!
+
+    override func setUp() async throws {
+        mockWebRTCConnectionManager = MockWebRTCConnectionManager()
+        mockWebSocketConnectionManager = MockWebSocketConnectionManager()
+        dependencyProvider = TestDependencyProvider(
+            webRTCConnectionManager: mockWebRTCConnectionManager,
+            webSocketConnectionManager: mockWebSocketConnectionManager
+        )
+        client = ConversationClient(dependencyProvider: dependencyProvider)
+    }
+
+    override func tearDown() async throws {
+        client = nil
+        mockWebRTCConnectionManager = nil
+        mockWebSocketConnectionManager = nil
+        dependencyProvider = nil
+    }
+
+    func testInitialStateIsIdleBeforeAnyStart() {
+        XCTAssertEqual(client.state, .idle)
+        XCTAssertTrue(client.chatHistory.isEmpty)
+        XCTAssertFalse(client.isMicMuted)
+    }
+
+    func testConversationTokenReportsUnknownAgentId() async throws {
+        _ = try await client.startVoiceConversation(.conversationToken("tok"))
+        assertConnected(agentId: "unknown")
+    }
+
+    func testStartConversationMirrorsSessionStateThroughActiveAndEnd() async throws {
+        let result = try await client.startVoiceConversation(.publicAgent(id: "test-agent-id"))
+
+        assertConnected(agentId: "test-agent-id")
+        XCTAssertEqual(result.callInfo.agentId, "test-agent-id")
+        XCTAssertEqual(result.callInfo.conversationId, "test-conversation-id")
+        XCTAssertNotNil(result.metrics.initiationMetadata)
+        XCTAssertFalse(client.isMicMuted)
+        XCTAssertFalse(mockWebRTCConnectionManager.isMicrophoneMuted)
+
+        let payload: [String: Any] = [
+            "type": "agent_response",
+            "agent_response_event": [
+                "agent_response": "Hello from the agent",
+                "event_id": 1,
+                "response_id": "response-1"
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        await mockWebRTCConnectionManager.receive(data: data)
+        await waitForPublished(client.$chatHistory) {
+            $0.last?.message?.content == "Hello from the agent"
+        }
+
+        XCTAssertEqual(client.chatHistory.last?.message?.content, "Hello from the agent")
+
+        await client.endConversation()
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
+    func testRestartEndsPreviousSessionAndStartsFresh() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        assertConnected(agentId: "first-agent")
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 0)
+
+        await client.endConversation()
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
+
+        assertConnected(agentId: "second-agent")
+        XCTAssertTrue(client.chatHistory.isEmpty)
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 2)
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
+    }
+
+    func testStartWhileActiveEndsPreviousAndStartsNext() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        assertConnected(agentId: "first-agent")
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
+
+        assertConnected(agentId: "second-agent")
+        XCTAssertTrue(client.chatHistory.isEmpty)
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 2)
+        XCTAssertEqual(mockWebRTCConnectionManager.disconnectCallCount, 1)
+    }
+
+    func testLatestOverlappingStartWins() async throws {
+        mockWebRTCConnectionManager.autoSucceedAgentReady = false
+
+        let firstStart = Task {
+            try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        }
+        await mockWebRTCConnectionManager.waitUntilWaitingForAgent()
+
+        _ = try await client.startTextOnlyConversation(.publicAgent(id: "second-agent"))
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await firstStart.value
+        }
+
+        assertConnected(agentId: "second-agent")
+    }
+
+    func testResetEndsSessionAndClearsMirroredState() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        let payload: [String: Any] = [
+            "type": "agent_response",
+            "agent_response_event": [
+                "agent_response": "Hello",
+                "event_id": 1,
+                "response_id": "response-1"
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        await mockWebRTCConnectionManager.receive(data: data)
+        await waitForPublished(client.$chatHistory) {
+            $0.last?.message?.content == "Hello"
+        }
+
+        await client.reset()
+
+        XCTAssertEqual(client.state, .idle)
+        XCTAssertTrue(client.chatHistory.isEmpty)
+        XCTAssertTrue(client.pendingToolCalls.isEmpty)
+        XCTAssertNil(client.conversationMetadata)
+        XCTAssertFalse(client.isMicMuted)
+
+        // Client is reusable after reset.
+        _ = try await client.startVoiceConversation(.publicAgent(id: "after-reset"))
+        assertConnected(agentId: "after-reset")
+    }
+
+    func testVoiceThenTextOnlyUsesFreshSessionPerTransport() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "voice-agent"))
+        XCTAssertEqual(mockWebRTCConnectionManager.connectCallCount, 1)
+
+        _ = try await client.startTextOnlyConversation(.publicAgent(id: "text-agent"))
+
+        assertConnected(agentId: "text-agent")
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 1)
+        XCTAssertNil(mockWebRTCConnectionManager.onEventReceived)
+        XCTAssertNil(mockWebRTCConnectionManager.onDisconnected)
+    }
+
+    func testStartFailureAfterBindMirrorsErrorAndCommandsRemainUnavailable() async throws {
+        mockWebRTCConnectionManager.tokenError = .authenticationFailed("Mock authentication failed")
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, .authenticationFailed("Mock authentication failed"))
+        }
+
+        guard case let .error(error) = client.state else {
+            return XCTFail("Expected mirrored startup error after bind")
+        }
+        XCTAssertEqual(error, .authenticationFailed("Mock authentication failed"))
+
+        await XCTAssertThrowsErrorAsync {
+            try await client.sendMessage("hello")
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, .notConnected)
+        }
+
+        // A later start should still work on the same client.
+        mockWebRTCConnectionManager.tokenError = nil
+        _ = try await client.startVoiceConversation(.publicAgent(id: "recovered-agent"))
+        assertConnected(agentId: "recovered-agent")
+    }
+
+    func testPreCancelledStartDoesNotReplaceLiveSession() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "live-agent"))
+        let start = Task { @MainActor in
+            try await client.startTextOnlyConversation(.publicAgent(id: "cancelled-agent"))
+        }
+        start.cancel()
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await start.value
+        } errorHandler: { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        assertConnected(agentId: "live-agent")
+        XCTAssertEqual(mockWebSocketConnectionManager.connectCallCount, 0)
+    }
+
+    func testStartDuringResetWaitsForTheOldSessionAndIsNotOrphaned() async throws {
+        let log = CallbackLog()
+        let client = ConversationClient(
+            callbacks: ConversationCallbacks(
+                onAgentReady: { log.append("ready") },
+                onDisconnect: { _ in log.append("disconnect") }
+            ),
+            dependencyProvider: dependencyProvider
+        )
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        var secondStart: Task<ConversationStartResult, Error>?
+        // Runs while reset() awaits the first session's disconnect; issued as its own task, like a host would.
+        mockWebRTCConnectionManager.onDisconnectStarted = { [unowned self] in
+            guard secondStart == nil else { return }
+            secondStart = Task { try await client.startVoiceConversation(.publicAgent(id: "second-agent")) }
+            // Hold the old disconnect open until the second start has bound its session.
+            await waitForPublished(client.$state) { $0 == .idle }
+        }
+
+        await client.reset()
+        _ = try await XCTUnwrap(secondStart).value
+
+        XCTAssertEqual(log.events, ["ready", "disconnect", "ready"])
+        XCTAssertEqual(client.state.connectedAgentId, "second-agent")
+        await client.endConversation()
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
+    func testCommandThrowsNotConnectedWithNoSession() async throws {
+        do {
+            try await client.sendMessage("hello")
+            XCTFail("Expected notConnected to be thrown")
+        } catch let error as ConversationError {
+            XCTAssertEqual(error, .notConnected)
+        }
+    }
+
+    func testSetMicMutedUpdatesStateWithNoSession() async throws {
+        await client.endConversation()
+        try await client.setMicMuted(true)
+        XCTAssertTrue(client.isMicMuted)
+
+        try await client.setMicMuted(false)
+        XCTAssertFalse(client.isMicMuted)
+
+        client.markToolCallCompleted("missing-id")
+
+        XCTAssertEqual(client.state, .idle)
+    }
+
+    // MARK: - Client tool handler
+
+    func testClientToolHandlerSetOnTheClientAnswersCalls() async throws {
+        client.callbacks.onClientToolCall = { _ in .result("Shipped") }
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
+        XCTAssertTrue(sent)
+        XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.first?["result"] as? String, "Shipped")
+    }
+
+    func testClientToolHandlerSetDuringAConversationAppliesToLaterCalls() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        client.callbacks.onClientToolCall = { _ in .pending }
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+
+        let pending = await eventually { self.client.pendingToolCalls.map(\.toolCallId) == ["call_1"] }
+        XCTAssertTrue(pending)
+        XCTAssertTrue(mockWebRTCConnectionManager.sentToolResults.isEmpty)
+    }
+
+    func testPreStartMuteIsAppliedToConversation() async throws {
+        mockWebRTCConnectionManager.isMicrophoneMuted = false
+
+        try await client.setMicMuted(true)
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        XCTAssertTrue(client.isMicMuted)
+        XCTAssertTrue(mockWebRTCConnectionManager.isMicrophoneMuted)
+    }
+
+    // MARK: - Agent mute
+
+    func testAgentStartsUnmuted() {
+        XCTAssertFalse(client.isAgentMuted)
+    }
+
+    func testSetAgentMutedWithNoSessionIsRememberedAndAppliedOnStart() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+
+        client.setAgentMuted(true)
+        XCTAssertTrue(client.isAgentMuted)
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
+    func testAgentMuteCarriesAcrossSessions() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await client.startVoiceConversation(.publicAgent(id: "first-agent"))
+        client.setAgentMuted(true)
+
+        _ = try await client.startVoiceConversation(.publicAgent(id: "second-agent"))
+
+        XCTAssertTrue(client.isAgentMuted)
+        XCTAssertEqual(mockWebRTCConnectionManager.appliedAgentMuted, true)
+    }
+
+    func testResetUnmutesTheAgent() async throws {
+        mockWebRTCConnectionManager.agentAudioTrack = SpyAudioTrack()
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        client.setAgentMuted(true)
+
+        await client.reset()
+
+        XCTAssertFalse(client.isAgentMuted)
+    }
+
+    func testSetMicMutedIsHarmlessAfterEnd() async throws {
+        _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
+        await client.endConversation()
+
+        try await client.setMicMuted(true)
+
+        XCTAssertTrue(client.isMicMuted)
+        XCTAssertEqual(client.state, .ended(reason: .userEnded))
+    }
+
+    private func assertConnected(
+        agentId: String,
+        conversationId: String = "test-conversation-id",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard case let .connected(info) = client.state else {
+            return XCTFail("Expected connected state, got \(client.state)", file: file, line: line)
+        }
+        XCTAssertEqual(info.agentId, agentId, file: file, line: line)
+        XCTAssertEqual(info.conversationId, conversationId, file: file, line: line)
+    }
+}
+
+/// Records callbacks, which arrive as `@Sendable` closures, in order.
+private final class CallbackLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var events: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ event: String) {
+        lock.lock()
+        storage.append(event)
+        lock.unlock()
+    }
+}

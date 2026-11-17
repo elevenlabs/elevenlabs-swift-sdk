@@ -1,0 +1,666 @@
+import Combine
+import Foundation
+import LiveKit
+
+// swiftlint:disable file_length type_body_length
+
+/// A single-use conversation session, created by and owned by `ConversationClient`.
+///
+/// Owns one conversation's transport (`WebRTCConnectionManager` or
+/// `WebSocketConnectionManager`) and audio device setup.
+@MainActor
+final class Conversation: ObservableObject {
+    // MARK: - State
+
+    @Published var state: ConversationState = .idle
+    @Published var chatHistory: [any ChatHistoryItem] = []
+    @Published var agentState: AgentState = .listening
+
+    /// Client tool calls without an answer yet
+    @Published var pendingToolCalls: [ClientToolCallEvent] = []
+
+    /// Set by `ConversationClient`, which keeps it current.
+    var callbacks: ConversationCallbacks
+
+    /// Conversation metadata including conversation ID, received when the conversation is initialized
+    @Published var conversationMetadata: ConversationMetadataEvent?
+
+    /// MCP tool calls from the agent
+    @Published var mcpToolCalls: [MCPToolCallEvent] = []
+
+    /// Current MCP connection status for all integrations
+    @Published var mcpConnectionStatus: MCPConnectionStatusEvent?
+
+    private var activeConnectionManager: (any ConnectionManaging)?
+    private var agentStateManager: AgentStateManager?
+    private var chatHistoryReconciler = ChatHistoryReconciler()
+    private let config: ConversationConfig
+    private let dependencyProvider: any ConversationDependencyProvider
+    private var isTearingDown = false
+    private nonisolated let logger: any Logging
+
+    // Voice-related state
+
+    private var activeWebRTCConnectionManager: (any WebRTCConnectionManaging)? {
+        activeConnectionManager as? any WebRTCConnectionManaging
+    }
+
+    /// Audio device management
+    private var audioManager: ConversationAudioManager?
+
+    /// Pending mute state to apply after connection completes.
+    /// Allows setting mute state during connection phase.
+    private var pendingMuteState: Bool?
+
+    /// Whether agent playback is muted.
+    private(set) var isAgentMuted: Bool
+
+    /// Externally registered audio observers. Kept attached across track swaps.
+    private let agentObserverRegistry = AudioObserverRegistry()
+    private let micObserverRegistry = AudioObserverRegistry()
+
+    /// Internal LiveKit tracks used to attach ``ConversationAudioObserver``s.
+    private var inputTrack: (any AudioTrackProtocol)? {
+        activeWebRTCConnectionManager?.inputTrack
+    }
+
+    private var agentAudioTrack: (any AudioTrackProtocol)? {
+        activeWebRTCConnectionManager?.agentAudioTrack
+    }
+
+    private var speakingTimer: Task<Void, Never>?
+    /// Running `onClientToolCall` handlers, by tool call id.
+    private var clientToolTasks: [String: Task<Void, Never>] = [:]
+    /// The in-flight teardown; later `endConversation()` calls wait for it instead of returning early.
+    private var ending: Task<Void, Never>?
+
+    // MARK: - Init
+
+    init(
+        dependencyProvider: any ConversationDependencyProvider,
+        config: ConversationConfig = .init(),
+        callbacks: ConversationCallbacks = .init(),
+        initialMicMuted: Bool = false,
+        initialAgentMuted: Bool = false
+    ) {
+        self.dependencyProvider = dependencyProvider
+        self.config = config
+        self.callbacks = callbacks
+        pendingMuteState = initialMicMuted
+        isAgentMuted = initialAgentMuted
+        logger = dependencyProvider.logger
+    }
+
+    // MARK: - API
+
+    func startVoiceConversation(_ auth: ConversationAuth.Voice) async throws -> ConversationStartResult {
+        let manager = dependencyProvider.webRTCConnectionManager
+        return try await start(agentId: auth.agentId, isTextOnly: false, using: manager) { config in
+            let audioManager = ConversationAudioManager(logger: logger)
+            self.audioManager = audioManager
+
+            manager.onRemoteSpeakingChanged = { [weak self] isSpeaking in
+                Task { @MainActor in
+                    self?.handleRemoteSpeakingUpdate(isSpeaking: isSpeaking)
+                }
+            }
+            manager.onTracksChanged = { [weak self] in
+                Task { @MainActor in
+                    self?.refreshAudioObservers()
+                }
+            }
+            // The closure reads the current callback on each detection, so a new one applies at once.
+            await audioManager.configure(with: config) { [weak self] in
+                self?.callbacks.onSpeechDetectedWhileMuted?()
+            }
+            guard state.isConnecting else {
+                audioManager.cleanup()
+                throw CancellationError()
+            }
+            if let pendingMuteState {
+                audioManager.softwareMuteProcessor?.setMuted(pendingMuteState)
+            }
+
+            let result = try await manager.connect(
+                auth: auth,
+                config: config,
+                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
+            )
+
+            if let pendingMute = pendingMuteState {
+                pendingMuteState = nil
+                do {
+                    if let softwareMuteProcessor = audioManager.softwareMuteProcessor {
+                        softwareMuteProcessor.setMuted(pendingMute)
+                    } else {
+                        try await manager.setMicrophoneMuted(pendingMute)
+                    }
+                } catch {
+                    logger.warning("Failed to apply pending mute state", context: ["error": "\(error)"])
+                }
+            }
+
+            refreshAudioObservers()
+            return result
+        }
+    }
+
+    func startTextOnlyConversation(_ auth: ConversationAuth.TextOnly) async throws -> ConversationStartResult {
+        let manager = dependencyProvider.webSocketConnectionManager
+        return try await start(agentId: auth.agentId, isTextOnly: true, using: manager) { config in
+            try await manager.connect(
+                auth: auth,
+                config: config,
+                onStartupStateChange: { [weak self] in self?.updateStartupStage($0) }
+            )
+        }
+    }
+
+    // MARK: - Audio observers
+
+    /// Register an observer for the agent's decoded output audio.
+    func addAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        guard !isTearingDown else { return }
+        agentObserverRegistry.add(observer)
+    }
+
+    /// Unregister a previously added agent audio observer.
+    func removeAgentAudioObserver(_ observer: any ConversationAudioObserver) {
+        agentObserverRegistry.remove(observer)
+    }
+
+    /// Register an observer for the local microphone input audio.
+    func addMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        guard !isTearingDown else { return }
+        micObserverRegistry.add(observer)
+    }
+
+    /// Unregister a previously added mic audio observer.
+    func removeMicAudioObserver(_ observer: any ConversationAudioObserver) {
+        micObserverRegistry.remove(observer)
+    }
+
+    /// Reconcile registered observers with the currently available tracks.
+    func refreshAudioObservers() {
+        guard !isTearingDown else { return }
+        agentObserverRegistry.attach(to: agentAudioTrack)
+        micObserverRegistry.attach(to: inputTrack)
+        activeWebRTCConnectionManager?.setAgentMuted(isAgentMuted)
+    }
+
+    /// End and clean up.
+    /// Can be called during connection phase to cancel, or during connected conversation to end.
+    func endConversation(reason: EndReason = .userEnded) async {
+        if let ending { return await ending.value }
+        if state == .idle {
+            state = .ended(reason: reason)
+            tearDownActiveSession()
+            return
+        }
+
+        guard state.isConnected || state.isConnecting,
+              let connectionManager = activeConnectionManager
+        else { return }
+        state = .ended(reason: reason)
+
+        tearDownActiveSession()
+        let ending = Task {
+            await connectionManager.disconnect()
+            callbacks.onDisconnect?(reason)
+        }
+        self.ending = ending
+        await ending.value
+    }
+
+    /// Send a text message to the agent.
+    func sendMessage(_ text: String) async throws {
+        guard state.isConnected else {
+            throw ConversationError.notConnected
+        }
+        let event = OutgoingEvent.userMessage(UserMessageEvent(text: text))
+        try await publish(event)
+        updateChatHistory { $0.appendUserMessage(text) }
+    }
+
+    /// Mute or unmute agent playback.
+    func setAgentMuted(_ muted: Bool) {
+        isAgentMuted = muted
+        activeWebRTCConnectionManager?.setAgentMuted(muted)
+    }
+
+    /// Mute or unmute the local microphone.
+    func setMicMuted(_ muted: Bool) async throws {
+        if let softwareMuteProcessor = audioManager?.softwareMuteProcessor {
+            softwareMuteProcessor.setMuted(muted)
+            if state.isConnecting {
+                pendingMuteState = muted
+            }
+            return
+        }
+        try await setHardwareMicMuted(muted)
+    }
+
+    func setHardwareMicMuted(_ muted: Bool) async throws {
+        if state.isConnected {
+            guard let webRTCConnectionManager = activeWebRTCConnectionManager else {
+                throw ConversationError.notConnected
+            }
+            do {
+                try await webRTCConnectionManager.setMicrophoneMuted(muted)
+                pendingMuteState = nil
+            } catch WebRTCConnectionManagerError.roomUnavailable {
+                throw ConversationError.notConnected
+            } catch {
+                throw ConversationError.microphoneFailed(error.localizedDescription)
+            }
+        } else if state == .idle || state.isConnecting {
+            pendingMuteState = muted
+        }
+    }
+
+    /// Interrupt the agent while speaking.
+    func interruptAgent() async throws {
+        guard state.isConnected else { throw ConversationError.notConnected }
+        let event = OutgoingEvent.userActivity
+        try await publish(event)
+    }
+
+    /// Inject context for the agent without interrupting or adding a user-visible message.
+    func updateContext(_ context: String) async throws {
+        guard state.isConnected else { throw ConversationError.notConnected }
+        let event = OutgoingEvent.contextualUpdate(ContextualUpdateEvent(text: context))
+        try await publish(event)
+    }
+
+    /// Send feedback (like/dislike) for an event/message id.
+    func sendFeedback(_ score: FeedbackEvent.Score, eventId: Int) async throws {
+        guard state.isConnected else {
+            throw ConversationError.notConnected
+        }
+
+        let event = OutgoingEvent.feedback(FeedbackEvent(score: score, eventId: eventId))
+        try await publish(event)
+    }
+
+    /// Approve or reject an MCP tool call request from the agent.
+    /// - Parameters:
+    ///   - toolCallId: The tool call identifier from `MCPToolCallEvent`.
+    ///   - isApproved: Pass `true` to approve, `false` to reject.
+    func sendMCPToolApproval(toolCallId: String, isApproved: Bool) async throws {
+        guard state.isConnected else { throw ConversationError.notConnected }
+        let approval = MCPToolApprovalResultEvent(toolCallId: toolCallId, isApproved: isApproved)
+        try await publish(.mcpToolApprovalResult(approval))
+    }
+
+    /// Send the result of a client tool call back to the agent. This works while the
+    /// conversation is still connecting too, because a call can arrive before then.
+    func sendToolResult(_ result: ClientToolResultEvent) async throws {
+        guard state.isConnected || state.isConnecting else { throw ConversationError.notConnected }
+        try await publish(.clientToolResult(result))
+        markToolCallCompleted(result.toolCallId)
+    }
+
+    /// Mark a tool call as completed without sending a result (for tools that don't expect responses).
+    func markToolCallCompleted(_ toolCallId: String) {
+        // `@Published` publishes on every write, also on one that removes nothing.
+        guard pendingToolCalls.contains(where: { $0.toolCallId == toolCallId }) else { return }
+        pendingToolCalls.removeAll { $0.toolCallId == toolCallId }
+    }
+
+    // MARK: - Private
+
+    private func start(
+        agentId: String,
+        isTextOnly: Bool,
+        using manager: any ConnectionManaging,
+        connect: (ConversationConfig) async throws -> ConversationStartResult
+    ) async throws -> ConversationStartResult {
+        // Sessions are single-use; a non-idle one was ended or superseded before it started.
+        guard state == .idle else { throw CancellationError() }
+
+        var startConfig = config
+        startConfig.conversationOverrides.textOnly = isTextOnly
+
+        state = .connecting(.preparing)
+        activeConnectionManager = manager
+
+        let mode = isTextOnly ? "text-only" : "voice"
+        logger.info("Starting \(mode) conversation", context: ["agentId": agentId])
+
+        setupAgentStateManager()
+
+        let connectionManagerID = ObjectIdentifier(manager)
+        manager.onEventReceived = { [weak self] event in
+            Task { @MainActor [weak self] in
+                await self?.handleIncomingEvent(event, from: connectionManagerID)
+            }
+        }
+        // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
+        var dropFailure: ConversationError?
+        manager.onDisconnected = { [weak self, weak manager] in
+            guard let self else { return }
+            guard state.isConnecting else { return await endConversation(reason: .remoteDisconnected) }
+            dropFailure = startupError(from: ConversationError.notConnected)
+            await manager?.disconnect()
+        }
+
+        do {
+            let result = try await connect(startConfig)
+            if let dropFailure { throw dropFailure } // it dropped just as `connect` finished
+            return try setConnected(result)
+        } catch {
+            // Cancelled, ended or superseded meanwhile: whatever the transport threw is a side effect.
+            if Task.isCancelled || !state.isConnecting {
+                await handleStartupCancellation(disconnecting: manager)
+                throw CancellationError()
+            }
+            let conversationError = dropFailure ?? startupError(from: error)
+            await handleStartupFailure(conversationError, disconnecting: manager)
+            throw conversationError
+        }
+    }
+
+    /// Anything a transport didn't classify fails the stage it happened in.
+    /// `notConnected` during startup means the transport went away mid-start.
+    private func startupError(from error: Error) -> ConversationError {
+        if let error = error as? ConversationError, error != .notConnected { return error }
+        let failure: ConversationError.ConnectionFailure = switch state {
+        case .connecting(.connectingRoom): .roomConnectionFailed
+        case .connecting(.waitingForAgent): .agentDidNotJoin
+        case .connecting(.agentReady), .connecting(.sendingConversationInit),
+             .connecting(.waitingForInitiationMetadata): .initializationFailed
+        default: .tokenRequestFailed
+        }
+        return .connectionFailed(failure, error.localizedDescription)
+    }
+
+    private func setConnected(_ result: ConversationStartResult) throws -> ConversationStartResult {
+        guard !Task.isCancelled, state.isConnecting else { throw CancellationError() }
+        state = .connected(result.callInfo)
+        callbacks.onAgentReady?()
+        return result
+    }
+
+    private func updateStartupStage(_ stage: ConversationStartupState) {
+        guard state.isConnecting, state != .connecting(stage) else { return }
+        state = .connecting(stage)
+    }
+
+    private func setupAgentStateManager() {
+        guard let configuration = config.agentStateConfiguration else { return }
+        let manager = AgentStateManager(configuration: configuration)
+        manager.onStateChange = { [weak self] state in
+            self?.agentState = state
+            self?.callbacks.onAgentStateChange?(state)
+        }
+        agentStateManager = manager
+    }
+
+    /// Forward a signal to the event-based state manager, or fall back to directly setting `agentState`.
+    private func applyStateSignal(_ signal: AgentStateSignal, fallback: AgentState) {
+        if let manager = agentStateManager {
+            manager.processSignal(signal)
+        } else {
+            agentState = fallback
+        }
+    }
+
+    private func handleRemoteSpeakingUpdate(isSpeaking: Bool) {
+        if let manager = agentStateManager {
+            manager.processSignal(isSpeaking ? .agentStartedSpeaking : .agentStoppedSpeaking)
+        } else if isSpeaking {
+            speakingTimer?.cancel()
+            agentState = .speaking
+        } else {
+            scheduleBackToListening(delay: 1.0)
+        }
+    }
+
+    private func handleIncomingEvent(_ event: IncomingEvent, from connectionManagerID: ObjectIdentifier) async {
+        guard let activeConnectionManager,
+              ObjectIdentifier(activeConnectionManager) == connectionManagerID,
+              state.isConnecting || state.isConnected
+        else {
+            return
+        }
+        await handleIncomingEvent(event)
+    }
+
+    private func handleStartupFailure(
+        _ error: ConversationError,
+        disconnecting connectionManager: any ConnectionManaging
+    ) async {
+        cleanupTransientResources()
+        await connectionManager.disconnect()
+
+        // End/supersede may have already moved us out of connecting; don't
+        // overwrite `.ended` or fire shared `onError` for a discarded session.
+        guard state.isConnecting else { return }
+        state = .error(error)
+        callbacks.onError?(error)
+    }
+
+    private func handleStartupCancellation(disconnecting connectionManager: any ConnectionManaging) async {
+        if state.isConnecting {
+            state = .ended(reason: .userEnded)
+            tearDownActiveSession()
+        }
+        await connectionManager.disconnect()
+    }
+
+    /// Tear down operational state when an active session ends.
+    /// Preserves user-visible display state (history, MCP activity, conversation
+    /// metadata) so `ConversationClient` can keep the completed transcript visible.
+    private func tearDownActiveSession() {
+        cleanupTransientResources()
+
+        pendingToolCalls.removeAll()
+    }
+
+    private func cleanupTransientResources() {
+        isTearingDown = true
+        speakingTimer?.cancel()
+        speakingTimer = nil
+        for task in clientToolTasks.values {
+            task.cancel()
+        }
+        clientToolTasks.removeAll()
+        pendingMuteState = nil
+        agentState = .listening
+
+        agentObserverRegistry.reset()
+        micObserverRegistry.reset()
+
+        audioManager?.cleanup()
+        agentStateManager = nil
+    }
+
+    private func scheduleBackToListening(delay: TimeInterval = 0.5) {
+        speakingTimer?.cancel()
+        speakingTimer = Task {
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                self.agentState = .listening
+            } catch {
+                // Task was cancelled, do nothing
+            }
+        }
+    }
+
+    private func publish(_ event: OutgoingEvent) async throws {
+        guard let connectionManager = activeConnectionManager else {
+            throw ConversationError.notConnected
+        }
+
+        try await connectionManager.send(event: event)
+    }
+
+    // MARK: - Client tools
+
+    private func runClientTool(_ call: ClientToolCallEvent, handler: @escaping ClientToolHandler) {
+        clientToolTasks[call.toolCallId] = Task { [weak self] in
+            let reply: Result<ClientToolReply, Error>
+            do {
+                reply = try await .success(handler(call))
+            } catch {
+                reply = .failure(error)
+            }
+            // A cancelled handler belongs to a session that ended.
+            guard let self, !Task.isCancelled else { return }
+            clientToolTasks[call.toolCallId] = nil
+            // The app may have answered the call itself while the handler ran.
+            guard pendingToolCalls.contains(where: { $0.toolCallId == call.toolCallId }) else { return }
+            switch reply {
+            case .success(.pending):
+                return
+            case let .success(.result(text)):
+                await completeClientToolCall(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+            case let .failure(error as ClientToolError):
+                // The handler chose this answer, for example because the user declined.
+                logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
+            case let .failure(error):
+                // Like the error result, the log leaves out an `NSError`'s user info.
+                logger.warning(
+                    "A client tool handler failed",
+                    context: ["tool": call.toolName, "error": error.localizedDescription]
+                )
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
+            }
+        }
+    }
+
+    private static func errorResult(_ error: Error, for call: ClientToolCallEvent) -> ClientToolResultEvent {
+        if let error = error as? ClientToolError {
+            return ClientToolResultEvent(
+                toolCallId: call.toolCallId,
+                result: error.message,
+                isError: true,
+                errorType: error.errorType
+            )
+        }
+        // `String(describing:)` would add an `NSError`'s user info, which can hold a URL with a token.
+        return ClientToolResultEvent(
+            toolCallId: call.toolCallId,
+            result: "Client tool execution failed: \(error.localizedDescription)",
+            isError: true
+        )
+    }
+
+    /// Sends `result` if the agent waits for one. Otherwise marks the call completed.
+    private func completeClientToolCall(_ call: ClientToolCallEvent, with result: ClientToolResultEvent) async {
+        guard call.expectsResponse else { return markToolCallCompleted(call.toolCallId) }
+        do {
+            try await sendToolResult(result)
+        } catch {
+            logger.warning(
+                "Failed to send a client tool result",
+                context: ["tool": call.toolName, "error": "\(error)"]
+            )
+        }
+    }
+
+    // MARK: - Event Handling
+
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
+    func handleIncomingEvent(_ event: IncomingEvent) async {
+        switch event {
+        case let .userTranscript(e):
+            updateChatHistory { $0.receive(e) }
+            agentStateManager?.processSignal(.userTranscript)
+            callbacks.onUserTranscript?(e.transcript, e.eventId)
+
+        case let .agentResponse(e):
+            updateChatHistory { $0.receive(e) }
+            agentStateManager?.processSignal(.agentResponse)
+            callbacks.onAgentResponse?(e.response, e.eventId)
+
+        case let .agentResponseCorrection(correction):
+            updateChatHistory { $0.receive(correction) }
+            callbacks.onAgentResponseCorrection?(
+                correction.originalAgentResponse,
+                correction.correctedAgentResponse,
+                correction.eventId
+            )
+
+        case let .agentResponseMetadata(metadata):
+            callbacks.onAgentResponseMetadata?(
+                metadata.metadataData,
+                metadata.eventId
+            )
+
+        case let .agentChatResponsePart(e):
+            updateChatHistory { $0.receive(e) }
+
+        case let .audio(audioEvent):
+            if let alignment = audioEvent.alignment {
+                callbacks.onAudioAlignment?(alignment)
+            }
+
+        case let .interruption(interruptionEvent):
+            speakingTimer?.cancel()
+            applyStateSignal(.interruption, fallback: .listening)
+            callbacks.onInterruption?(interruptionEvent.eventId)
+
+        case let .conversationMetadata(metadata):
+            conversationMetadata = metadata
+            callbacks.onConversationMetadata?(metadata)
+
+        case let .ping(p):
+            let pong = OutgoingEvent.pong(PongEvent(eventId: p.eventId))
+            try? await publish(pong)
+
+        case let .clientToolCall(toolCall):
+            guard let handler = callbacks.onClientToolCall else {
+                // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
+                logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
+                let error = ClientToolError("No client tool handler is configured in the app.")
+                await completeClientToolCall(toolCall, with: Self.errorResult(error, for: toolCall))
+                break
+            }
+            pendingToolCalls.append(toolCall)
+            runClientTool(toolCall, handler: handler)
+
+        case let .vadScore(vad):
+            agentStateManager?.processSignal(.vadScore(vad.vadScore))
+            callbacks.onVadScore?(vad.vadScore)
+
+        case let .agentToolResponse(toolResponse):
+            updateChatHistory { $0.receive(toolResponse) }
+            applyStateSignal(.agentToolResponse, fallback: .listening)
+
+            if toolResponse.toolName == "end_call" {
+                await endConversation(reason: .agentEnded)
+            }
+            callbacks.onAgentToolResponse?(toolResponse)
+
+        case let .agentToolRequest(toolRequest):
+            applyStateSignal(.agentToolRequest, fallback: .thinking)
+            callbacks.onAgentToolRequest?(toolRequest)
+
+        case let .tentativeUserTranscript(transcript):
+            updateChatHistory { $0.receive(transcript) }
+
+        case let .mcpToolCall(toolCall):
+            if let index = mcpToolCalls.firstIndex(where: { $0.toolCallId == toolCall.toolCallId }) {
+                mcpToolCalls[index] = toolCall
+            } else {
+                mcpToolCalls.append(toolCall)
+            }
+
+        case let .mcpConnectionStatus(status):
+            mcpConnectionStatus = status
+
+        case let .error(errorEvent):
+            logger.error("Received error event from server: code=\(errorEvent.code), message=\(errorEvent.message ?? "none")")
+            callbacks.onError?(.serverError(errorEvent))
+        }
+    }
+
+    private func updateChatHistory(_ update: (inout ChatHistoryReconciler) -> Void) {
+        update(&chatHistoryReconciler)
+        chatHistory = chatHistoryReconciler.items
+    }
+}
+
+// swiftlint:enable file_length type_body_length
