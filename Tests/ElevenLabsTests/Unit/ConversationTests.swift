@@ -1090,13 +1090,16 @@ final class ConversationTests: XCTestCase {
         )
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent-id"))
 
-        let failure = EndReason.error(EndReason.Details(message: "LiveKit room disconnected: Server shutdown"))
+        let failure = EndReason.error(EndReason.Details(
+            message: "LiveKit room disconnected: Server shutdown", roomDisconnectReason: .serverShutdown
+        ))
         let onDisconnected = try XCTUnwrap(mockWebRTCConnectionManager.onDisconnected)
         await onDisconnected(failure)
         await onDisconnected(.agentEnded())
 
         let values = await waitForValues(reasons, count: 1)
         XCTAssertEqual(values, [failure])
+        XCTAssertEqual(values.first?.details?.roomDisconnectReason, .serverShutdown)
         XCTAssertEqual(conversation.state, .ended(reason: failure), "A later end must not replace the error")
     }
 

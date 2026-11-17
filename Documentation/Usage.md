@@ -96,7 +96,7 @@ The `EndReason` in `.ended`, which `onDisconnect` also receives, says what ended
 | `.agentEnded` | The agent: it called its `end_call` tool, left the room, or the server closed the connection normally |
 | `.error` | A failure: the connection dropped, or the server ended the conversation with an error |
 
-`.agentEnded` and `.error` carry `EndReason.Details` with what the SDK knows about the end; `reason.details?.message` describes it for logs.
+`.agentEnded` and `.error` carry `EndReason.Details` with what the SDK knows about the end; `reason.details?.message` describes it for logs. When the server ends a voice conversation's room, `details.roomDisconnectReason` is the reason it gave, such as `.roomDeleted` (`.agentEnded`) or `.serverShutdown` (`.error`). LiveKit's Swift SDK names seven reasons and reports the rest, including `ROOM_CLOSED`, as `.unknown`, which the SDK treats as an error. For text-only conversations, see the close code and reason under [Text-Only Conversations](#text-only).
 
 ```swift
 switch reason {

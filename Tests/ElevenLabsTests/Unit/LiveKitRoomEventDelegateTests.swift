@@ -58,7 +58,7 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     func testReportsOnlyTheFirstEnd() async throws {
         let got = expectation(description: "first end")
         let delegate = makeDelegate(onRemoteDisconnect: { reason in
-            XCTAssertEqual(reason, .agentEnded())
+            XCTAssertEqual(reason.details?.roomDisconnectReason, .roomDeleted)
             got.fulfill()
         })
 
@@ -81,21 +81,34 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     }
 
     func testServerClosingTheRoomIsTheAgentEnding() {
-        for type in [LiveKitErrorType.roomDeleted, .participantRemoved, .cancelled] {
-            XCTAssertEqual(LiveKitRoomEventDelegate.endReason(for: LiveKitError(type)), .agentEnded(), "\(type)")
+        let deliberate: [(LiveKitErrorType, EndReason.RoomDisconnectReason)] = [
+            (.roomDeleted, .roomDeleted), (.participantRemoved, .participantRemoved), (.cancelled, .clientInitiated)
+        ]
+        for (type, serverReason) in deliberate {
+            let reason = LiveKitRoomEventDelegate.endReason(for: LiveKitError(type))
+            guard case let .agentEnded(details) = reason else { return XCTFail("Expected .agentEnded, got \(reason)") }
+            XCTAssertEqual(details.roomDisconnectReason, serverReason)
         }
     }
 
-    func testFailedRoomIsAnError() {
-        let failures: [LiveKitErrorType] = [
-            .serverShutdown, .duplicateIdentity, .stateMismatch, .joinFailure, .unknown, .network, .serverPingTimedOut
+    func testServerEndingTheRoomWithAFailureIsAnErrorWithTheServerReason() {
+        let failures: [(LiveKitErrorType, EndReason.RoomDisconnectReason)] = [
+            (.serverShutdown, .serverShutdown), (.duplicateIdentity, .duplicateIdentity),
+            (.stateMismatch, .stateMismatch), (.joinFailure, .joinFailure), (.unknown, .unknown)
         ]
-        for type in failures {
+        for (type, serverReason) in failures {
             let reason = LiveKitRoomEventDelegate.endReason(for: LiveKitError(type))
-            guard case .error = reason else { return XCTFail("Expected .error for \(type), got \(reason)") }
+            guard case let .error(details) = reason else { return XCTFail("Expected .error, got \(reason)") }
+            XCTAssertEqual(details.roomDisconnectReason, serverReason)
+            XCTAssertEqual(details.message, "LiveKit room disconnected: \(type)")
         }
-        guard case .error = LiveKitRoomEventDelegate.endReason(for: nil) else {
-            return XCTFail("A disconnect without an error must report .error")
+    }
+
+    func testConnectionFailureIsAnErrorWithoutAServerReason() {
+        for error in [LiveKitError(.network), LiveKitError(.serverPingTimedOut), nil] {
+            let reason = LiveKitRoomEventDelegate.endReason(for: error)
+            guard case let .error(details) = reason else { return XCTFail("Expected .error, got \(reason)") }
+            XCTAssertNil(details.roomDisconnectReason)
         }
     }
 

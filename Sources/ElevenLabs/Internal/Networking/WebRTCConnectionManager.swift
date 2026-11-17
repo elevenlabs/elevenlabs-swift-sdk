@@ -451,11 +451,15 @@ final class LiveKitRoomEventDelegate: RoomDelegate, @unchecked Sendable {
         guard let error else {
             return .error(EndReason.Details(message: "LiveKit room disconnected"))
         }
+        let details = EndReason.Details(
+            message: "LiveKit room disconnected: \(error.localizedDescription)",
+            roomDisconnectReason: EndReason.RoomDisconnectReason(error.type)
+        )
         switch error.type {
         case .cancelled, .participantRemoved, .roomDeleted:
-            return .agentEnded()
+            return .agentEnded(details)
         default:
-            return .error(EndReason.Details(message: "LiveKit room disconnected: \(error.localizedDescription)"))
+            return .error(details)
         }
     }
 
@@ -489,6 +493,25 @@ final class LiveKitRoomEventDelegate: RoomDelegate, @unchecked Sendable {
     nonisolated func room(_: Room, participant _: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
         guard publication.kind == .audio else { return }
         onTracksChanged()
+    }
+}
+
+extension EndReason.RoomDisconnectReason {
+    /// LiveKit's Swift SDK keeps the server's `DisconnectReason` internal and turns it into the error
+    /// type below, folding every reason it doesn't name into `.unknown`. `nil` for an error type that
+    /// no `DisconnectReason` maps to, such as a network failure.
+    init?(_ type: LiveKitErrorType) {
+        switch type {
+        case .cancelled: self = .clientInitiated
+        case .duplicateIdentity: self = .duplicateIdentity
+        case .serverShutdown: self = .serverShutdown
+        case .participantRemoved: self = .participantRemoved
+        case .roomDeleted: self = .roomDeleted
+        case .stateMismatch: self = .stateMismatch
+        case .joinFailure: self = .joinFailure
+        case .unknown: self = .unknown
+        default: return nil
+        }
     }
 }
 
