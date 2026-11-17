@@ -340,7 +340,12 @@ final class Conversation: ObservableObject {
         manager.onDisconnected = { [weak self, weak manager] reason in
             guard let self else { return }
             guard state.isConnecting else { return await endConversation(reason: reason) }
-            dropFailure = startupError(from: ConversationError.notConnected)
+            let failure = startupError(from: ConversationError.notConnected)
+            if case let .connectionFailed(stage, _) = failure, let closeReason = reason.details?.closeReason {
+                dropFailure = .connectionFailed(stage, closeReason)
+            } else {
+                dropFailure = failure
+            }
             await manager?.disconnect()
         }
 

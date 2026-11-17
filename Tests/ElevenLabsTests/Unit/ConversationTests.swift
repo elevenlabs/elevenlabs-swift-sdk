@@ -688,6 +688,25 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(errors.count, 1)
     }
 
+    func testTextOnlyDropDuringStartupFailsWithTheServerCloseReason() async throws {
+        mockWebSocketConnectionManager.autoDeliverInitiationMetadata = false
+        let mock = try XCTUnwrap(mockWebSocketConnectionManager)
+        let startTask = Task { [conversation = conversation!] in
+            _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent"))
+        }
+        await waitForPublished(conversation.$state) { $0 == .connecting(.waitingForInitiationMetadata(timeout: 5.0)) }
+
+        await mock.onDisconnected?(.error(EndReason.Details(
+            message: "Agent not found", closeCode: 1008, closeReason: "Agent not found"
+        )))
+
+        await XCTAssertThrowsErrorAsync {
+            try await startTask.value
+        } errorHandler: { error in
+            XCTAssertEqual(error as? ConversationError, .connectionFailed(.initializationFailed, "Agent not found"))
+        }
+    }
+
     func testDropRacingASuccessfulConnectStillFailsTheStart() async throws {
         let mock = try XCTUnwrap(mockWebRTCConnectionManager)
         mock.onConnectCompleted = {

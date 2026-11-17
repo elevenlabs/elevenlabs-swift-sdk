@@ -820,7 +820,7 @@ do {
 
 ### 4. Handling Connection Drops
 
-Listen to the `$state` property. If you see `.ended(reason: .error)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
+Listen to the `$state` property. If you see `.ended(reason: .error)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead, carrying the server's close reason as its message when the server sent one.
 
 ### 5. Privacy
 
