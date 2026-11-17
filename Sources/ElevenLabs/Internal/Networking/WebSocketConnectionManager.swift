@@ -156,7 +156,8 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                await onFailure(error, endReason(closeCode: task.closeCode, receiveError: error))
+                let reason = endReason(closeCode: task.closeCode, closeReason: task.closeReason, receiveError: error)
+                await onFailure(error, reason)
                 return
             }
         }
@@ -176,17 +177,20 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     /// without a close frame (`closeCode` is `.invalid`), is an error.
     nonisolated static func endReason(
         closeCode: URLSessionWebSocketTask.CloseCode,
+        closeReason: Data? = nil,
         receiveError: Error
     ) -> EndReason {
+        let closeReason = closeReason.flatMap { String(bytes: $0, encoding: .utf8) }.flatMap { $0.isEmpty ? nil : $0 }
         switch closeCode {
         case .invalid:
-            .error(EndReason.Details(message: receiveError.localizedDescription))
+            return .error(EndReason.Details(message: receiveError.localizedDescription))
         case .normalClosure:
-            .agentEnded(EndReason.Details(closeCode: closeCode.rawValue))
+            return .agentEnded(EndReason.Details(closeCode: closeCode.rawValue, closeReason: closeReason))
         default:
-            .error(EndReason.Details(
-                message: "The connection was closed by the server.",
-                closeCode: closeCode.rawValue
+            return .error(EndReason.Details(
+                message: closeReason ?? "The connection was closed by the server.",
+                closeCode: closeCode.rawValue,
+                closeReason: closeReason
             ))
         }
     }

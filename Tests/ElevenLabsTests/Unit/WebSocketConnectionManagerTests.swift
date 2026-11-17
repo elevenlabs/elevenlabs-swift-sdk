@@ -19,6 +19,36 @@ final class WebSocketConnectionManagerTests: XCTestCase {
         }
     }
 
+    func testServerCloseReasonIsReported() {
+        let reason = WebSocketConnectionManager.endReason(
+            closeCode: .policyViolation,
+            closeReason: Data("Max duration exceeded".utf8),
+            receiveError: receiveError
+        )
+        XCTAssertEqual(reason, .error(EndReason.Details(
+            message: "Max duration exceeded",
+            closeCode: 1008,
+            closeReason: "Max duration exceeded"
+        )))
+
+        let normalClose = WebSocketConnectionManager.endReason(
+            closeCode: .normalClosure,
+            closeReason: Data("Conversation ended".utf8),
+            receiveError: receiveError
+        )
+        XCTAssertEqual(normalClose, .agentEnded(EndReason.Details(closeCode: 1000, closeReason: "Conversation ended")))
+    }
+
+    func testEmptyServerCloseReasonIsNil() {
+        let reason = WebSocketConnectionManager.endReason(
+            closeCode: .internalServerError,
+            closeReason: Data(),
+            receiveError: receiveError
+        )
+        XCTAssertNil(reason.details?.closeReason)
+        XCTAssertEqual(reason.details?.message, "The connection was closed by the server.")
+    }
+
     func testSocketFailureWithoutCloseFrameIsAnErrorWithoutACode() {
         let reason = WebSocketConnectionManager.endReason(closeCode: .invalid, receiveError: receiveError)
         XCTAssertEqual(reason, .error(EndReason.Details(message: receiveError.localizedDescription)))

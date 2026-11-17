@@ -165,13 +165,13 @@ client.$chatHistory
 
 For private agents, authenticate with a signed WebSocket URL minted by your backend — see [Advanced Authentication](#advanced-authentication).
 
-When the server closes the WebSocket, `onDisconnect` receives `.agentEnded` for a normal close (1000) and `.error` for any other close code, with the code the server sent in `details.closeCode`:
+When the server closes the WebSocket, `onDisconnect` receives `.agentEnded` for a normal close (1000) and `.error` for any other close code, with the code and reason the server sent in `details.closeCode` and `details.closeReason`:
 
 ```swift
 let callbacks = ConversationCallbacks(
     onDisconnect: { reason in
         if let closeCode = reason.details?.closeCode {
-            print("Server closed the conversation with code \(closeCode)")
+            print("Server closed the conversation: \(closeCode) \(reason.details?.closeReason ?? "")")
         }
     }
 )

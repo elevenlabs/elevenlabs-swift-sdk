@@ -27,9 +27,13 @@ public enum EndReason: Equatable, Sendable {
         /// `nil` when the connection ended without one, and for voice conversations.
         public var closeCode: Int?
 
-        public init(message: String? = nil, closeCode: Int? = nil) {
+        /// The reason the server sent along with ``closeCode``; `nil` when it sent none.
+        public var closeReason: String?
+
+        public init(message: String? = nil, closeCode: Int? = nil, closeReason: String? = nil) {
             self.message = message
             self.closeCode = closeCode
+            self.closeReason = closeReason
         }
     }
 }
