@@ -789,6 +789,18 @@ do {
 
 Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
 
+For text-only conversations, `onDisconnectDetails` receives the same `EndReason` plus the close code and reason the server sent when it closed the WebSocket:
+
+```swift
+let callbacks = ConversationCallbacks(
+    onDisconnectDetails: { details in
+        if let closeCode = details.closeCode {
+            print("Server closed the conversation: \(closeCode) \(details.closeReason ?? "")")
+        }
+    }
+)
+```
+
 ### 5. Privacy
 
 Always ensure you have requested microphone permissions **before** starting a voice conversation for a smoother user experience, although the SDK will handle basics.
