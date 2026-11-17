@@ -464,10 +464,10 @@ final class LiveKitRoomEventDelegate: RoomDelegate, @unchecked Sendable {
     }
 
     private func reportEnd(_ reason: EndReason) {
-        let isFirst = endLock.withLock {
-            defer { endReported = true }
-            return !endReported
-        }
+        endLock.lock()
+        let isFirst = !endReported
+        endReported = true
+        endLock.unlock()
         guard isFirst else { return }
         Task { [onRemoteDisconnect] in
             await onRemoteDisconnect(reason)
