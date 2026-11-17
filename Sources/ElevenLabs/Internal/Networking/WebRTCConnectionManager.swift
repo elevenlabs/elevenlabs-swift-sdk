@@ -27,7 +27,7 @@ enum WebRTCConnectionManagerError: Error {
 @MainActor
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((EndReason) async -> Void)?
 
     /// Fired when LiveKit receives and parses a protocol event from the room.
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
@@ -248,8 +248,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
                     self?.onRemoteSpeakingChanged?(isSpeaking)
                 }
             },
-            onRemoteDisconnect: { [weak self] in
-                await self?.handleRemoteDisconnect()
+            onRemoteDisconnect: { [weak self] reason in
+                await self?.handleRemoteDisconnect(reason)
             },
             onTracksChanged: { [weak self] in
                 Task { @MainActor in self?.onTracksChanged?() }
@@ -330,8 +330,8 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
         eventDelegate = nil
     }
 
-    private func handleRemoteDisconnect() async {
-        await onDisconnected?()
+    private func handleRemoteDisconnect(_ reason: EndReason) async {
+        await onDisconnected?(reason)
     }
 
     // MARK: – Private helpers
@@ -387,13 +387,13 @@ private func isAgentParticipant(_ participant: Participant) -> Bool {
 final class LiveKitRoomEventDelegate: RoomDelegate {
     private let onData: @Sendable (Data) -> Void
     private let onRemoteSpeaking: @Sendable (Bool) -> Void
-    private let onRemoteDisconnect: @Sendable () async -> Void
+    private let onRemoteDisconnect: @Sendable (EndReason) async -> Void
     private let onTracksChanged: @Sendable () -> Void
 
     init(
         onData: @escaping @Sendable (Data) -> Void,
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void,
-        onRemoteDisconnect: @escaping @Sendable () async -> Void,
+        onRemoteDisconnect: @escaping @Sendable (EndReason) async -> Void,
         onTracksChanged: @escaping @Sendable () -> Void = {}
     ) {
         self.onData = onData
@@ -417,14 +417,14 @@ final class LiveKitRoomEventDelegate: RoomDelegate {
     nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
         guard isAgentParticipant(participant) || room.remoteParticipants.isEmpty else { return }
         Task { [onRemoteDisconnect] in
-            await onRemoteDisconnect()
+            await onRemoteDisconnect(.remoteDisconnected)
         }
     }
 
     nonisolated func room(_: Room, didUpdateConnectionState state: ConnectionState, from _: ConnectionState) {
         guard state == .disconnected else { return }
         Task { [onRemoteDisconnect] in
-            await onRemoteDisconnect()
+            await onRemoteDisconnect(.remoteDisconnected)
         }
     }
 

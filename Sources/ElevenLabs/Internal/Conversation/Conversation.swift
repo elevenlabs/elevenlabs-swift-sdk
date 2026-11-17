@@ -337,9 +337,9 @@ final class Conversation: ObservableObject {
         }
         // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
         var dropFailure: ConversationError?
-        manager.onDisconnected = { [weak self, weak manager] in
+        manager.onDisconnected = { [weak self, weak manager] reason in
             guard let self else { return }
-            guard state.isConnecting else { return await endConversation(reason: .remoteDisconnected) }
+            guard state.isConnecting else { return await endConversation(reason: reason) }
             dropFailure = startupError(from: ConversationError.notConnected)
             await manager?.disconnect()
         }

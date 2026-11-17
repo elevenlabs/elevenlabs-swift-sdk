@@ -8,7 +8,8 @@ enum ConnectionManagerError: Error {
 @MainActor
 protocol ConnectionManaging: AnyObject {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)? { get set }
-    var onDisconnected: (() async -> Void)? { get set }
+    /// Fired once when the remote side ends the connection, with what ended it.
+    var onDisconnected: ((EndReason) async -> Void)? { get set }
     var errorHandler: ((Swift.Error?) -> Void)? { get set }
 
     func disconnect() async

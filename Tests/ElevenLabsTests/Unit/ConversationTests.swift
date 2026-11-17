@@ -672,7 +672,7 @@ final class ConversationTests: XCTestCase {
         }
         await mock.waitUntilWaitingForAgent()
 
-        await mock.onDisconnected?()
+        await mock.onDisconnected?(.remoteDisconnected)
 
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
@@ -691,7 +691,7 @@ final class ConversationTests: XCTestCase {
     func testDropRacingASuccessfulConnectStillFailsTheStart() async throws {
         let mock = try XCTUnwrap(mockWebRTCConnectionManager)
         mock.onConnectCompleted = {
-            await mock.onDisconnected?()
+            await mock.onDisconnected?(.remoteDisconnected)
         }
 
         await XCTAssertThrowsErrorAsync {
@@ -1069,7 +1069,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.state.isConnected)
         let disconnectsBefore = mockWebRTCConnectionManager.disconnectCallCount
 
-        await mockWebRTCConnectionManager.onDisconnected?()
+        await mockWebRTCConnectionManager.onDisconnected?(.remoteDisconnected)
 
         XCTAssertEqual(
             mockWebRTCConnectionManager.disconnectCallCount,
@@ -1078,6 +1078,21 @@ final class ConversationTests: XCTestCase {
         )
         await fulfillment(of: [gotDisconnect], timeout: 1.0)
         XCTAssertEqual(conversation.state, .ended(reason: .remoteDisconnected))
+    }
+
+    func testTransportEndReasonReachesOnDisconnect() async throws {
+        let reasons = ValueRecorder<EndReason>()
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onDisconnect = { reason in Task { await reasons.append(reason) } }
+        })
+        let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
+        _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent-id"))
+
+        await mockWebSocketConnectionManager.onDisconnected?(.agentEnded)
+
+        let values = await waitForValues(reasons, count: 1)
+        XCTAssertEqual(values, [.agentEnded])
+        XCTAssertEqual(conversation.state, .ended(reason: .agentEnded))
     }
 }
 

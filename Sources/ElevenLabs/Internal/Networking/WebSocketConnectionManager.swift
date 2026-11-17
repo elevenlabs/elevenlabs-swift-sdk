@@ -13,7 +13,7 @@ import Foundation
 @MainActor
 final class WebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((EndReason) async -> Void)?
     var errorHandler: ((Swift.Error?) -> Void)?
 
     private let urlSession: URLSession
@@ -169,7 +169,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     private func handleReceiveFailure(_ error: Error) async {
         task = nil
         errorHandler?(error)
-        await onDisconnected?()
+        await onDisconnected?(.remoteDisconnected)
     }
 
     static func websocketUrl(

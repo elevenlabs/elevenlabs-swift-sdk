@@ -7,7 +7,7 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     private func makeDelegate(
         onData: @escaping @Sendable (Data) -> Void = { _ in },
         onRemoteSpeaking: @escaping @Sendable (Bool) -> Void = { _ in },
-        onRemoteDisconnect: @escaping @Sendable () async -> Void = {},
+        onRemoteDisconnect: @escaping @Sendable (EndReason) async -> Void = { _ in },
         onTracksChanged: @escaping @Sendable () -> Void = {}
     ) -> RoomDelegate {
         LiveKitRoomEventDelegate(
@@ -45,7 +45,7 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
 
     func testForwardsDisconnectOnConnectionLoss() async {
         let got = expectation(description: "disconnect")
-        let delegate = makeDelegate(onRemoteDisconnect: { got.fulfill() })
+        let delegate = makeDelegate(onRemoteDisconnect: { _ in got.fulfill() })
 
         delegate.room?(Room(), didUpdateConnectionState: .disconnected, from: .connected)
 
@@ -55,7 +55,7 @@ final class LiveKitRoomEventDelegateTests: XCTestCase {
     func testIgnoresNonDisconnectedConnectionState() async {
         let notCalled = expectation(description: "disconnect")
         notCalled.isInverted = true
-        let delegate = makeDelegate(onRemoteDisconnect: { notCalled.fulfill() })
+        let delegate = makeDelegate(onRemoteDisconnect: { _ in notCalled.fulfill() })
 
         delegate.room?(Room(), didUpdateConnectionState: .connected, from: .connecting)
 
