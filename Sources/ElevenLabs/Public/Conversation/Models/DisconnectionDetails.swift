@@ -9,8 +9,12 @@ public struct DisconnectionDetails: Equatable, Sendable {
     /// `nil` when the server didn't close the WebSocket, and for voice conversations.
     public var closeCode: Int?
 
-    public init(reason: EndReason, closeCode: Int? = nil) {
+    /// The close reason the server sent along with `closeCode`; `nil` when it sent none.
+    public var closeReason: String?
+
+    public init(reason: EndReason, closeCode: Int? = nil, closeReason: String? = nil) {
         self.reason = reason
         self.closeCode = closeCode
+        self.closeReason = closeReason
     }
 }

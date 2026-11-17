@@ -1095,7 +1095,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(Set(values), ["onDisconnect userEnded", "onDisconnectDetails userEnded"])
     }
 
-    func testServerCloseCodeReachesOnDisconnectDetails() async throws {
+    func testServerCloseCodeAndReasonReachOnDisconnectDetails() async throws {
         let disconnects = ValueRecorder<DisconnectionDetails>()
         let callbacks = makeCallbacks(configure: { callbacks in
             callbacks.onDisconnectDetails = { details in Task { await disconnects.append(details) } }
@@ -1103,7 +1103,7 @@ final class ConversationTests: XCTestCase {
         let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
         _ = try await conversation.startTextOnlyConversation(.publicAgent(id: "test-agent-id"))
 
-        let serverClose = DisconnectionDetails(reason: .remoteDisconnected, closeCode: 1011)
+        let serverClose = DisconnectionDetails(reason: .remoteDisconnected, closeCode: 1011, closeReason: "Internal error")
         await mockWebSocketConnectionManager.onDisconnected?(serverClose)
 
         let values = await waitForValues(disconnects, count: 1)

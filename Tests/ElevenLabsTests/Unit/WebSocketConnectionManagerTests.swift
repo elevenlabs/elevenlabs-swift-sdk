@@ -14,4 +14,17 @@ final class WebSocketConnectionManagerTests: XCTestCase {
         let details = WebSocketConnectionManager.disconnectionDetails(closeCode: .invalid)
         XCTAssertEqual(details, DisconnectionDetails(reason: .remoteDisconnected))
     }
+
+    func testServerCloseReasonIsReported() {
+        let details = WebSocketConnectionManager.disconnectionDetails(
+            closeCode: .policyViolation,
+            closeReason: Data("Max duration exceeded".utf8)
+        )
+        XCTAssertEqual(details.closeReason, "Max duration exceeded")
+    }
+
+    func testEmptyServerCloseReasonIsNil() {
+        XCTAssertNil(WebSocketConnectionManager.disconnectionDetails(closeCode: .normalClosure, closeReason: Data()).closeReason)
+        XCTAssertNil(WebSocketConnectionManager.disconnectionDetails(closeCode: .normalClosure, closeReason: nil).closeReason)
+    }
 }

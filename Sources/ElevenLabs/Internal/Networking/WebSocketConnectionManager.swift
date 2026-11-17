@@ -5,7 +5,7 @@ import Foundation
 /// Opens a single `URLSessionWebSocketTask` to the text conversation endpoint,
 /// sends `conversationInit` once the socket is open, then runs a receive loop
 /// that forwards incoming events and waits for initiation metadata. When the
-/// socket closes or fails, fires `onDisconnected` once with the server's close code.
+/// socket closes or fails, fires `onDisconnected` once with the server's close code and reason.
 ///
 /// Used instead of `WebRTCConnectionManager` because the WebRTC transport
 /// drops rooms with no audio — text-only needs a transport that stays open
@@ -156,7 +156,7 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                await onFailure(error, Self.disconnectionDetails(closeCode: task.closeCode))
+                await onFailure(error, disconnectionDetails(closeCode: task.closeCode, closeReason: task.closeReason))
                 return
             }
         }
@@ -173,10 +173,14 @@ final class WebSocketConnectionManager: WebSocketConnectionManaging {
     }
 
     /// `closeCode` is `.invalid` when the receive failed without a close frame from the server.
-    nonisolated static func disconnectionDetails(closeCode: URLSessionWebSocketTask.CloseCode) -> DisconnectionDetails {
+    nonisolated static func disconnectionDetails(
+        closeCode: URLSessionWebSocketTask.CloseCode,
+        closeReason: Data? = nil
+    ) -> DisconnectionDetails {
         DisconnectionDetails(
             reason: .remoteDisconnected,
-            closeCode: closeCode == .invalid ? nil : closeCode.rawValue
+            closeCode: closeCode == .invalid ? nil : closeCode.rawValue,
+            closeReason: closeReason.flatMap { $0.isEmpty ? nil : String(decoding: $0, as: UTF8.self) }
         )
     }
 
