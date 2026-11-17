@@ -3,7 +3,7 @@ import Foundation
 
 final class MockWebSocketConnectionManager: WebSocketConnectionManaging {
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((DisconnectionDetails) async -> Void)?
     var errorHandler: ((Swift.Error?) -> Void)?
     private var initiationMetadataWaiter: ConversationInitiationMetadataWaiter?
 

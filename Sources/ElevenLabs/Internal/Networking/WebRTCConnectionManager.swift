@@ -27,7 +27,7 @@ enum WebRTCConnectionManagerError: Error {
 @MainActor
 final class WebRTCConnectionManager: WebRTCConnectionManaging {
     /// Fired when the remote agent leaves, the room disconnects, or all remote participants are gone.
-    var onDisconnected: (() async -> Void)?
+    var onDisconnected: ((DisconnectionDetails) async -> Void)?
 
     /// Fired when LiveKit receives and parses a protocol event from the room.
     var onEventReceived: (@Sendable (IncomingEvent) -> Void)?
@@ -331,7 +331,7 @@ final class WebRTCConnectionManager: WebRTCConnectionManaging {
     }
 
     private func handleRemoteDisconnect() async {
-        await onDisconnected?()
+        await onDisconnected?(DisconnectionDetails(reason: .remoteDisconnected))
     }
 
     // MARK: – Private helpers

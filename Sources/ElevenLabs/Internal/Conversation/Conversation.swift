@@ -191,6 +191,11 @@ final class Conversation: ObservableObject {
     /// End and clean up.
     /// Can be called during connection phase to cancel, or during connected conversation to end.
     func endConversation(reason: EndReason = .userEnded) async {
+        await endConversation(DisconnectionDetails(reason: reason))
+    }
+
+    private func endConversation(_ details: DisconnectionDetails) async {
+        let reason = details.reason
         if let ending { return await ending.value }
         if state == .idle {
             state = .ended(reason: reason)
@@ -207,6 +212,7 @@ final class Conversation: ObservableObject {
         let ending = Task {
             await connectionManager.disconnect()
             callbacks.onDisconnect?(reason)
+            callbacks.onDisconnectDetails?(details)
         }
         self.ending = ending
         await ending.value
@@ -337,9 +343,9 @@ final class Conversation: ObservableObject {
         }
         // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
         var dropFailure: ConversationError?
-        manager.onDisconnected = { [weak self, weak manager] in
+        manager.onDisconnected = { [weak self, weak manager] details in
             guard let self else { return }
-            guard state.isConnecting else { return await endConversation(reason: .remoteDisconnected) }
+            guard state.isConnecting else { return await endConversation(details) }
             dropFailure = startupError(from: ConversationError.notConnected)
             await manager?.disconnect()
         }

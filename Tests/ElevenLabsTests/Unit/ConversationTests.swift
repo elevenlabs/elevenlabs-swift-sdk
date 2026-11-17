@@ -672,7 +672,7 @@ final class ConversationTests: XCTestCase {
         }
         await mock.waitUntilWaitingForAgent()
 
-        await mock.onDisconnected?()
+        await mock.onDisconnected?(DisconnectionDetails(reason: .remoteDisconnected))
 
         await XCTAssertThrowsErrorAsync {
             try await startTask.value
@@ -691,7 +691,7 @@ final class ConversationTests: XCTestCase {
     func testDropRacingASuccessfulConnectStillFailsTheStart() async throws {
         let mock = try XCTUnwrap(mockWebRTCConnectionManager)
         mock.onConnectCompleted = {
-            await mock.onDisconnected?()
+            await mock.onDisconnected?(DisconnectionDetails(reason: .remoteDisconnected))
         }
 
         await XCTAssertThrowsErrorAsync {
@@ -1069,7 +1069,7 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(conversation.state.isConnected)
         let disconnectsBefore = mockWebRTCConnectionManager.disconnectCallCount
 
-        await mockWebRTCConnectionManager.onDisconnected?()
+        await mockWebRTCConnectionManager.onDisconnected?(DisconnectionDetails(reason: .remoteDisconnected))
 
         XCTAssertEqual(
             mockWebRTCConnectionManager.disconnectCallCount,
@@ -1078,6 +1078,21 @@ final class ConversationTests: XCTestCase {
         )
         await fulfillment(of: [gotDisconnect], timeout: 1.0)
         XCTAssertEqual(conversation.state, .ended(reason: .remoteDisconnected))
+    }
+
+    func testOnDisconnectDetailsIsCalledWithOnDisconnect() async throws {
+        let calls = ValueRecorder<String>()
+        let callbacks = makeCallbacks(configure: { callbacks in
+            callbacks.onDisconnect = { reason in Task { await calls.append("onDisconnect \(reason)") } }
+            callbacks.onDisconnectDetails = { details in Task { await calls.append("onDisconnectDetails \(details.reason)") } }
+        })
+        let conversation = Conversation(dependencyProvider: dependencyProvider, config: makeConfig(), callbacks: callbacks)
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test-agent-id"))
+
+        await conversation.endConversation()
+
+        let values = await waitForValues(calls, count: 2)
+        XCTAssertEqual(Set(values), ["onDisconnect userEnded", "onDisconnectDetails userEnded"])
     }
 }
 
