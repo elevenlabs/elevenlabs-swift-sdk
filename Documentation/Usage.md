@@ -787,7 +787,7 @@ do {
 
 ### 4. Handling Connection Drops
 
-Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead.
+Listen to the `$state` property. If you see `.ended(reason: .remoteDisconnected)`, consider showing a reconnect option and/or performing automatic reconnect with backoff. A drop while still connecting fails the start with `.connectionFailed` instead, carrying the server's close reason as its message when the server sent one.
 
 `onDisconnect` receives a `DisconnectionDetails`: the same `EndReason` as the state, plus, for a text-only conversation, the close code and reason the server sent when it closed the WebSocket:
 

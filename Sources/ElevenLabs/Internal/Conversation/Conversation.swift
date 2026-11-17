@@ -340,12 +340,18 @@ final class Conversation: ObservableObject {
                 await self?.handleIncomingEvent(event, from: connectionManagerID)
             }
         }
-        // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage.
+        // Before the conversation is ready, a drop stops `connect` and fails the start at its current stage,
+        // explained by the server's close reason when it sent one.
         var dropFailure: ConversationError?
         manager.onDisconnected = { [weak self, weak manager] details in
             guard let self else { return }
             guard state.isConnecting else { return await endConversation(details) }
-            dropFailure = startupError(from: ConversationError.notConnected)
+            let failure = startupError(from: ConversationError.notConnected)
+            if case let .connectionFailed(stage, _) = failure, let closeReason = details.closeReason {
+                dropFailure = .connectionFailed(stage, closeReason)
+            } else {
+                dropFailure = failure
+            }
             await manager?.disconnect()
         }
 
