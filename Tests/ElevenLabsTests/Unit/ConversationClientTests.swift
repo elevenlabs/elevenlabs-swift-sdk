@@ -250,8 +250,8 @@ final class ConversationClientTests: XCTestCase {
 
     // MARK: - Client tool handler
 
-    func testClientToolHandlerSetOnTheClientAnswersCalls() async throws {
-        client.callbacks.onClientToolCall = { _ in .result("Shipped") }
+    func testClientToolSetOnTheClientAnswersCalls() async throws {
+        client.callbacks.clientTools = ["get_order_status": { _ in .result("Shipped") }]
         _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
 
         mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
@@ -261,9 +261,9 @@ final class ConversationClientTests: XCTestCase {
         XCTAssertEqual(mockWebRTCConnectionManager.sentToolResults.first?["result"] as? String, "Shipped")
     }
 
-    func testClientToolHandlerSetDuringAConversationAppliesToLaterCalls() async throws {
+    func testClientToolAddedDuringAConversationAppliesToLaterCalls() async throws {
         _ = try await client.startVoiceConversation(.publicAgent(id: "test-agent"))
-        client.callbacks.onClientToolCall = { _ in .pending }
+        client.callbacks.clientTools["get_order_status"] = { _ in .pending }
 
         mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
 

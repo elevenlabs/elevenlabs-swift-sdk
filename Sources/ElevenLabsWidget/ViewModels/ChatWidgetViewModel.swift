@@ -333,14 +333,15 @@ final class ChatWidgetViewModel: ObservableObject {
 
     // MARK: - Client tools
 
-    /// Passes the host's handler to the client. Without one, the client answers each call that
-    /// expects a response with its own error result.
+    /// Passes the host's handler to the client as `onUnhandledClientToolCall`. The widget sets no
+    /// `clientTools`, so the handler gets every call. Without a handler, the client answers each
+    /// call that expects a response with an error result.
     func setClientToolHandler(_ handler: (@MainActor (ClientToolCallEvent) async -> ClientToolResultEvent)?) {
         guard let handler else {
-            client.callbacks.onClientToolCall = nil
+            client.callbacks.onUnhandledClientToolCall = nil
             return
         }
-        client.callbacks.onClientToolCall = { call in
+        client.callbacks.onUnhandledClientToolCall = { call in
             let result = await handler(call)
             guard !result.isError else { throw ClientToolError(result.result, errorType: result.errorType) }
             return .result(result.result)

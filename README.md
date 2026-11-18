@@ -210,7 +210,7 @@ You can allow your agent to perform actions in your app (like opening a screen o
 
 ```swift
 let client = ConversationClient()
-client.callbacks.onClientToolCall = ClientTools.handler([
+client.callbacks.clientTools = [
     "get_weather": { call in
         let city = try call.getParameters()["city"] as? String ?? ""
         return .result(await weather(for: city))
@@ -220,16 +220,14 @@ client.callbacks.onClientToolCall = ClientTools.handler([
         return try .result(json: await orders.order(id: id)) // any Encodable
     },
     "confirm_cancellation": { _ in .pending } // the app answers it after the user decides
-])
+]
 ```
-
-A call for a tool that isn't in the map gets an error result, and `client.callbacks.onUnhandledClientToolCall` is called with it. To route calls yourself, set your own closure as `client.callbacks.onClientToolCall` instead.
 
 A thrown error reaches the agent as an error result. Throw `ClientToolError` to set the message and an `errorType`, such as `.userRejected`.
 
-If the handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it with `client.sendToolResult`, from anywhere in your app.
+If a handler returns `.pending`, the call stays in `client.pendingToolCalls` until you answer it with `client.sendToolResult`, from anywhere in your app.
 
-Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it, and calls `onUnhandledClientToolCall` for each call. To answer every call yourself through `pendingToolCalls`, set `client.callbacks.onClientToolCall = { _ in .pending }`.
+A call for any other tool name goes to `client.callbacks.onUnhandledClientToolCall`. It has the same type as a handler in `clientTools`, so it returns a `ClientToolReply` or throws. Without it, the call gets an error result, so the agent doesn't wait for it. To route every call yourself, leave `clientTools` empty and set only `onUnhandledClientToolCall`. For example, `{ _ in .pending }` leaves every call in `pendingToolCalls` for you to answer.
 
 If you use `ChatWidget`, pass a handler instead and the widget wires this up for you:
 

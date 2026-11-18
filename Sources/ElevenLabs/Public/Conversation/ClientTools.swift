@@ -1,23 +1,8 @@
 import Foundation
 
-/// Answers a client tool call. See `ConversationCallbacks.onClientToolCall`.
+/// Answers a client tool call. See `ConversationCallbacks.clientTools` and
+/// `ConversationCallbacks.onUnhandledClientToolCall`.
 public typealias ClientToolHandler = @MainActor @Sendable (ClientToolCallEvent) async throws -> ClientToolReply
-
-/// Builds a `ClientToolHandler` from one handler for each tool.
-public enum ClientTools {
-    /// Returns a handler that runs the handler for the call's tool name. A call for a
-    /// tool that `tools` doesn't have gets an error result, so the agent doesn't wait for it.
-    public static func handler(_ tools: [String: ClientToolHandler]) -> ClientToolHandler {
-        { call in
-            guard let tool = tools[call.toolName] else {
-                var error = ClientToolError("No client tool named \(call.toolName) is registered in this app.")
-                error.isUnregisteredTool = true
-                throw error
-            }
-            return try await tool(call)
-        }
-    }
-}
 
 /// What a `ClientToolHandler` does with a call.
 public enum ClientToolReply: Sendable, Equatable {
@@ -42,10 +27,6 @@ public struct ClientToolError: LocalizedError, Sendable, Equatable {
     /// The kind of failure, which the agent can react to, such as `.userRejected`.
     public let errorType: ClientToolErrorType?
 
-    /// Set by `ClientTools.handler(_:)` for a call to a tool it doesn't have, so the conversation
-    /// can call `onUnhandledClientToolCall`. Not part of equality.
-    var isUnregisteredTool = false
-
     public init(_ message: String, errorType: ClientToolErrorType? = nil) {
         self.message = message
         self.errorType = errorType
@@ -53,9 +34,5 @@ public struct ClientToolError: LocalizedError, Sendable, Equatable {
 
     public var errorDescription: String? {
         message
-    }
-
-    public static func == (lhs: ClientToolError, rhs: ClientToolError) -> Bool {
-        lhs.message == rhs.message && lhs.errorType == rhs.errorType
     }
 }
