@@ -43,6 +43,7 @@ final class ClientToolsTests: XCTestCase {
                 error as? ClientToolError,
                 ClientToolError("No client tool named open_settings is registered in this app.")
             )
+            XCTAssertEqual((error as? ClientToolError)?.isUnregisteredTool, true)
         }
     }
 }

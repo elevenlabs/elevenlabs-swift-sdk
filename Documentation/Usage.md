@@ -329,6 +329,14 @@ client.callbacks.onClientToolCall = ClientTools.handler([
 
 To route calls yourself, set your own closure as `client.callbacks.onClientToolCall`.
 
+To find out about calls that no handler answers, set `client.callbacks.onUnhandledClientToolCall`. The SDK calls it with the call when there is no `onClientToolCall`, or when the handler from `ClientTools.handler(_:)` has no tool with the call's name, such as a tool that was added to the agent but not to the app. The agent still gets an error result:
+
+```swift
+client.callbacks.onUnhandledClientToolCall = { call in
+    log.warning("The agent called \(call.toolName), which this app doesn't handle")
+}
+```
+
 A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
 
 If a tool doesn't expect a response, the SDK runs the handler and sends nothing. When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.

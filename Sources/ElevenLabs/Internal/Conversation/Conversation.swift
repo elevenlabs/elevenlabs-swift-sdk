@@ -520,6 +520,10 @@ final class Conversation: ObservableObject {
                 return
             case let .success(.result(text)):
                 await completeClientToolCall(call, with: ClientToolResultEvent(toolCallId: call.toolCallId, result: text))
+            case let .failure(error as ClientToolError) where error.isUnregisteredTool:
+                logger.warning("No client tool is registered for this call", context: ["tool": call.toolName])
+                callbacks.onUnhandledClientToolCall?(call)
+                await completeClientToolCall(call, with: Self.errorResult(error, for: call))
             case let .failure(error as ClientToolError):
                 // The handler chose this answer, for example because the user declined.
                 logger.info("A client tool handler answered with an error", context: ["tool": call.toolName])
@@ -617,8 +621,9 @@ final class Conversation: ObservableObject {
 
         case let .clientToolCall(toolCall):
             guard let handler = callbacks.onClientToolCall else {
-                // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
+                // No handler answers the call, so the agent gets an error now instead of waiting out the timeout.
                 logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
+                callbacks.onUnhandledClientToolCall?(toolCall)
                 let error = ClientToolError("No client tool handler is configured in the app.")
                 await completeClientToolCall(toolCall, with: Self.errorResult(error, for: toolCall))
                 break

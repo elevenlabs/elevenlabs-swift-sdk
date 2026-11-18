@@ -52,6 +52,11 @@ public struct ConversationCallbacks: Sendable {
     /// `{ _ in .pending }` to answer every call through `pendingToolCalls`.
     public var onClientToolCall: ClientToolHandler?
 
+    /// Called for a client tool call that no handler answers: there is no `onClientToolCall`, or
+    /// the handler from `ClientTools.handler(_:)` has no tool with the call's name. The agent
+    /// still gets an error result for the call.
+    public var onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)?
+
     /// Called whenever the agent state changes (event-based mode only).
     public var onAgentStateChange: (@Sendable (AgentState) -> Void)?
 
@@ -71,6 +76,7 @@ public struct ConversationCallbacks: Sendable {
         onVadScore: (@Sendable (_ score: Double) -> Void)? = nil,
         onAudioAlignment: (@Sendable (AudioAlignment) -> Void)? = nil,
         onClientToolCall: ClientToolHandler? = nil,
+        onUnhandledClientToolCall: (@Sendable (ClientToolCallEvent) -> Void)? = nil,
         onAgentStateChange: (@Sendable (AgentState) -> Void)? = nil
     ) {
         self.onAgentReady = onAgentReady
@@ -88,6 +94,7 @@ public struct ConversationCallbacks: Sendable {
         self.onVadScore = onVadScore
         self.onAudioAlignment = onAudioAlignment
         self.onClientToolCall = onClientToolCall
+        self.onUnhandledClientToolCall = onUnhandledClientToolCall
         self.onAgentStateChange = onAgentStateChange
     }
 }
