@@ -982,18 +982,43 @@ final class ConversationTests: XCTestCase {
         try await startTask.value
     }
 
-    func testCallWithoutAHandlerGetsAnErrorResult() async throws {
+    func testCallForAMissingToolGetsAnErrorResult() async throws {
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider,
+            config: makeConfig(),
+            callbacks: makeCallbacks { $0.clientTools = ["get_order_status": { _ in .result("Shipped") }] }
+        )
         _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
 
-        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "call_1", toolName: "open_settings")))
 
         let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 1 }
         XCTAssertTrue(sent)
         let result = try XCTUnwrap(mockWebRTCConnectionManager.sentToolResults.first)
         XCTAssertEqual(result["tool_call_id"] as? String, "call_1")
-        XCTAssertEqual(result["result"] as? String, "No client tool handler is configured in the app.")
+        XCTAssertEqual(result["result"] as? String, "This app has no client tool named open_settings.")
         XCTAssertEqual(result["is_error"] as? Bool, true)
-        XCTAssertTrue(conversation.pendingToolCalls.isEmpty)
+    }
+
+    func testCallRunsTheToolWithItsNameBeforeOnUnhandledClientToolCall() async throws {
+        let conversation = Conversation(
+            dependencyProvider: dependencyProvider,
+            config: makeConfig(),
+            callbacks: makeCallbacks { callbacks in
+                callbacks.clientTools = ["get_order_status": { _ in .result("Shipped") }]
+                callbacks.onUnhandledClientToolCall = { _ in .result("Unhandled") }
+            }
+        )
+        _ = try await conversation.startVoiceConversation(.publicAgent(id: "test"))
+
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "known")))
+        mockWebRTCConnectionManager.deliver(.clientToolCall(.fixture(id: "missing", toolName: "open_settings")))
+
+        let sent = await eventually { self.mockWebRTCConnectionManager.sentToolResults.count == 2 }
+        XCTAssertTrue(sent)
+        let results = mockWebRTCConnectionManager.sentToolResults
+        XCTAssertEqual(results.first { $0["tool_call_id"] as? String == "known" }?["result"] as? String, "Shipped")
+        XCTAssertEqual(results.first { $0["tool_call_id"] as? String == "missing" }?["result"] as? String, "Unhandled")
     }
 
     func testEndingTheConversationCancelsARunningHandler() async throws {
@@ -1170,11 +1195,12 @@ extension ConversationTests {
         return callbacks
     }
 
-    private func makeConversation(onClientToolCall: @escaping ClientToolHandler) -> Conversation {
+    /// A conversation without `clientTools`, so `onUnhandledClientToolCall` gets every call.
+    private func makeConversation(onUnhandledClientToolCall: @escaping ClientToolHandler) -> Conversation {
         Conversation(
             dependencyProvider: dependencyProvider,
             config: makeConfig(),
-            callbacks: makeCallbacks { $0.onClientToolCall = onClientToolCall }
+            callbacks: makeCallbacks { $0.onUnhandledClientToolCall = onUnhandledClientToolCall }
         )
     }
 }

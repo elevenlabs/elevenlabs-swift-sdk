@@ -69,7 +69,7 @@ final class Conversation: ObservableObject {
     }
 
     private var speakingTimer: Task<Void, Never>?
-    /// Running `onClientToolCall` handlers, by tool call id.
+    /// Running client tool handlers, by tool call id.
     private var clientToolTasks: [String: Task<Void, Never>] = [:]
     /// The in-flight teardown; later `endConversation()` calls wait for it instead of returning early.
     private var ending: Task<Void, Never>?
@@ -616,10 +616,11 @@ final class Conversation: ObservableObject {
             try? await publish(pong)
 
         case let .clientToolCall(toolCall):
-            guard let handler = callbacks.onClientToolCall else {
-                // The app never sees the call, so the agent gets an error now instead of waiting out the timeout.
-                logger.warning("No client tool handler is set", context: ["tool": toolCall.toolName])
-                let error = ClientToolError("No client tool handler is configured in the app.")
+            let handler = callbacks.clientTools[toolCall.toolName] ?? callbacks.onUnhandledClientToolCall
+            guard let handler else {
+                // Nothing in the app answers the call, so the agent gets an error now instead of waiting out the timeout.
+                logger.warning("The app has no client tool with this name", context: ["tool": toolCall.toolName])
+                let error = ClientToolError("This app has no client tool named \(toolCall.toolName).")
                 await completeClientToolCall(toolCall, with: Self.errorResult(error, for: toolCall))
                 break
             }

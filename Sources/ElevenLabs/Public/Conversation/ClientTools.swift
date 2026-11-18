@@ -1,21 +1,8 @@
 import Foundation
 
-/// Answers a client tool call. See `ConversationCallbacks.onClientToolCall`.
+/// Answers a client tool call. See `ConversationCallbacks.clientTools` and
+/// `ConversationCallbacks.onUnhandledClientToolCall`.
 public typealias ClientToolHandler = @MainActor @Sendable (ClientToolCallEvent) async throws -> ClientToolReply
-
-/// Builds a `ClientToolHandler` from one handler for each tool.
-public enum ClientTools {
-    /// Returns a handler that runs the handler for the call's tool name. A call for a
-    /// tool that `tools` doesn't have gets an error result, so the agent doesn't wait for it.
-    public static func handler(_ tools: [String: ClientToolHandler]) -> ClientToolHandler {
-        { call in
-            guard let tool = tools[call.toolName] else {
-                throw ClientToolError("No client tool named \(call.toolName) is registered in this app.")
-            }
-            return try await tool(call)
-        }
-    }
-}
 
 /// What a `ClientToolHandler` does with a call.
 public enum ClientToolReply: Sendable, Equatable {

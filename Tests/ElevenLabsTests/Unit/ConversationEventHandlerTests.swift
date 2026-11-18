@@ -274,7 +274,7 @@ final class ConversationEventHandlerTests: XCTestCase {
             eventId: 1,
             expectsResponse: false
         )
-        conversation.callbacks.onClientToolCall = { _ in .pending }
+        conversation.callbacks.clientTools["test_tool"] = { _ in .pending }
         await conversation.handleIncomingEvent(.clientToolCall(toolCall))
 
         XCTAssertEqual(conversation.pendingToolCalls.count, 1)

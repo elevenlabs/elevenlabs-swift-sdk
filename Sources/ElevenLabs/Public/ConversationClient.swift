@@ -35,8 +35,9 @@ public final class ConversationClient: ObservableObject {
     // MARK: - Callbacks
 
     /// The callbacks for every conversation this client starts. A change applies at once, also
-    /// during a conversation. A new `ConversationCallbacks` value replaces all of them, so set
-    /// one field, such as `client.callbacks.onClientToolCall`, to change only that callback.
+    /// during a conversation. A new `ConversationCallbacks` value replaces all of them. To change
+    /// only one, set its field, such as `client.callbacks.onDisconnect`. To add or replace the
+    /// handler for one tool, set `client.callbacks.clientTools["get_order"]`.
     public var callbacks: ConversationCallbacks {
         didSet { session?.callbacks = callbacks }
     }

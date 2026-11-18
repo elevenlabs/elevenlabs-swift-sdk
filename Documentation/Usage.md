@@ -301,16 +301,14 @@ Client tools allow your agent to execute logic within your app. You must registe
 
 #### Answer calls with a handler
 
-Set `client.callbacks.onClientToolCall` to answer the calls, or pass `onClientToolCall` in the `ConversationCallbacks` that you give the client. A new value applies to the calls that arrive after it. The SDK runs the handler once for each call, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
+Set `client.callbacks.clientTools` to answer the calls, or pass `clientTools` in the `ConversationCallbacks` that you give the client. It maps each tool name to a handler. The SDK runs the handler once for each call of its tool, on the main actor, while the call is in `client.pendingToolCalls`. The handler returns a `ClientToolReply`:
 
 - `.result(text)` sends the text to the agent.
 - `.result(json: value)` sends any `Encodable` value as JSON, with dates in ISO 8601.
 - `.pending` leaves the call in `pendingToolCalls`, for the app to answer later.
 
-`ClientTools.handler(_:)` builds the handler from one handler for each tool name. A call for a tool that isn't in the map gets an error result, so the agent doesn't wait for it:
-
 ```swift
-client.callbacks.onClientToolCall = ClientTools.handler([
+client.callbacks.clientTools = [
     "get_weather": { call in
         let location = try call.getParameters()["location"] as? String ?? ""
         return .result(await weather(for: location))
@@ -324,14 +322,27 @@ client.callbacks.onClientToolCall = ClientTools.handler([
         return .result("Opened the settings screen.")
     },
     "confirm_cancellation": { _ in .pending } // the confirmation UI below answers it
-])
+]
 ```
 
-To route calls yourself, set your own closure as `client.callbacks.onClientToolCall`.
+A change applies to the calls that arrive after it. To add or replace the handler for one tool, set `client.callbacks.clientTools["open_settings"] = ...`.
 
 A thrown error reaches the agent as an error result. To control what the agent sees, throw `ClientToolError` with a message and an optional `errorType`. For example, `.userRejected` tells the agent that the user declined, so the tool counts as not called. Any other error is sent as `"Client tool execution failed: <description>"`.
 
 If a tool doesn't expect a response, the SDK runs the handler and sends nothing. When a conversation ends, the SDK cancels the handlers that are still running and sends nothing for them.
+
+#### Answer calls for other tool names
+
+`client.callbacks.onUnhandledClientToolCall` answers each call whose tool name isn't in `clientTools`. It has the same type as a handler in `clientTools`: it returns a `ClientToolReply`, or throws to send an error result. Without it, such a call gets an error result, so the agent doesn't wait for it. For example, the app can report a tool that the agent has but the app doesn't, and still send the agent an error:
+
+```swift
+client.callbacks.onUnhandledClientToolCall = { call in
+    log.warning("The agent called \(call.toolName), which this app doesn't have")
+    throw ClientToolError("This app has no client tool named \(call.toolName).")
+}
+```
+
+To route every call yourself, leave `clientTools` empty and set only `onUnhandledClientToolCall`.
 
 #### Answer calls later
 
@@ -358,7 +369,7 @@ The card goes away when the call is answered, and when the conversation ends, be
 
 The agent waits for a result only as long as the tool's response timeout in the agent settings. Give a tool that waits for the user a longer timeout, or no timeout.
 
-To answer every call this way, set `client.callbacks.onClientToolCall = { _ in .pending }`. Without a handler, the SDK answers every call that expects a response with an error result, so the agent doesn't wait for it.
+To answer every call this way, leave `clientTools` empty and set `client.callbacks.onUnhandledClientToolCall = { _ in .pending }`.
 
 ### MCP (Model Context Protocol) Tools
 
